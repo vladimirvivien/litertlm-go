@@ -1,0 +1,31 @@
+# Go build / test artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+/vendor/
+
+# Go workspace files (per-developer)
+go.work
+go.work.sum
+
+# LLVM source-based coverage / PGO instrumentation
+# Created when an instrumented binary or .so is loaded.
+*.profraw
+*.profdata
+
+# Staged distribution directories produced by build_litertlm.md
+/dist/
+/dist-*/
+
+# Local environment overrides
+.env
+.env.local
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
