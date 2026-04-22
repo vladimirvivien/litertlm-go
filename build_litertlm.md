@@ -1,37 +1,26 @@
-# Building and Distributing the LiteRT-LM Shared Library
+# Building LiteRT-LM Shared Library
 
-This guide covers building the LiteRT-LM C-API shared library
-(`liblitertlm_c[_cpu].{so,dylib}` / `litertlm_c[_cpu].dll`) from source on
-**Linux, macOS, and Windows**, and packaging it together with its required
-runtime dependencies so a downstream app can be deployed without re-running
-the build.
+This guide covers building a C-API shared library
+(`liblitertlm_c[_cpu].{so,dylib}`) for the [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) 
+project from source on **Linux and macOS**.
 
-The output of this guide is a self-contained `dist/` directory you can copy
-to any machine of the same OS/arch and consume from C, C++, or any other
-language binding (e.g. the `litertlm-go` Go wrapper in this repository).
+## Platform support
 
-> **What you'll build:** a wrapper shared library that exposes the C API in
-> `c/engine.h`. 
+- **Linux** — tested.
+- **macOS** — tested.
+- **Windows** — **not tested** with `litertlm-go`.
 
-**What you won't build:** the lower-level LiteRT runtime and
-> GPU accelerator plugins (`libLiteRt`, `libLiteRt*Accelerator`,
-> `libGemmaModelConstraintProvider`) — those are pre-compiled binaries
-> shipped in `prebuilt/<os>/` via Git LFS. Your wrapper dynamically loads
-> them at run time, which is why the distribution step matters.
+## 1. Install prerequisites
 
----
+| Platform   | What to install                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Linux**  | `sudo apt install clang git-lfs patchelf` — clang is required (the project's `.bazelrc` pins `CC=clang` on Linux). |
+| **macOS**  | `xcode-select --install` (provides clang) and `brew install git-lfs`.                                              |
 
-## 1. Install prerequisites (one-time, per machine)
+### Bazel 7.6.1 (exact version)
 
-| Platform   | What to install                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Linux**  | `sudo apt install clang git-lfs patchelf` — clang is required (the project's `.bazelrc` pins `CC=clang` on Linux).             |
-| **macOS**  | `xcode-select --install` (provides clang) and `brew install git-lfs`.                                                          |
-| **Windows**| Visual Studio 2022 with the "Desktop development with C++" workload (provides MSVC), Git for Windows, Python 3.13, Git LFS, and you must enable **LongPathsEnabled** in the registry. |
-
-### Bazel 7.6.1 (exact version, all OSes)
-
-The repo's `.bazelversion` pins **7.6.1**. Use [Bazelisk](https://github.com/bazelbuild/bazelisk) — it reads `.bazelversion` and downloads the matching Bazel automatically:
+The repo's `.bazelversion` pins **7.6.1**. 
+Use [Bazelisk](https://github.com/bazelbuild/bazelisk) — it reads `.bazelversion` and downloads the matching Bazel automatically:
 
 ```bash
 # Linux
@@ -45,11 +34,6 @@ chmod +x ~/.local/bin/bazel
 brew install bazelisk
 ```
 
-```powershell
-# Windows
-winget install --id=Bazel.Bazelisk -e
-```
-
 ---
 
 ## 2. Get the source and pull the prebuilt deps
@@ -61,80 +45,87 @@ git lfs install --local
 git lfs pull
 ```
 
-
 **Verify prebuilt files** 
-
-MacOS/Linux:
+The `git lfs pull` command downloads pre-built shared libraries for different architectures:
 
 ```bash
-file prebuilt/linux_x86_64/libGemmaModelConstraintProvider.so
+ls -al prebuilt/
+android_arm64  
+android_x86_64  
+ios_arm64  
+ios_sim_arm64
+linux_arm64
+linux_x86_64
+macos_arm64
+windows_x86_64
 ```
 
-On Windows:
-
-```powershell
-Get-Item prebuilt\windows_x86_64\libGemmaModelConstraintProvider.dll | Select-Object Length
-```
+Ensure your target environment is listed above.
 
 ---
 
 ## 3. Build the C-API shared library
 
-Two Bazel targets are defined in `c/BUILD`:
+Currently, the LiteRT-LM project does not distribute the
+C API shared library; it must be built from source. This doc walks
+you through creating a Bazel BUILD package that generates the
+necessary shared library files.
 
-- `//c:litertlm_c_cpu` — CPU-only. Smaller, no GPU runtime deps required.
-- `//c:litertlm_c`     — GPU-capable. Wraps the same C API but its
-  initialisation also dynamically loads the GPU accelerator plugins from
-  `prebuilt/`.
+### 3.1 Create `c/litertlm_c_api/BUILD`
 
-### 3.1 Linux
+Create a new directory `c/litertlm_c_api/` at the root of your LiteRT-LM
+checkout, and put this in `c/litertlm_c_api/BUILD`:
+
+```python
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "litertlm_c_cpu",
+    linkshared = 1,
+    deps = ["//c:engine_cpu"],
+)
+
+cc_binary(
+    name = "litertlm_c",
+    linkshared = 1,
+    deps = ["//c:engine"],
+)
+```
+
+### 3.2 Linux
 
 ```bash
 # CPU-only
-bazel build //c:litertlm_c_cpu
-# Output: bazel-bin/c/liblitertlm_c_cpu.so
+bazel build //c/litertlm_c_api:litertlm_c_cpu
+# Output: bazel-bin/c/litertlm_c_api/liblitertlm_c_cpu.so
 
 # GPU-capable
-bazel build //c:litertlm_c \
+bazel build //c/litertlm_c_api:litertlm_c \
     --define=litert_link_capi_so=true \
     --define=resolve_symbols_in_exec=false
-# Output: bazel-bin/c/liblitertlm_c.so
+# Output: bazel-bin/c/litertlm_c_api/liblitertlm_c.so
 ```
 
-### 3.2 macOS
+### 3.3 macOS
 
 ```bash
 # CPU-only
-bazel build //c:litertlm_c_cpu
-# Output: bazel-bin/c/liblitertlm_c_cpu.dylib
+bazel build //c/litertlm_c_api:litertlm_c_cpu
+# Output: bazel-bin/c/litertlm_c_api/liblitertlm_c_cpu.dylib
 
 # GPU-capable
-bazel build //c:litertlm_c \
+bazel build //c/litertlm_c_api:litertlm_c \
     --define=litert_link_capi_so=true \
     --define=resolve_symbols_in_exec=false
-# Output: bazel-bin/c/liblitertlm_c.dylib
+# Output: bazel-bin/c/litertlm_c_api/liblitertlm_c.dylib
 ```
 
-### 3.3 Windows
-
-Run inside a "x64 Native Tools Command Prompt for VS 2022" (or any shell
-where MSVC is on PATH):
-
-```powershell
-# CPU-only
-bazel build //c:litertlm_c_cpu --config=windows
-# Outputs:
-#   bazel-bin\c\litertlm_c_cpu.dll        ← the DLL
-#   bazel-bin\c\litertlm_c_cpu.if.lib     ← the import library
-
-# GPU-capable
-bazel build //c:litertlm_c --config=windows `
-    --define=litert_link_capi_so=true `
-    --define=resolve_symbols_in_exec=false
-# Outputs:
-#   bazel-bin\c\litertlm_c.dll
-#   bazel-bin\c\litertlm_c.if.lib
-```
+> The flag `--@litert//litert/build_common:build_include=cpu_only` would
+> exclude NPU/GPU registration (silencing the `NPU accelerator could not
+> be loaded` runtime warning), but it is currently broken in upstream
+> LiteRT — `environment.cc` unconditionally includes a GPU header that
+> is gated out of the deps. Until upstream fixes the include guards,
+> live with the warning or drop stderr at the OS level (`2>/dev/null`).
 
 ### 3.4 Clean rebuild
 
@@ -146,89 +137,55 @@ bazel clean --expunge
 
 ---
 
-## 4. Package for distribution
+## 4. Prepare libraries
 
-The shared library Bazel just produced is **not self-contained**. Even the
-CPU build needs one prebuilt runtime file at run time
-(`libGemmaModelConstraintProvider`). The GPU build needs several more.
+Next, we need to place all shared libraries in a centralized location 
+where they can be loaded at runtime. For instance, for our setup, we
+will place all files in `~/include/litertlm/lib`.
 
-### 4.1 What each runtime dependency does
-
-| File                                  | Required for                  | Why                                                                                            |
-| ------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| `libGemmaModelConstraintProvider.*`   | **All builds (CPU & GPU)**    | Constrained-decoding plugin used during prefill and chat-template handling. Always loaded.     |
-| `libLiteRt.*`                         | GPU build                     | The LiteRT (TFLite-Next) C runtime. Statically linked into the CPU build but dynamic for GPU.  |
-| `libLiteRtWebGpuAccelerator.*`        | GPU build (all desktop OSes)  | WebGPU backend for graph execution.                                                            |
-| `libLiteRtTopKWebGpuSampler.*`        | GPU build (all desktop OSes)  | TopK sampler implemented as a WebGPU compute kernel.                                           |
-| `libLiteRtMetalAccelerator.dylib`     | GPU build (macOS only)        | Metal backend specific to Apple silicon.                                                       |
-| `dxcompiler.dll`, `dxil.dll`          | GPU build (Windows only)      | Microsoft DirectX Shader Compiler runtime, required by the WebGPU backend on Windows.          |
-
-### 4.2 Target distribution layout
-
-The same shape works on every OS — only the file extensions differ:
+### Copy shared libraries files
+Let's store the library directory location in environment variable `$LITERTLM_LIB`:
 
 ```
-dist/
-├── include/
-│   ├── engine.h                                ← public C API
-│   └── litert_lm_logging.h                     ← optional logging API
-└── lib/
-    ├── liblitertlm_c[_cpu].so   |  .dylib   |  litertlm_c[_cpu].dll
-    ├── libGemmaModelConstraintProvider.{so,dylib,dll}      ← always
-    │
-    │   --- GPU only (omit for CPU build): ---
-    ├── libLiteRt.{so,dylib,dll}
-    ├── libLiteRtWebGpuAccelerator.{so,dylib,dll}
-    ├── libLiteRtTopKWebGpuSampler.{so,dylib,dll}
-    ├── libLiteRtMetalAccelerator.dylib                     ← macOS only
-    └── (Windows GPU also: dxcompiler.dll, dxil.dll, litertlm_c[_cpu].if.lib)
+export LITERTLM_LIB=~/include/litertlm/lib
 ```
 
-For consumers that link statically against the DLL on Windows, also include
-the import library `litertlm_c[_cpu].if.lib` from `bazel-bin/c/`.
+Copy the prebuilt library files for our target architecture:
 
-### 4.7 Download a model
+```
+cp prebuilt/linux_x86_64/*.so $LITERTLM_LIB
+```
 
-LiteRT-LM consumes `.litertlm` model files (not raw `.tflite`). Pick one
-from the "Supported Models and Performance" table in the upstream
-LiteRT-LM README. For example, Gemma 4 instruct is published on
-Hugging Face at `litert-community/gemma-4-E2B-it-litert-lm` — see the
-project README for download options. Place the file anywhere; the path is
-passed at runtime.
+Next, copy your bazel-built files into the library location as well:
 
-## 6. Using litertlm-go
+```
+cp bazel-bin/c/litertlm_c_api/*.so $LITERTLM_LIB
+```
 
-Point the Go wrapper at the staged `dist/lib` via the `LITERTLM_LIB`
-environment variable:
+## 5. Using litertlm-go
+
+When you write a program that uses `litertlm-go` you will need to specify
+the location of the library files (optionally with the `LITERTLM_LIB`
+environment variable) and the model path:
 
 ```bash
-# Linux / macOS
-LITERTLM_LIB=$(pwd)/dist/lib \
+LITERTLM_LIB=~/include/litertlm/lib \
     go run ./examples/hello -model /path/to/model.litertlm
-
-# Windows
-$Env:LITERTLM_LIB = "$PWD\dist\lib"
-go run .\examples\hello -model C:\path\to\model.litertlm
 ```
 
-The wrapper handles the platform-specific lib filename mapping
-(`liblitertlm_c_cpu.so` on Linux, `.dylib` on macOS, `litertlm_c_cpu.dll`
-on Windows) and dlopens the runtime deps in the right order so neither
-`LD_LIBRARY_PATH` nor `PATH` tweaks are required.
+`litertlm-go` handles the platform-specific lib filename mapping
+(`liblitertlm_c_cpu.so` on Linux, `liblitertlm_c_cpu.dylib` on macOS).
 
 ---
 
-## 7. Troubleshooting
+## 6. Troubleshooting
 
 | Symptom                                                                | Cause                                                                                  | Fix                                                                                            |
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Link error: *"not an object or archive"* on a `prebuilt/*.so`          | LFS pointer instead of binary                                                          | `git lfs install --local && git lfs pull`                                                      |
 | Bazel: *"Cannot find gcc or CC (clang)"* (Linux)                       | clang not installed                                                                    | `sudo apt install clang`                                                                       |
-| Bazel: *"requires Bazel 7.6.1 …"*                                      | Wrong Bazel version on PATH                                                            | Install Bazelisk (§1)                                                                          |
-| Windows: file-permission errors deep in `external/`                    | LongPaths not enabled                                                                  | Set `LongPathsEnabled=1` in registry; optionally `bazelisk --output_base=C:\bzl`              |
-| Runtime: *"error while loading shared libraries: libLiteRt.so"*        | GPU plugins missing from `dist/lib/`                                                   | Re-run §4.4 (Linux GPU) or §4.5 (macOS GPU) packaging                                          |
-| Runtime: *"dyld: Library not loaded: bazel-out/..."* (macOS)           | Install names not rewritten                                                            | Run the `install_name_tool -id` loop in §4.5                                                   |
-| Runtime: *"The code execution cannot proceed because litertlm_c_cpu.dll was not found"* (Windows) | DLL not on PATH / not next to `.exe`              | Add `dist\lib` to PATH or copy DLLs next to the executable (§5.3)                              |
+| Bazel: *"requires Bazel 7.6.1 …"*                                      | Wrong Bazel version on PATH                                                            | Install and use Bazelisk (a drop-in replacement)                                               |
+| Runtime: *"error while loading shared libraries: libLiteRt.so"*        | GPU plugins missing from `LITERTLM_LIB`                                                | Re-stage the GPU plugins into `LITERTLM_LIB` per §4                                            |
 | `engine_create` returns NULL early in setup                            | LFS deps missing or out of date                                                        | Re-run `git lfs pull`; verify file size/`file` output                                          |
 | `engine_create` returns NULL with `DYNAMIC_UPDATE_SLICE` error in logs | `max_num_tokens` is smaller than the model's smallest prefill signature (often 128)    | Bump `max_num_tokens` to ≥1024                                                                 |
 | `Responses.NumCandidates() == 1` but `Text(0) == ""`                   | Chat-tuned model received raw text without its template                                | Use the **Conversation** API instead of `Session.GenerateContent`, or wrap the prompt manually |

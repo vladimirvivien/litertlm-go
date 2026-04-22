@@ -6,7 +6,14 @@ local LLM inference.
 `litertlm-go` uses `ebitengine/purego` to 
 dynamically load the LiteRT-LM C API shared library at runtime.
 No CGo toolchain is required to build applications with this package.
-Note: this approach was inspired by project Hybridgroup's project Yzma.
+Note: this approach was inspired by project Hybridgroup's project [Yzma](https://github.com/hybridgroup/yzma).
+
+## Building LiteRT-LM C shared object libraries
+Project LiteRT-LM is a C++ projects and does not distribute a C API by default.
+So, if you want to use LiteRT-LM locally for inference in Go, you must first compile the
+shared librariries to expose a C API.  
+
+Folllow instructions [here](./build_litertlm.md) to build the the shared object binaries.
 
 ## Install
 
@@ -14,17 +21,13 @@ Note: this approach was inspired by project Hybridgroup's project Yzma.
 go get github.com/vladimirvivien/litertlm-go@latest
 ```
 
-### Build C API library
-You will also need the LiteRT-LM native shared library. See
-[`build_litertlm.md`](./build_litertlm.md) for instructions on how to build
-the all necessary dynamic library files needed to run LiteRT-LM.
-
 ### Model files
-You will also need to download the `*.litertlm` version of the Gemma model
+You will need to download the `*.litertlm` model
 that you want to use for inference. You can get the models from Hugging Face's 
-[LiteRT Community](https://huggingface.co/litert-community).
+[LiteRT Community](https://huggingface.co/litert-community). For
+the example below, we will use `litert-community/gemma-4-E2B-it-litert-lm`.
 
-## Minimal usage
+## Using `litertlm-go`
 
 ```go
 package main
@@ -61,6 +64,13 @@ func main() {
 }
 ```
 
+Run the code with:
+
+```bash
+LITERTLM_LIB=/path/to/shared-objects/lib \
+    go run ./examples/hello -model /abs/path/to/model.litertlm
+```
+
 ## Examples
 
 | Path                 | What it shows                                                      |
@@ -70,23 +80,7 @@ func main() {
 | `examples/chat/`     | Multi-turn Conversation API with JSON messages                     |
 | `examples/gpu/`      | GPU-backed generation + BenchmarkInfo metrics                      |
 
-Run any of them with:
 
-```bash
-LITERTLM_LIB=/abs/path/to/dist/lib \
-    go run ./examples/hello -model /abs/path/to/model.litertlm
-```
-
-## Project layout
-
-```
-pkg/
-  loader/     resolves lib<name>.{so,dylib,dll} and opens it via purego
-  utils/      cross-platform string ↔ *byte helpers
-  litertlm/   the Go API: bindings, Engine, Session, Conversation, ...
-examples/
-  hello/  stream/  chat/  gpu/
-```
 
 ## License
 
