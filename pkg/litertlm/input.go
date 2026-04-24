@@ -20,6 +20,11 @@ type InputData struct {
 	Size uintptr
 }
 
+// Compile-time check: InputData must be 24 bytes (enum+pad+ptr+size_t on
+// 64-bit) to match the C `LiteRtLmInputData` struct. If upstream c/engine.h
+// changes the layout, this indexing expression becomes a compile error.
+var _ = [1]byte{}[unsafe.Sizeof(InputData{})-24]
+
 // NewTextInput builds an InputData that references the UTF-8 bytes of s.
 // The returned record is only valid for the lifetime of the supplied slice —
 // callers are responsible for keeping a reference alive across the C call

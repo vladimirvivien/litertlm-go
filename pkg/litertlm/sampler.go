@@ -1,5 +1,7 @@
 package litertlm
 
+import "unsafe"
+
 // SamplerParams is the Go-side image of the C `LiteRtLmSamplerParams` struct.
 // Layout must match the C struct exactly:
 //
@@ -19,6 +21,11 @@ type SamplerParams struct {
 	Temperature float32
 	Seed        int32
 }
+
+// Compile-time check: SamplerParams must be 20 bytes (5 × 4-byte fields) to
+// match the C `LiteRtLmSamplerParams` struct. If upstream c/engine.h changes
+// the layout, this indexing expression becomes a compile error.
+var _ = [1]byte{}[unsafe.Sizeof(SamplerParams{})-20]
 
 // DefaultSamplerParams returns a reasonable greedy default. Callers may mutate
 // the returned value before passing it to SessionConfig.SetSamplerParams.

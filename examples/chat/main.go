@@ -34,7 +34,7 @@ func main() {
 	}
 	defer litertlm.Close()
 
-	// Silence LiteRT-LM's INFO/WARN chatter. Bump to LogInfo (0) to see it.
+	// Silence LiteRT-LM's INFO/WARN chatter. Drop to LogInfo to see it.
 	litertlm.SetMinLogLevel(litertlm.LogError)
 
 	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)

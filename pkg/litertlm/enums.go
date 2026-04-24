@@ -25,8 +25,11 @@ const (
 // Log severity levels accepted by SetMinLogLevel, mirroring the levels
 // documented in c/engine.h next to litert_lm_set_min_log_level.
 const (
-	LogInfo    = 0
-	LogWarning = 1
-	LogError   = 2
-	LogFatal   = 3
+	LogVerbose = 0
+	LogDebug   = 1
+	LogInfo    = 2
+	LogWarning = 3
+	LogError   = 4
+	LogFatal   = 5
+	LogSilent  = 1000
 )

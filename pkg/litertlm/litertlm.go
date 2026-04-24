@@ -26,6 +26,8 @@
 package litertlm
 
 import (
+	"sync"
+
 	"github.com/jupiterrider/ffi"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/loader"
@@ -62,11 +64,19 @@ var optionalLibs = []string{
 	"LiteRtMetalAccelerator", // macOS only; missing on Linux, which is fine
 }
 
-var libPath string
+var (
+	loadMu     sync.Mutex
+	loadedOnce bool
+	libPath    string
+)
 
 // LibPath returns the directory from which the LiteRT-LM shared libraries
 // were loaded. Empty until Load has been called successfully.
-func LibPath() string { return libPath }
+func LibPath() string {
+	loadMu.Lock()
+	defer loadMu.Unlock()
+	return libPath
+}
 
 // Load dynamically opens the LiteRT-LM shared library set and binds every
 // C entry point this package uses. `path` is the directory containing the
@@ -86,8 +96,17 @@ func LibPath() string { return libPath }
 // references in the main library resolve to the already-loaded copies. This
 // lets Load work without the user having to set LD_LIBRARY_PATH /
 // DYLD_LIBRARY_PATH.
+//
+// Load is safe to call concurrently. Once it has succeeded, subsequent calls
+// are a no-op and return nil — the process-wide C library and its bound
+// function pointers persist for the life of the program. If the first call
+// fails, subsequent calls may retry.
 func Load(path, backend string) error {
-	libPath = path
+	loadMu.Lock()
+	defer loadMu.Unlock()
+	if loadedOnce {
+		return nil
+	}
 
 	// Optional libs first — skip silently if absent (CPU-only deployments).
 	for _, name := range optionalLibs {
@@ -106,7 +125,13 @@ func Load(path, backend string) error {
 		return err
 	}
 
-	return loadFuncs(mainLib)
+	if err := loadFuncs(mainLib); err != nil {
+		return err
+	}
+
+	libPath = path
+	loadedOnce = true
+	return nil
 }
 
 // loadMainLib opens the LiteRT-LM C API shared library that matches the

@@ -125,15 +125,18 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 		unsafe.Pointer(&cbAddr),
 		unsafe.Pointer(&cbData),
 	)
-	runtime.KeepAlive(inputs)
 
 	if ret != 0 {
 		unregisterStreamCB(id)
+		runtime.KeepAlive(inputs)
 		return fmt.Errorf("litertlm: generate_content_stream start failed (code=%d)", ret)
 	}
 
 	<-done
 	unregisterStreamCB(id)
+	// Hold inputs alive until the C side has produced its Final chunk; the
+	// callback reads &inputs[0] across the async decode, not just during Call.
+	runtime.KeepAlive(inputs)
 	return nil
 }
 
@@ -204,10 +207,16 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 
 	if ret != 0 {
 		unregisterStreamCB(id)
+		runtime.KeepAlive(msgPtr)
+		runtime.KeepAlive(ctxPtr)
 		return fmt.Errorf("litertlm: send_message_stream start failed (code=%d)", ret)
 	}
 	<-done
 	unregisterStreamCB(id)
+	// Hold the C strings alive until the Final chunk has been delivered;
+	// the C side dereferences them across the async decode, not just Call.
+	runtime.KeepAlive(msgPtr)
+	runtime.KeepAlive(ctxPtr)
 	return nil
 }
 
