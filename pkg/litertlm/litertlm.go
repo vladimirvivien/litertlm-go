@@ -3,7 +3,7 @@
 //
 // The flow for local inference is:
 //
-//	litertlm.Load(libDir)                        // once
+//	litertlm.Load(libDir, "cpu")                 // once; "" auto-picks
 //	defer litertlm.Close()
 //
 //	s := litertlm.NewEngineSettings(modelPath, "cpu", nil, nil)
@@ -26,17 +26,24 @@
 package litertlm
 
 import (
+	"github.com/jupiterrider/ffi"
+
 	"github.com/vladimirvivien/litertlm-go/pkg/loader"
 )
 
-// mainLibShort is the "short name" (no prefix, no extension) of the C API
-// shared library this package binds against. The loader resolves it to
-// liblitertlm_c_cpu.so / .dylib / .dll per platform.
+// libByBackend maps the backend string accepted by NewEngineSettings to the
+// short library name that contains that execution path:
 //
-// If you built the GPU-capable variant (//c:litertlm_c), override this by
-// copying the file alongside liblitertlm_c_cpu.{so,dylib}, or set
-// LITERTLM_LIB_NAME before calling Load to select a different short name.
-const mainLibShort = "litertlm_c_cpu"
+//   "cpu" → litertlm_c_cpu  (CPU-only binary, built from //c:engine_cpu)
+//   "gpu" → litertlm_c      (GPU-capable binary, built from //c:engine;
+//                            also runs backend="cpu" via fallback)
+//
+// Unknown or empty backends cause Load to prefer litertlm_c and fall back to
+// litertlm_c_cpu if absent.
+var libByBackend = map[string]string{
+	"cpu": "litertlm_c_cpu",
+	"gpu": "litertlm_c",
+}
 
 // auxLibs are additional shared libraries the C API loads at runtime. They
 // must be present in the same LITERTLM_LIB directory. libGemmaModelConstraintProvider
@@ -64,17 +71,22 @@ func LibPath() string { return libPath }
 // Load dynamically opens the LiteRT-LM shared library set and binds every
 // C entry point this package uses. `path` is the directory containing the
 // shared libs; if empty, the LITERTLM_LIB environment variable is consulted.
+// `backend` selects which main library to open: "cpu" → liblitertlm_c_cpu.*,
+// "gpu" → liblitertlm_c.*; any other value (including "") prefers the GPU
+// binary and falls back to the CPU-only one if absent. The GPU binary also
+// handles backend="cpu" calls internally, so it is the safer default when
+// both files are staged.
 //
-// The required main library (liblitertlm_c_cpu.so/.dylib/.dll) and
-// libGemmaModelConstraintProvider.* must be present. GPU accelerator plugins
-// are loaded opportunistically — if they are not in the directory, Load still
-// succeeds but backend="gpu" calls will fail at runtime.
+// libGemmaModelConstraintProvider.* must be present next to the main library.
+// GPU accelerator plugins are loaded opportunistically — if they are not in
+// the directory, Load still succeeds but backend="gpu" calls will fail at
+// runtime.
 //
 // Auxiliary libraries are dlopen'd before the main library so that DT_NEEDED
 // references in the main library resolve to the already-loaded copies. This
 // lets Load work without the user having to set LD_LIBRARY_PATH /
 // DYLD_LIBRARY_PATH.
-func Load(path string) error {
+func Load(path, backend string) error {
 	libPath = path
 
 	// Optional libs first — skip silently if absent (CPU-only deployments).
@@ -89,12 +101,27 @@ func Load(path string) error {
 		}
 	}
 
-	mainLib, err := loader.LoadLibrary(path, mainLibShort)
+	mainLib, err := loadMainLib(path, backend)
 	if err != nil {
 		return err
 	}
 
 	return loadFuncs(mainLib)
+}
+
+// loadMainLib opens the LiteRT-LM C API shared library that matches the
+// requested backend. For a known backend it returns the specific variant's
+// error verbatim. For an empty/unknown backend it prefers the GPU-capable
+// build and falls back to the CPU-only build, returning the fallback error
+// if neither is present.
+func loadMainLib(path, backend string) (ffi.Lib, error) {
+	if short, ok := libByBackend[backend]; ok {
+		return loader.LoadLibrary(path, short)
+	}
+	if lib, err := loader.LoadLibrary(path, "litertlm_c"); err == nil {
+		return lib, nil
+	}
+	return loader.LoadLibrary(path, "litertlm_c_cpu")
 }
 
 // Close is a no-op retained for API symmetry with yzma. purego does not

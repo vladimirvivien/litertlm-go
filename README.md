@@ -40,7 +40,7 @@ import (
 )
 
 func main() {
-    if err := litertlm.Load(os.Getenv("LITERTLM_LIB")); err != nil {
+    if err := litertlm.Load(os.Getenv("LITERTLM_LIB"), "cpu"); err != nil {
         panic(err)
     }
     defer litertlm.Close()

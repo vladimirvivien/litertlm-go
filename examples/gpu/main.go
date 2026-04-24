@@ -26,7 +26,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := litertlm.Load(*libPath); err != nil {
+	if err := litertlm.Load(*libPath, "gpu"); err != nil {
 		fmt.Fprintf(os.Stderr, "load: %v\n", err)
 		os.Exit(1)
 	}
