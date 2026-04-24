@@ -1,0 +1,7 @@
+# The Dockerfile clones LiteRT-LM and writes the BUILD file inside the
+# container; nothing from the host is COPYed in. Send only the Dockerfile so
+# the build context stays tiny regardless of repo state (test-lib-*, models,
+# editor scratch, etc.).
+*
+!Dockerfile
+!.dockerignore
