@@ -8,6 +8,8 @@ you must build them yourself.
 This guide walks you through the steps to build the libraries from source 
 so you can use them in your Go programs.
 
+> Find more information about building (C++) [here](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md)
+
 ## Prerequisites
 LiteRT-LM is supported on many platforms including MacOS, Linux, and Windows.
 LiteRT-LM is also supported on iOS, Android, and Rasberry Pi.

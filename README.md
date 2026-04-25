@@ -1,6 +1,6 @@
 # litertlm-go
 
-A Go wrapper for Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) C API for running
+A Go wrapper for Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) for running
 local LLM inference.
 
 `litertlm-go` uses `ebitengine/purego` to 
@@ -9,11 +9,10 @@ No CGo toolchain is required to build applications with this package.
 Note: this approach was inspired by project Hybridgroup's project [Yzma](https://github.com/hybridgroup/yzma).
 
 ## Building LiteRT-LM C shared object libraries
-Project LiteRT-LM is a C++ projects and does not distribute a C API by default.
-So, if you want to use LiteRT-LM locally for inference in Go, you must first compile the
-shared librariries to expose a C API.  
+LiteRT-LM is a C++ project and does not distribute a C API by default.
+However, you can folllow instructions [here](./build_litertlm.md) to build 
+the LiteRT-ML source code with C shared object libraries.
 
-Folllow instructions [here](./build_litertlm.md) to build the the shared object binaries.
 
 ## Install
 
