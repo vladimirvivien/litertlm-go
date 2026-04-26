@@ -14,7 +14,7 @@ go.work.sum
 *.profraw
 *.profdata
 
-# Staged distribution directories produced by build_litertlm.md
+# Staged distribution directories produced by LITERTLM-BUILD.md
 /dist/
 /dist-*/
 

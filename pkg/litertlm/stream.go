@@ -5,11 +5,22 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
+
+// streamWatchdog is the maximum wall-clock time we wait for the C engine to
+// deliver the Final chunk. It exists primarily as a deadlock-detector escape
+// hatch: while a goroutine is parked on `<-done`, the Go runtime fires
+// "all goroutines are asleep - deadlock!" if it sees no other runnable
+// goroutine and no pending timer, even though the C++ engine's foreign
+// thread will eventually invoke the purego callback. A pending timer puts an
+// entry on the runtime's timer heap so the scheduler considers itself alive.
+// 24h is well beyond any realistic decode time.
+const streamWatchdog = 24 * time.Hour
 
 // StreamChunk is one piece of a streaming generation result. A callback will
 // receive multiple non-Final chunks followed by a single Final chunk. If the
@@ -132,7 +143,16 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 		return fmt.Errorf("litertlm: generate_content_stream start failed (code=%d)", ret)
 	}
 
-	<-done
+	watchdog := time.NewTimer(streamWatchdog)
+	defer watchdog.Stop()
+
+	select {
+	case <-done:
+	case <-watchdog.C:
+		unregisterStreamCB(id)
+		runtime.KeepAlive(inputs)
+		return fmt.Errorf("litertlm: generate_content_stream: watchdog fired after %v", streamWatchdog)
+	}
 	unregisterStreamCB(id)
 	// Hold inputs alive until the C side has produced its Final chunk; the
 	// callback reads &inputs[0] across the async decode, not just during Call.
@@ -211,7 +231,18 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 		runtime.KeepAlive(ctxPtr)
 		return fmt.Errorf("litertlm: send_message_stream start failed (code=%d)", ret)
 	}
-	<-done
+
+	watchdog := time.NewTimer(streamWatchdog)
+	defer watchdog.Stop()
+
+	select {
+	case <-done:
+	case <-watchdog.C:
+		unregisterStreamCB(id)
+		runtime.KeepAlive(msgPtr)
+		runtime.KeepAlive(ctxPtr)
+		return fmt.Errorf("litertlm: send_message_stream: watchdog fired after %v", streamWatchdog)
+	}
 	unregisterStreamCB(id)
 	// Hold the C strings alive until the Final chunk has been delivered;
 	// the C side dereferences them across the async decode, not just Call.

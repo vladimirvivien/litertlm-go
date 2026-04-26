@@ -109,13 +109,15 @@ func Load(path, backend string) error {
 	}
 
 	// Optional libs first — skip silently if absent (CPU-only deployments).
+	// Aux libs use the "lib" prefix on every platform (prebuilt convention),
+	// distinct from the main C-API DLL whose name is platform-default.
 	for _, name := range optionalLibs {
-		_, _ = loader.LoadLibrary(path, name)
+		_, _ = loader.LoadAuxLibrary(path, name)
 	}
 
 	// Required aux libs before the main lib so ld.so finds them by soname.
 	for _, name := range auxLibs {
-		if _, err := loader.LoadLibrary(path, name); err != nil {
+		if _, err := loader.LoadAuxLibrary(path, name); err != nil {
 			return err
 		}
 	}

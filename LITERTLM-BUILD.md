@@ -1,39 +1,28 @@
-# Building the LiteRT-LM C Shared Libraries
+# Building the LiteRT-LM C Shared Libraries on Linux and macOS
 
 `litertlm-go` is a Go wrapper API that loads LiteRT-LM shared libraries
-(`*.so`, or `*.dylib` files) at runtime. Currently, the project is not
-distributed with pre-built shared libraries that expose a C API. So,
+(`*.so` on Linux, `*.dylib` on macOS) at runtime. Currently, the project is
+not distributed with pre-built shared libraries that expose a C API. So,
 you must build them yourself.
 
-This guide walks you through the steps to build the libraries from source 
-so you can use them in your Go programs.
+This guide walks you through the steps to build the libraries from source
+so you can use them in your Go programs on **Linux and macOS**.
 
-> Find more information about building (C++) [here](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md)
+> **Building on Windows?** The Windows toolchain (MSVC) needs additional
+> linker options and runtime staging steps that this guide does not cover.
+> See [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md) instead.
+
+Find more information about building (C++) [here](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md).
 
 ## Prerequisites
-LiteRT-LM is supported on many platforms including MacOS, Linux, and Windows.
-LiteRT-LM is also supported on iOS, Android, and Rasberry Pi.
 
-However, this guide only covers Linux/MacOS.
+Install your Linux/MacOS prerequisites per [LiteRT-LM's official 
+guide](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md):
 
 | Platform | Install |
 |----------|---------|
 | Linux    | `sudo apt install clang git-lfs` |
 | macOS    | `xcode-select --install` and `brew install git-lfs` |
-
-Both platforms also need **Bazel** via project
-[Bazelisk](https://github.com/bazelbuild/bazelisk), which  picks the right
-version automatically:
-
-```bash
-# Linux
-curl -L -o ~/.local/bin/bazel \
-  https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
-chmod +x ~/.local/bin/bazel
-
-# macOS
-brew install bazelisk
-```
 
 ## Build via Docker (optional)
 
@@ -118,17 +107,14 @@ export LITERTLM_LIB=~/include/litertlm/lib
 mkdir -p $LITERTLM_LIB
 ```
 
-Copy in the prebuilt runtime dependencies for your platform, then your
-freshly-built C-API libraries:
-
 ```bash
 # Linux
-cp prebuilt/linux_x86_64/*.so    $LITERTLM_LIB
-cp bazel-bin/c/litertlm_c_api/*.so $LITERTLM_LIB
+cp prebuilt/linux_x86_64/*.so $LITERTLM_LIB              # all runtime deps
+cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.so $LITERTLM_LIB  # ONLY your build
 
 # macOS
-cp prebuilt/macos_arm64/*.dylib    $LITERTLM_LIB
-cp bazel-bin/c/litertlm_c_api/*.dylib $LITERTLM_LIB
+cp prebuilt/macos_arm64/*.dylib $LITERTLM_LIB
+cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.dylib $LITERTLM_LIB
 ```
 
 ## Get a model
@@ -151,6 +137,7 @@ LITERTLM_LIB=~/include/litertlm/lib go run ./examples/hello \
 ```
 
 ## Troubleshooting
+
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|

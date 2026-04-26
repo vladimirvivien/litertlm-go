@@ -27,20 +27,33 @@ bazel build //c:litertlm_c \
 ```
 
 This produces `bazel-bin/c/liblitertlm_c.{so,dylib}` (or
-`bazel-bin\c\litertlm_c.dll` on Windows). See `build_litertlm.md` §3 for
+`bazel-bin\c\litertlm_c.dll` on Windows). See `LITERTLM-BUILD.md` §3 for
 full per-OS instructions.
 
 ### 2. Stage the GPU runtime files into one directory
 
 In addition to the wrapper library, the GPU build dynamically loads four
 plugins from the `prebuilt/<os>/` directory of the LiteRT-LM checkout.
-Per `build_litertlm.md` §4.4, on Linux x86_64:
+
+> **Use the prebuilt `libLiteRt.*`, not the freshly-built one.** The GPU
+> recipe (`--define=litert_link_capi_so=true`) makes Bazel produce a
+> rebuilt `libLiteRt.*` and symlink it into `bazel-bin/c/litertlm_c_api/`
+> alongside `liblitertlm_c.*`. The prebuilt accelerator plugins
+> (`libLiteRtWebGpuAccelerator.*`, `libLiteRtTopKWebGpuSampler.*`) were
+> compiled against the prebuilt `libLiteRt.*` and are ABI-coupled to it —
+> loading them against the rebuilt version causes a segfault during
+> WebGPU kernel upload. Copy `libLiteRt.*` from `prebuilt/<os>/`,
+> *not* from `bazel-bin/`.
+
+Per `LITERTLM-BUILD.md` §4.4, on Linux x86_64:
 
 ```bash
 PREBUILT=$LITERTLM/prebuilt/linux_x86_64
 DIST=./dist-gpu/lib
 mkdir -p $DIST
+# Your build artifact — the only thing from bazel-bin you should stage.
 cp $LITERTLM/bazel-bin/c/liblitertlm_c.so          $DIST/
+# All other runtime deps come from prebuilt/, including libLiteRt.so.
 cp $PREBUILT/libGemmaModelConstraintProvider.so    $DIST/
 cp $PREBUILT/libLiteRt.so                          $DIST/
 cp $PREBUILT/libLiteRtWebGpuAccelerator.so         $DIST/
@@ -49,7 +62,7 @@ cp $PREBUILT/libLiteRtTopKWebGpuSampler.so         $DIST/
 
 macOS arm64 also requires `libLiteRtMetalAccelerator.dylib`. Windows
 also requires the **DirectX Shader Compiler** (`dxcompiler.dll` +
-`dxil.dll`) on the system. See `build_litertlm.md` §4.1 for the full
+`dxil.dll`) on the system. See `LITERTLM-BUILD.md` §4.1 for the full
 table of which platform needs what.
 
 ### 3. Bridge the wrapper's expected name to the GPU build

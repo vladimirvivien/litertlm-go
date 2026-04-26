@@ -1,29 +1,54 @@
 package loader
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestGetLibraryFilename(t *testing.T) {
-	got := GetLibraryFilename("/tmp/dist/lib", "litertlm_c_cpu")
+	dir := filepath.Join("tmp", "dist", "lib")
+	got := GetLibraryFilename(dir, "litertlm_c_cpu")
 
 	var want string
 	switch runtime.GOOS {
 	case "linux", "freebsd":
-		want = "/tmp/dist/lib/liblitertlm_c_cpu.so"
+		want = filepath.Join(dir, "liblitertlm_c_cpu.so")
 	case "darwin":
-		want = "/tmp/dist/lib/liblitertlm_c_cpu.dylib"
+		want = filepath.Join(dir, "liblitertlm_c_cpu.dylib")
 	case "windows":
-		want = "/tmp/dist/lib/litertlm_c_cpu.dll"
+		want = filepath.Join(dir, "litertlm_c_cpu.dll")
 	default:
 		// Unknown GOOS: fall back to concatenation, no prefix/extension.
-		want = "/tmp/dist/lib/litertlm_c_cpu"
+		want = filepath.Join(dir, "litertlm_c_cpu")
 	}
 
 	if got != want {
 		t.Fatalf("GetLibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
+	}
+}
+
+func TestGetAuxLibraryFilename(t *testing.T) {
+	dir := filepath.Join("tmp", "dist", "lib")
+	got := GetAuxLibraryFilename(dir, "GemmaModelConstraintProvider")
+
+	var want string
+	switch runtime.GOOS {
+	case "linux", "freebsd":
+		want = filepath.Join(dir, "libGemmaModelConstraintProvider.so")
+	case "darwin":
+		want = filepath.Join(dir, "libGemmaModelConstraintProvider.dylib")
+	case "windows":
+		// Aux libs (prebuilt plugins) keep the "lib" prefix on Windows,
+		// unlike the main C-API DLL.
+		want = filepath.Join(dir, "libGemmaModelConstraintProvider.dll")
+	default:
+		want = filepath.Join(dir, "GemmaModelConstraintProvider")
+	}
+
+	if got != want {
+		t.Fatalf("GetAuxLibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
 	}
 }
 

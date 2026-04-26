@@ -5,6 +5,6 @@
 //	import "github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 //	import "github.com/vladimirvivien/litertlm-go/pkg/loader"
 //
-// See README.md for the full usage guide and build_litertlm.md for the
+// See README.md for the full usage guide and LITERTLM-BUILD.md for the
 // native-library build recipe.
 package litertlmgo

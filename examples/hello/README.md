@@ -16,7 +16,7 @@ and prints every candidate the model returns.
 ## Prerequisites
 
 1. **Native shared library + runtime deps staged in a directory**, per
-   `build_litertlm.md` §3 and §4. At minimum:
+   `LITERTLM-BUILD.md` §3 and §4. At minimum:
    - `liblitertlm_c_cpu.so` (Linux) / `.dylib` (macOS) / `.dll` (Windows)
    - `libGemmaModelConstraintProvider.{so,dylib,dll}`
 2. **A `.litertlm` model file**. Gemma 4 2B works well for a smoke test:

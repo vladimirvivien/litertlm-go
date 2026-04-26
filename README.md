@@ -10,7 +10,7 @@ Note: this approach was inspired by project Hybridgroup's project [Yzma](https:/
 
 ## Building LiteRT-LM C shared object libraries
 LiteRT-LM is a C++ project and does not distribute a C API by default.
-However, you can folllow instructions [here](./build_litertlm.md) to build 
+However, you can folllow instructions [here](./LITERTLM-BUILD.md) to build 
 the LiteRT-ML source code with C shared object libraries.
 
 
