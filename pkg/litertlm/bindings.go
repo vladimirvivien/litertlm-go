@@ -12,10 +12,10 @@ var ffiTypeSizeT = ffi.TypeUint64
 // call in loadFuncs().
 var (
 	// Session config
-	sessionConfigCreateFunc              ffi.Fun
-	sessionConfigSetMaxOutputTokensFunc  ffi.Fun
-	sessionConfigSetSamplerParamsFunc    ffi.Fun
-	sessionConfigDeleteFunc              ffi.Fun
+	sessionConfigCreateFunc             ffi.Fun
+	sessionConfigSetMaxOutputTokensFunc ffi.Fun
+	sessionConfigSetSamplerParamsFunc   ffi.Fun
+	sessionConfigDeleteFunc             ffi.Fun
 
 	// Conversation config
 	conversationConfigCreateFunc                       ffi.Fun
@@ -30,21 +30,21 @@ var (
 	setMinLogLevelFunc ffi.Fun
 
 	// Engine settings
-	engineSettingsCreateFunc                          ffi.Fun
-	engineSettingsDeleteFunc                          ffi.Fun
-	engineSettingsSetMaxNumTokensFunc                 ffi.Fun
-	engineSettingsSetParallelFileSectionLoadingFunc   ffi.Fun
-	engineSettingsSetCacheDirFunc                     ffi.Fun
-	engineSettingsSetActivationDataTypeFunc           ffi.Fun
-	engineSettingsSetPrefillChunkSizeFunc             ffi.Fun
-	engineSettingsEnableBenchmarkFunc                 ffi.Fun
-	engineSettingsSetNumPrefillTokensFunc             ffi.Fun
-	engineSettingsSetNumDecodeTokensFunc              ffi.Fun
+	engineSettingsCreateFunc                        ffi.Fun
+	engineSettingsDeleteFunc                        ffi.Fun
+	engineSettingsSetMaxNumTokensFunc               ffi.Fun
+	engineSettingsSetParallelFileSectionLoadingFunc ffi.Fun
+	engineSettingsSetCacheDirFunc                   ffi.Fun
+	engineSettingsSetActivationDataTypeFunc         ffi.Fun
+	engineSettingsSetPrefillChunkSizeFunc           ffi.Fun
+	engineSettingsEnableBenchmarkFunc               ffi.Fun
+	engineSettingsSetNumPrefillTokensFunc           ffi.Fun
+	engineSettingsSetNumDecodeTokensFunc            ffi.Fun
 
 	// Engine
-	engineCreateFunc         ffi.Fun
-	engineDeleteFunc         ffi.Fun
-	engineCreateSessionFunc  ffi.Fun
+	engineCreateFunc        ffi.Fun
+	engineDeleteFunc        ffi.Fun
+	engineCreateSessionFunc ffi.Fun
 
 	// Session
 	sessionDeleteFunc                ffi.Fun
@@ -53,9 +53,9 @@ var (
 	sessionGetBenchmarkInfoFunc      ffi.Fun
 
 	// Responses
-	responsesDeleteFunc             ffi.Fun
-	responsesGetNumCandidatesFunc   ffi.Fun
-	responsesGetResponseTextAtFunc  ffi.Fun
+	responsesDeleteFunc            ffi.Fun
+	responsesGetNumCandidatesFunc  ffi.Fun
+	responsesGetResponseTextAtFunc ffi.Fun
 
 	// Benchmark info
 	benchmarkInfoDeleteFunc                   ffi.Fun

@@ -36,9 +36,9 @@ import (
 // libByBackend maps the backend string accepted by NewEngineSettings to the
 // short library name that contains that execution path:
 //
-//   "cpu" → litertlm_c_cpu  (CPU-only binary, built from //c:engine_cpu)
-//   "gpu" → litertlm_c      (GPU-capable binary, built from //c:engine;
-//                            also runs backend="cpu" via fallback)
+//	"cpu" → litertlm_c_cpu  (CPU-only binary, built from //c:engine_cpu)
+//	"gpu" → litertlm_c      (GPU-capable binary, built from //c:engine;
+//	                         also runs backend="cpu" via fallback)
 //
 // Unknown or empty backends cause Load to prefer litertlm_c and fall back to
 // litertlm_c_cpu if absent.

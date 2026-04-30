@@ -5,11 +5,11 @@ package litertlm
 type InputDataType int32
 
 const (
-	InputText       InputDataType = 0
-	InputImage      InputDataType = 1
-	InputImageEnd   InputDataType = 2
-	InputAudio      InputDataType = 3
-	InputAudioEnd   InputDataType = 4
+	InputText     InputDataType = 0
+	InputImage    InputDataType = 1
+	InputImageEnd InputDataType = 2
+	InputAudio    InputDataType = 3
+	InputAudioEnd InputDataType = 4
 )
 
 // SamplerType mirrors the `Type` enum for LiteRtLmSamplerParams in c/engine.h.

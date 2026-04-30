@@ -6,15 +6,15 @@
 //
 // Flow:
 //
-//	1. Build a ConversationConfig with a system prompt and a tools_json
-//	   describing one function (calc_add).
-//	2. Send the user question. The chat-tuned model emits a Gemma 4
-//	   <|tool_call> block; the C side parses it and surfaces it to us
-//	   as a structured `tool_calls` array on the assistant message.
-//	3. Execute the call locally and send the result back as a tool-role
-//	   message — the chat template renders it as <|tool_response>...
-//	4. The model continues the same model turn and produces the final
-//	   natural-language answer.
+//  1. Build a ConversationConfig with a system prompt and a tools_json
+//     describing one function (calc_add).
+//  2. Send the user question. The chat-tuned model emits a Gemma 4
+//     <|tool_call> block; the C side parses it and surfaces it to us
+//     as a structured `tool_calls` array on the assistant message.
+//  3. Execute the call locally and send the result back as a tool-role
+//     message — the chat template renders it as <|tool_response>...
+//  4. The model continues the same model turn and produces the final
+//     natural-language answer.
 //
 // See README.md in this directory for prerequisites and run instructions.
 package main

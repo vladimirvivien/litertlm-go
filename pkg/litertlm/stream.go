@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
@@ -39,7 +40,7 @@ type StreamChunk struct {
 // cookie passed through the C `callback_data` argument.
 
 var (
-	streamOnce     sync.Once
+	streamOnce      sync.Once
 	streamTrampAddr uintptr
 
 	streamRegMu sync.Mutex
