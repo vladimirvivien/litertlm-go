@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"runtime"
 	"unsafe"
+
+	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
 // NewSessionConfig creates a fresh SessionConfig with C-side defaults.
@@ -82,4 +84,90 @@ func (s Session) BenchmarkInfo() (BenchmarkInfo, error) {
 	}
 	return callForHandle[BenchmarkInfo](sessionGetBenchmarkInfoFunc,
 		"session_get_benchmark_info", unsafe.Pointer(&s))
+}
+
+// Cancel requests cancellation of an in-flight process on this session.
+// It is safe to call when no process is running.
+func (s Session) Cancel() {
+	if s == 0 {
+		return
+	}
+	sessionCancelProcessFunc.Call(nil, unsafe.Pointer(&s))
+}
+
+// RunPrefill adds inputs to the session's context as the prompt phase.
+// Pair with RunDecode to drive the explicit prefill→decode flow rather
+// than the all-in-one GenerateContent.
+func (s Session) RunPrefill(inputs []InputData) error {
+	if s == 0 {
+		return fmt.Errorf("litertlm: session_run_prefill: invalid session")
+	}
+	if len(inputs) == 0 {
+		return fmt.Errorf("litertlm: session_run_prefill: no inputs")
+	}
+
+	inputsPtr := unsafe.Pointer(&inputs[0])
+	n := uint64(len(inputs))
+
+	var status int32
+	sessionRunPrefillFunc.Call(
+		unsafe.Pointer(&status),
+		unsafe.Pointer(&s),
+		unsafe.Pointer(&inputsPtr),
+		unsafe.Pointer(&n),
+	)
+	runtime.KeepAlive(inputs)
+	if status != 0 {
+		return fmt.Errorf("litertlm: session_run_prefill failed (code=%d)", status)
+	}
+	return nil
+}
+
+// RunDecode performs the decode phase against context that's been
+// populated via RunPrefill. Caller must Delete() the returned Responses.
+func (s Session) RunDecode() (Responses, error) {
+	if s == 0 {
+		return 0, fmt.Errorf("litertlm: session_run_decode: invalid session")
+	}
+	return callForHandle[Responses](sessionRunDecodeFunc, "session_run_decode",
+		unsafe.Pointer(&s))
+}
+
+// ScoreTexts scores each candidate string against the prefilled prompt.
+// storeTokenLengths attaches the per-target tokenized length to the
+// returned Responses (retrievable via Responses.TokenLength once that
+// accessor lands in 4d). Caller must Delete() the result.
+func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses, error) {
+	if s == 0 {
+		return 0, fmt.Errorf("litertlm: session_run_text_scoring: invalid session")
+	}
+	if len(targets) == 0 {
+		return 0, fmt.Errorf("litertlm: session_run_text_scoring: no targets")
+	}
+
+	// Build a contiguous []*byte so &ptrs[0] gives C its const char**.
+	ptrs := make([]*byte, len(targets))
+	for i, t := range targets {
+		p, err := utils.BytePtrFromString(t)
+		if err != nil {
+			return 0, err
+		}
+		ptrs[i] = p
+	}
+	arrPtr := unsafe.Pointer(&ptrs[0])
+	num := uint64(len(targets))
+	var enable uint8
+	if storeTokenLengths {
+		enable = 1
+	}
+
+	r, err := callForHandle[Responses](sessionRunTextScoringFunc, "session_run_text_scoring",
+		unsafe.Pointer(&s),
+		unsafe.Pointer(&arrPtr),
+		unsafe.Pointer(&num),
+		unsafe.Pointer(&enable),
+	)
+	// Hold the per-target byte buffers alive across the FFI call.
+	runtime.KeepAlive(ptrs)
+	return r, err
 }

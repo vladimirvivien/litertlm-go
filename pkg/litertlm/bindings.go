@@ -50,6 +50,10 @@ var (
 	sessionGenerateContentFunc       ffi.Fun
 	sessionGenerateContentStreamFunc ffi.Fun
 	sessionGetBenchmarkInfoFunc      ffi.Fun
+	sessionCancelProcessFunc         ffi.Fun
+	sessionRunPrefillFunc            ffi.Fun
+	sessionRunDecodeFunc             ffi.Fun
+	sessionRunTextScoringFunc        ffi.Fun
 
 	// Responses
 	responsesDeleteFunc            ffi.Fun
@@ -292,6 +296,35 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_session_get_benchmark_info",
 		&ffi.TypePointer, &ffi.TypePointer); err != nil {
 		return loadError("litert_lm_session_get_benchmark_info", err)
+	}
+	if sessionCancelProcessFunc, err = lib.Prep(
+		"litert_lm_session_cancel_process",
+		&ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_session_cancel_process", err)
+	}
+	if sessionRunPrefillFunc, err = lib.Prep(
+		"litert_lm_session_run_prefill",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // session
+		&ffi.TypePointer, // inputs
+		&ffiTypeSizeT,    // num_inputs
+	); err != nil {
+		return loadError("litert_lm_session_run_prefill", err)
+	}
+	if sessionRunDecodeFunc, err = lib.Prep(
+		"litert_lm_session_run_decode",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_session_run_decode", err)
+	}
+	if sessionRunTextScoringFunc, err = lib.Prep(
+		"litert_lm_session_run_text_scoring",
+		&ffi.TypePointer,
+		&ffi.TypePointer, // session
+		&ffi.TypePointer, // target_text (const char**)
+		&ffiTypeSizeT,    // num_targets
+		&ffi.TypeUint8,   // store_token_lengths
+	); err != nil {
+		return loadError("litert_lm_session_run_text_scoring", err)
 	}
 
 	// ---- Responses ----
