@@ -56,12 +56,11 @@ func (b BenchmarkInfo) PrefillTokenCount(i int) int {
 	if b == 0 {
 		return 0
 	}
-	idx := int32(i)
 	var v int32
 	benchmarkInfoGetPrefillTokenCountAtFunc.Call(
 		unsafe.Pointer(&v),
 		unsafe.Pointer(&b),
-		unsafe.Pointer(&idx),
+		unsafe.Pointer(new(int32(i))),
 	)
 	return int(v)
 }
@@ -71,12 +70,11 @@ func (b BenchmarkInfo) DecodeTokenCount(i int) int {
 	if b == 0 {
 		return 0
 	}
-	idx := int32(i)
 	var v int32
 	benchmarkInfoGetDecodeTokenCountAtFunc.Call(
 		unsafe.Pointer(&v),
 		unsafe.Pointer(&b),
-		unsafe.Pointer(&idx),
+		unsafe.Pointer(new(int32(i))),
 	)
 	return int(v)
 }
@@ -86,12 +84,11 @@ func (b BenchmarkInfo) PrefillTokensPerSec(i int) float64 {
 	if b == 0 {
 		return 0
 	}
-	idx := int32(i)
 	var v float64
 	benchmarkInfoGetPrefillTokensPerSecAtFunc.Call(
 		unsafe.Pointer(&v),
 		unsafe.Pointer(&b),
-		unsafe.Pointer(&idx),
+		unsafe.Pointer(new(int32(i))),
 	)
 	return v
 }
@@ -101,12 +98,11 @@ func (b BenchmarkInfo) DecodeTokensPerSec(i int) float64 {
 	if b == 0 {
 		return 0
 	}
-	idx := int32(i)
 	var v float64
 	benchmarkInfoGetDecodeTokensPerSecAtFunc.Call(
 		unsafe.Pointer(&v),
 		unsafe.Pointer(&b),
-		unsafe.Pointer(&idx),
+		unsafe.Pointer(new(int32(i))),
 	)
 	return v
 }

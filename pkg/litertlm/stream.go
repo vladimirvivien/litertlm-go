@@ -13,32 +13,24 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
-// streamWatchdog is the maximum wall-clock time we wait for the C engine to
-// deliver the Final chunk. It exists primarily as a deadlock-detector escape
-// hatch: while a goroutine is parked on `<-done`, the Go runtime fires
-// "all goroutines are asleep - deadlock!" if it sees no other runnable
-// goroutine and no pending timer, even though the C++ engine's foreign
-// thread will eventually invoke the purego callback. A pending timer puts an
-// entry on the runtime's timer heap so the scheduler considers itself alive.
-// 24h is well beyond any realistic decode time.
+// streamWatchdog bounds how long we'll wait for the C engine's Final
+// chunk. Its real job is to keep a runnable timer on the scheduler so
+// the Go runtime doesn't fire an "all goroutines asleep" deadlock while
+// we're parked on <-done waiting for a foreign-thread callback.
 const streamWatchdog = 24 * time.Hour
 
-// StreamChunk is one piece of a streaming generation result. A callback will
-// receive multiple non-Final chunks followed by a single Final chunk. If the
-// underlying C layer reports an error, Err is populated and Final is true.
+// StreamChunk is one piece of a streaming generation result. Callbacks
+// receive zero or more non-Final chunks followed by exactly one Final
+// chunk; on error, Err is populated and Final is true.
 type StreamChunk struct {
 	Text  string
 	Final bool
 	Err   error
 }
 
-// ---- One permanent trampoline shared by all streams ----------------------
-//
-// purego.NewCallback allocates a C function pointer that lives for the rest
-// of the process. Registering a new callback per inference call would leak
-// memory, so we register exactly one trampoline function and dispatch by a
-// cookie passed through the C `callback_data` argument.
-
+// One process-wide trampoline shared by all streams. purego.NewCallback
+// allocates a permanent C function pointer, so we register a single
+// trampoline and dispatch by a cookie passed through `callback_data`.
 var (
 	streamOnce      sync.Once
 	streamTrampAddr uintptr
@@ -48,12 +40,6 @@ var (
 	streamRegID uintptr
 )
 
-// streamTrampoline runs on whatever thread C invokes the callback from;
-// purego handles the cgo-like transition into the Go runtime for us.
-//
-// The pointer arguments are declared as unsafe.Pointer (rather than uintptr)
-// so converting them to *byte does not trip `go vet`'s
-// "possible misuse of unsafe.Pointer" heuristic.
 func streamTrampoline(data uintptr, chunk unsafe.Pointer, isFinal uint8, errMsg unsafe.Pointer) uintptr {
 	streamRegMu.Lock()
 	cb := streamRegM[data]
@@ -95,24 +81,19 @@ func unregisterStreamCB(id uintptr) {
 	streamRegMu.Unlock()
 }
 
-// ---- Public streaming entry points ---------------------------------------
-
 // GenerateContentStream starts a streaming generation. The callback is
-// invoked on a background thread for each chunk; the final invocation has
-// Final=true (with Err set if the C layer reported an error).
-//
-// The call blocks until the Final chunk is delivered to cb, so callers can
-// treat the function synchronously. Run it in a goroutine to consume the
-// stream concurrently with other work.
+// invoked on a background thread for each chunk; the final invocation
+// has Final=true. The call blocks until the Final chunk has been
+// delivered to cb, so callers can treat it synchronously.
 func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk)) error {
 	if s == 0 {
-		return errors.New("litertlm: generate_content_stream: invalid session")
+		return fmt.Errorf("litertlm: generate_content_stream: invalid session")
 	}
 	if len(inputs) == 0 {
-		return errors.New("litertlm: generate_content_stream: no inputs")
+		return fmt.Errorf("litertlm: generate_content_stream: no inputs")
 	}
 	if cb == nil {
-		return errors.New("litertlm: generate_content_stream: nil callback")
+		return fmt.Errorf("litertlm: generate_content_stream: nil callback")
 	}
 
 	done := make(chan struct{})
@@ -155,15 +136,15 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 		return fmt.Errorf("litertlm: generate_content_stream: watchdog fired after %v", streamWatchdog)
 	}
 	unregisterStreamCB(id)
-	// Hold inputs alive until the C side has produced its Final chunk; the
-	// callback reads &inputs[0] across the async decode, not just during Call.
+	// inputs (and the byte buffers it references) must stay live until
+	// the C side has delivered Final — the foreign thread reads through
+	// &inputs[0] across the entire decode, not just during Call.
 	runtime.KeepAlive(inputs)
 	return nil
 }
 
-// GenerateContentStreamCh is the channel-idiomatic convenience wrapper over
-// GenerateContentStream. The returned channel is closed after the Final
-// chunk has been sent.
+// GenerateContentStreamCh is the channel-idiomatic wrapper over
+// GenerateContentStream. The channel is closed after Final is sent.
 //
 //	for chunk := range session.GenerateContentStreamCh(inputs) {
 //	    if chunk.Err != nil { ... }
@@ -183,26 +164,23 @@ func (s Session) GenerateContentStreamCh(inputs []InputData) <-chan StreamChunk 
 	return out
 }
 
-// ConversationSendMessageStream is the Conversation-level streaming send.
-// Mirrors the signature of Session.GenerateContentStream.
+// SendMessageStream is the Conversation-level streaming send. Mirrors
+// Session.GenerateContentStream.
 func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb func(StreamChunk)) error {
 	if c == 0 {
-		return errors.New("litertlm: send_message_stream: invalid conversation")
+		return fmt.Errorf("litertlm: send_message_stream: invalid conversation")
 	}
 	if cb == nil {
-		return errors.New("litertlm: send_message_stream: nil callback")
+		return fmt.Errorf("litertlm: send_message_stream: nil callback")
 	}
 
 	msgPtr, err := utils.BytePtrFromString(messageJSON)
 	if err != nil {
 		return err
 	}
-	var ctxPtr *byte
-	if extraContext != "" {
-		ctxPtr, err = utils.BytePtrFromString(extraContext)
-		if err != nil {
-			return err
-		}
+	ctxPtr, err := bytePtrOrNil(extraContext)
+	if err != nil {
+		return err
 	}
 
 	done := make(chan struct{})
@@ -245,8 +223,7 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 		return fmt.Errorf("litertlm: send_message_stream: watchdog fired after %v", streamWatchdog)
 	}
 	unregisterStreamCB(id)
-	// Hold the C strings alive until the Final chunk has been delivered;
-	// the C side dereferences them across the async decode, not just Call.
+	// Hold the C strings live until Final has been delivered.
 	runtime.KeepAlive(msgPtr)
 	runtime.KeepAlive(ctxPtr)
 	return nil

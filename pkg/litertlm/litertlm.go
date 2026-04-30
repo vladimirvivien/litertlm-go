@@ -20,9 +20,10 @@
 //	defer resp.Delete()
 //	fmt.Println(resp.Text(0))
 //
-// Ownership: every New*/Generate* result must be paired with .Delete(). No
-// finalizers are attached. Strings returned by accessor methods are copied
-// into Go memory, so they remain valid after their parent is deleted.
+// Ownership: every New*/Generate* result must be paired with .Delete().
+// No finalizers are attached. Strings returned by accessor methods are
+// copied into Go memory, so they remain valid after their parent is
+// deleted.
 package litertlm
 
 import (
@@ -33,35 +34,28 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/loader"
 )
 
-// libByBackend maps the backend string accepted by NewEngineSettings to the
-// short library name that contains that execution path:
-//
-//	"cpu" → litertlm_c_cpu  (CPU-only binary, built from //c:engine_cpu)
-//	"gpu" → litertlm_c      (GPU-capable binary, built from //c:engine;
-//	                         also runs backend="cpu" via fallback)
-//
-// Unknown or empty backends cause Load to prefer litertlm_c and fall back to
-// litertlm_c_cpu if absent.
+// libByBackend maps the backend selector to the main C-API shared lib:
+// "cpu" → litertlm_c_cpu, "gpu" → litertlm_c. Unknown values fall back
+// to GPU first, then CPU.
 var libByBackend = map[string]string{
 	"cpu": "litertlm_c_cpu",
 	"gpu": "litertlm_c",
 }
 
-// auxLibs are additional shared libraries the C API loads at runtime. They
-// must be present in the same LITERTLM_LIB directory. libGemmaModelConstraintProvider
-// is always required (even for CPU builds); the GPU-only plugins are listed
-// but treated as optional — Load succeeds if they are absent.
+// auxLibs are required by the C API at load time and must sit next to
+// the main library.
 var auxLibs = []string{
-	"GemmaModelConstraintProvider", // always required
+	"GemmaModelConstraintProvider",
 }
 
-// optionalLibs are loaded if present but their absence is not an error. They
-// are the GPU accelerator plugins shipped in LiteRT-LM's prebuilt/ directory.
+// optionalLibs are GPU accelerator plugins from LiteRT-LM's prebuilt/
+// directory. Their absence is not an error; backend="gpu" calls will
+// just fail at runtime if any are missing.
 var optionalLibs = []string{
 	"LiteRt",
 	"LiteRtWebGpuAccelerator",
 	"LiteRtTopKWebGpuSampler",
-	"LiteRtMetalAccelerator", // macOS only; missing on Linux, which is fine
+	"LiteRtMetalAccelerator", // macOS only
 }
 
 var (
@@ -70,37 +64,21 @@ var (
 	libPath    string
 )
 
-// LibPath returns the directory from which the LiteRT-LM shared libraries
-// were loaded. Empty until Load has been called successfully.
+// LibPath returns the directory from which Load opened the shared
+// libraries. Empty until a successful Load.
 func LibPath() string {
 	loadMu.Lock()
 	defer loadMu.Unlock()
 	return libPath
 }
 
-// Load dynamically opens the LiteRT-LM shared library set and binds every
-// C entry point this package uses. `path` is the directory containing the
-// shared libs; if empty, the LITERTLM_LIB environment variable is consulted.
-// `backend` selects which main library to open: "cpu" → liblitertlm_c_cpu.*,
-// "gpu" → liblitertlm_c.*; any other value (including "") prefers the GPU
-// binary and falls back to the CPU-only one if absent. The GPU binary also
-// handles backend="cpu" calls internally, so it is the safer default when
-// both files are staged.
+// Load opens the LiteRT-LM shared libraries and binds C entry points.
+// path is the directory containing the libs; "" consults LITERTLM_LIB.
+// backend selects "cpu" or "gpu"; "" or unknown picks GPU then CPU.
 //
-// libGemmaModelConstraintProvider.* must be present next to the main library.
-// GPU accelerator plugins are loaded opportunistically — if they are not in
-// the directory, Load still succeeds but backend="gpu" calls will fail at
-// runtime.
-//
-// Auxiliary libraries are dlopen'd before the main library so that DT_NEEDED
-// references in the main library resolve to the already-loaded copies. This
-// lets Load work without the user having to set LD_LIBRARY_PATH /
-// DYLD_LIBRARY_PATH.
-//
-// Load is safe to call concurrently. Once it has succeeded, subsequent calls
-// are a no-op and return nil — the process-wide C library and its bound
-// function pointers persist for the life of the program. If the first call
-// fails, subsequent calls may retry.
+// Auxiliary libs are dlopen'd before the main lib so DT_NEEDED references
+// resolve without requiring LD_LIBRARY_PATH / DYLD_LIBRARY_PATH. Load is
+// safe to call concurrently; subsequent successful calls are no-ops.
 func Load(path, backend string) error {
 	loadMu.Lock()
 	defer loadMu.Unlock()
@@ -108,14 +86,9 @@ func Load(path, backend string) error {
 		return nil
 	}
 
-	// Optional libs first — skip silently if absent (CPU-only deployments).
-	// Aux libs use the "lib" prefix on every platform (prebuilt convention),
-	// distinct from the main C-API DLL whose name is platform-default.
 	for _, name := range optionalLibs {
 		_, _ = loader.LoadAuxLibrary(path, name)
 	}
-
-	// Required aux libs before the main lib so ld.so finds them by soname.
 	for _, name := range auxLibs {
 		if _, err := loader.LoadAuxLibrary(path, name); err != nil {
 			return err
@@ -126,7 +99,6 @@ func Load(path, backend string) error {
 	if err != nil {
 		return err
 	}
-
 	if err := loadFuncs(mainLib); err != nil {
 		return err
 	}
@@ -136,11 +108,8 @@ func Load(path, backend string) error {
 	return nil
 }
 
-// loadMainLib opens the LiteRT-LM C API shared library that matches the
-// requested backend. For a known backend it returns the specific variant's
-// error verbatim. For an empty/unknown backend it prefers the GPU-capable
-// build and falls back to the CPU-only build, returning the fallback error
-// if neither is present.
+// loadMainLib opens the C-API library matching backend, falling back
+// from GPU to CPU when backend is empty/unknown.
 func loadMainLib(path, backend string) (ffi.Lib, error) {
 	if short, ok := libByBackend[backend]; ok {
 		return loader.LoadLibrary(path, short)
@@ -151,7 +120,6 @@ func loadMainLib(path, backend string) (ffi.Lib, error) {
 	return loader.LoadLibrary(path, "litertlm_c_cpu")
 }
 
-// Close is a no-op retained for API symmetry with yzma. purego does not
-// expose an explicit dlclose, and the C library's lifetime is tied to the
-// process, so there is nothing to actively release here.
+// Close is a no-op retained for API symmetry: purego doesn't expose
+// dlclose, and the C library's lifetime is tied to the process.
 func Close() {}

@@ -1,18 +1,14 @@
 package litertlm
 
 import (
-	"errors"
+	"fmt"
 	"unsafe"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
-// NewEngineSettings constructs an EngineSettings handle. modelPath is the
-// path to the .litertlm model file. backend is typically "cpu" or "gpu".
-// vision and audio are optional extra backends; pass nil to leave them unset.
-//
-// The returned handle must be released with Delete() once an Engine has been
-// created from it (or if creation failed).
+// NewEngineSettings constructs an EngineSettings handle. vision and audio
+// may be nil to leave those backends unset. Caller must Delete().
 func NewEngineSettings(modelPath, backend string, vision, audio *string) (EngineSettings, error) {
 	pathPtr, err := utils.BytePtrFromString(modelPath)
 	if err != nil {
@@ -37,18 +33,12 @@ func NewEngineSettings(modelPath, backend string, vision, audio *string) (Engine
 		}
 	}
 
-	var s EngineSettings
-	engineSettingsCreateFunc.Call(
-		unsafe.Pointer(&s),
+	return callForHandle[EngineSettings](engineSettingsCreateFunc, "engine_settings_create",
 		unsafe.Pointer(&pathPtr),
 		unsafe.Pointer(&backendPtr),
 		unsafe.Pointer(&visionPtr),
 		unsafe.Pointer(&audioPtr),
 	)
-	if s == 0 {
-		return 0, errors.New("litertlm: engine_settings_create failed")
-	}
-	return s, nil
 }
 
 // Delete releases an EngineSettings handle.
@@ -64,8 +54,7 @@ func (s EngineSettings) SetMaxNumTokens(n int) {
 	if s == 0 {
 		return
 	}
-	v := int32(n)
-	engineSettingsSetMaxNumTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+	engineSettingsSetMaxNumTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
 }
 
 // SetParallelFileSectionLoading toggles parallel loading of litertlm file
@@ -81,17 +70,18 @@ func (s EngineSettings) SetParallelFileSectionLoading(on bool) {
 	engineSettingsSetParallelFileSectionLoadingFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
 }
 
-// SetCacheDir points the engine at a directory it can use for artefact caching.
-func (s EngineSettings) SetCacheDir(dir string) error {
+// SetCacheDir points the engine at a directory it can use for artefact
+// caching. Strings containing a NUL byte are silently ignored — they are
+// invalid as C strings and could not be passed through the FFI layer.
+func (s EngineSettings) SetCacheDir(dir string) {
 	if s == 0 {
-		return nil
+		return
 	}
 	dirPtr, err := utils.BytePtrFromString(dir)
 	if err != nil {
-		return err
+		return
 	}
 	engineSettingsSetCacheDirFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&dirPtr))
-	return nil
 }
 
 // SetActivationDataType selects the activation precision. Accepted values
@@ -100,8 +90,7 @@ func (s EngineSettings) SetActivationDataType(t int) {
 	if s == 0 {
 		return
 	}
-	v := int32(t)
-	engineSettingsSetActivationDataTypeFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+	engineSettingsSetActivationDataTypeFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(t))))
 }
 
 // SetPrefillChunkSize sets the CPU-backend prefill chunk size for dynamic models.
@@ -109,12 +98,11 @@ func (s EngineSettings) SetPrefillChunkSize(n int) {
 	if s == 0 {
 		return
 	}
-	v := int32(n)
-	engineSettingsSetPrefillChunkSizeFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+	engineSettingsSetPrefillChunkSizeFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
 }
 
-// EnableBenchmark turns on benchmark collection for the engine. BenchmarkInfo
-// can then be retrieved via Session.BenchmarkInfo() / Conversation.BenchmarkInfo().
+// EnableBenchmark turns on benchmark collection. BenchmarkInfo is then
+// retrievable via Session.BenchmarkInfo() / Conversation.BenchmarkInfo().
 func (s EngineSettings) EnableBenchmark() {
 	if s == 0 {
 		return
@@ -127,8 +115,7 @@ func (s EngineSettings) SetNumPrefillTokens(n int) {
 	if s == 0 {
 		return
 	}
-	v := int32(n)
-	engineSettingsSetNumPrefillTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+	engineSettingsSetNumPrefillTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
 }
 
 // SetNumDecodeTokens sets the number of decode steps for benchmarking.
@@ -136,23 +123,16 @@ func (s EngineSettings) SetNumDecodeTokens(n int) {
 	if s == 0 {
 		return
 	}
-	v := int32(n)
-	engineSettingsSetNumDecodeTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+	engineSettingsSetNumDecodeTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
 }
 
-// NewEngine loads the model described by the given settings and returns a
-// live Engine. The caller retains ownership of the settings handle — it is
-// safe (and recommended) to call settings.Delete() once the engine is created.
+// NewEngine loads the model described by settings. The caller still owns
+// the settings handle and may Delete() it once the engine is created.
 func NewEngine(settings EngineSettings) (Engine, error) {
 	if settings == 0 {
-		return 0, errors.New("litertlm: engine_create: settings is nil")
+		return 0, fmt.Errorf("litertlm: engine_create: settings is nil")
 	}
-	var e Engine
-	engineCreateFunc.Call(unsafe.Pointer(&e), unsafe.Pointer(&settings))
-	if e == 0 {
-		return 0, errors.New("litertlm: engine_create failed")
-	}
-	return e, nil
+	return callForHandle[Engine](engineCreateFunc, "engine_create", unsafe.Pointer(&settings))
 }
 
 // Delete releases an Engine handle and frees the underlying model weights.
@@ -163,37 +143,24 @@ func (e Engine) Delete() {
 	engineDeleteFunc.Call(nil, unsafe.Pointer(&e))
 }
 
-// NewSession opens a session on the engine. Pass a SessionConfig with tuned
-// sampler / max-output-tokens, or 0 to accept defaults.
+// NewSession opens a session on the engine. Pass 0 for cfg to accept defaults.
 func (e Engine) NewSession(cfg SessionConfig) (Session, error) {
 	if e == 0 {
-		return 0, errors.New("litertlm: engine_create_session: invalid engine")
+		return 0, fmt.Errorf("litertlm: engine_create_session: invalid engine")
 	}
-	var sess Session
-	engineCreateSessionFunc.Call(
-		unsafe.Pointer(&sess),
+	return callForHandle[Session](engineCreateSessionFunc, "engine_create_session",
 		unsafe.Pointer(&e),
 		unsafe.Pointer(&cfg),
 	)
-	if sess == 0 {
-		return 0, errors.New("litertlm: engine_create_session failed")
-	}
-	return sess, nil
 }
 
 // NewConversation creates a conversation rooted in the engine.
 func (e Engine) NewConversation(cfg ConversationConfig) (Conversation, error) {
 	if e == 0 {
-		return 0, errors.New("litertlm: conversation_create: invalid engine")
+		return 0, fmt.Errorf("litertlm: conversation_create: invalid engine")
 	}
-	var c Conversation
-	conversationCreateFunc.Call(
-		unsafe.Pointer(&c),
+	return callForHandle[Conversation](conversationCreateFunc, "conversation_create",
 		unsafe.Pointer(&e),
 		unsafe.Pointer(&cfg),
 	)
-	if c == 0 {
-		return 0, errors.New("litertlm: conversation_create failed")
-	}
-	return c, nil
 }

@@ -6,10 +6,9 @@ import "github.com/jupiterrider/ffi"
 // platforms this is a 64-bit unsigned integer.
 var ffiTypeSizeT = ffi.TypeUint64
 
-// Every exported litert_lm_* function in c/engine.h gets a package-level
-// ffi.Fun variable. This single block is the canonical list — if a new
-// symbol is added to the C header, add a matching Fun here and a lib.Prep
-// call in loadFuncs().
+// Every exported litert_lm_* function in c/engine.h has a package-level
+// ffi.Fun variable here. New symbols need both a Fun and a lib.Prep
+// in loadFuncs().
 var (
 	// Session config
 	sessionConfigCreateFunc             ffi.Fun
@@ -82,8 +81,8 @@ var (
 )
 
 // loadFuncs registers every C entry point with the opened main library.
-// Each Prep is pattern-identical to yzma's loader functions: return type
-// first, then argument types in declaration order.
+// Each Prep declares the return type first, then argument types in C
+// declaration order.
 func loadFuncs(lib ffi.Lib) error {
 	var err error
 
@@ -109,11 +108,7 @@ func loadFuncs(lib ffi.Lib) error {
 	}
 
 	// ---- Conversation config ----
-	// litert_lm_conversation_config_create takes no arguments — the C API
-	// returns an empty config that must be populated via the per-field
-	// setters below. Earlier versions of this binding declared six extra
-	// pointer args; those values were silently ignored by the C side, so
-	// every system_message / tools / messages slot we passed was a no-op.
+	// create() takes no args; fields are populated via per-field setters.
 	if conversationConfigCreateFunc, err = lib.Prep(
 		"litert_lm_conversation_config_create",
 		&ffi.TypePointer,

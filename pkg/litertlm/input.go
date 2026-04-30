@@ -25,11 +25,8 @@ type InputData struct {
 // changes the layout, this indexing expression becomes a compile error.
 var _ = [1]byte{}[unsafe.Sizeof(InputData{})-24]
 
-// NewTextInput builds an InputData that references the UTF-8 bytes of s.
-// The returned record is only valid for the lifetime of the supplied slice —
-// callers are responsible for keeping a reference alive across the C call
-// (typically by storing the slice in a local variable that outlives the
-// GenerateContent / GenerateContentStream invocation).
+// NewTextInput builds an InputData referencing the UTF-8 bytes of s.
+// The caller must keep s alive across the consuming C call.
 func NewTextInput(s []byte) InputData {
 	var data unsafe.Pointer
 	if len(s) > 0 {
@@ -43,8 +40,7 @@ func NewTextInput(s []byte) InputData {
 }
 
 // NewTextInputString is a convenience wrapper over NewTextInput for Go
-// strings. The string's backing bytes are referenced directly via unsafe —
-// valid because Go strings are immutable for the duration of the call.
+// strings. The string's backing bytes are referenced directly.
 func NewTextInputString(s string) InputData {
 	var data unsafe.Pointer
 	if len(s) > 0 {

@@ -25,23 +25,20 @@ func (r Responses) NumCandidates() int {
 }
 
 // Text returns the response text at index i, copied into Go memory.
-// Returns "" if the index is out of bounds or the underlying pointer is null.
+// Returns "" if the index is out of bounds or the underlying pointer is
+// null. The copy lets the result outlive Responses.Delete().
 func (r Responses) Text(i int) string {
 	if r == 0 {
 		return ""
 	}
-	idx := int32(i)
 	var ptr *byte
 	responsesGetResponseTextAtFunc.Call(
 		unsafe.Pointer(&ptr),
 		unsafe.Pointer(&r),
-		unsafe.Pointer(&idx),
+		unsafe.Pointer(new(int32(i))),
 	)
 	if ptr == nil {
 		return ""
 	}
-	// Copy the bytes into Go memory so the returned string stays valid after
-	// Responses.Delete(). This is a deliberate departure from the C API's
-	// "borrowed pointer" semantics.
 	return utils.BytePtrToString(ptr)
 }

@@ -1,25 +1,22 @@
 package litertlm
 
 import (
-	"errors"
+	"fmt"
 	"unsafe"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
-// NewConversationConfig builds a ConversationConfig with the provided
-// metadata. Any of systemMessageJSON, toolsJSON, and messagesJSON may be
-// empty strings to omit them. sessionConfig may be 0 to let the C API
-// pick defaults.
+// NewConversationConfig builds a ConversationConfig populated with the
+// given fields. Empty JSON strings or zero sessionConfig are skipped.
 //
-// The C API exposes config construction as `create()` returning an empty
-// handle, plus a setter per field (see c/engine.h: set_session_config,
-// set_system_message, set_tools, set_messages,
-// set_enable_constrained_decoding). The setters copy their string
-// arguments into std::string members of the underlying struct, so the
-// Go-side bytes do not need to outlive the call. The `engine` parameter
-// is retained for callsite symmetry with NewConversation but is not
-// actually consumed by the C config constructor.
+// systemMessageJSON should be the content (a JSON string or content
+// array), not a `{role,content}` envelope — the C side wraps it itself
+// (see c/engine.cc litert_lm_conversation_create). The C config
+// constructor ignores its `engine` argument; we still require it as a
+// non-zero handle for callsite symmetry with NewConversation. Setters
+// copy strings into std::string fields, so the Go bytes need not
+// outlive the call.
 func NewConversationConfig(
 	engine Engine,
 	sessionConfig SessionConfig,
@@ -29,13 +26,13 @@ func NewConversationConfig(
 	enableConstrainedDecoding bool,
 ) (ConversationConfig, error) {
 	if engine == 0 {
-		return 0, errors.New("litertlm: conversation_config_create: invalid engine")
+		return 0, fmt.Errorf("litertlm: conversation_config_create: invalid engine")
 	}
 
-	var c ConversationConfig
-	conversationConfigCreateFunc.Call(unsafe.Pointer(&c))
-	if c == 0 {
-		return 0, errors.New("litertlm: conversation_config_create failed")
+	c, err := callForHandle[ConversationConfig](conversationConfigCreateFunc,
+		"conversation_config_create")
+	if err != nil {
+		return 0, err
 	}
 
 	if sessionConfig != 0 {
@@ -86,11 +83,10 @@ func NewConversationConfig(
 	}
 
 	if enableConstrainedDecoding {
-		var enable uint8 = 1
 		conversationConfigSetEnableConstrainedDecodingFunc.Call(
 			nil,
 			unsafe.Pointer(&c),
-			unsafe.Pointer(&enable),
+			unsafe.Pointer(new(uint8(1))),
 		)
 	}
 
@@ -113,11 +109,11 @@ func (c Conversation) Delete() {
 	conversationDeleteFunc.Call(nil, unsafe.Pointer(&c))
 }
 
-// SendMessage runs a blocking multi-turn send against the conversation and
-// returns the JSON response (copied into Go memory).
+// SendMessage runs a blocking multi-turn send and returns the JSON
+// response (copied into Go memory).
 func (c Conversation) SendMessage(messageJSON, extraContext string) (string, error) {
 	if c == 0 {
-		return "", errors.New("litertlm: send_message: invalid conversation")
+		return "", fmt.Errorf("litertlm: send_message: invalid conversation")
 	}
 	msgPtr, err := utils.BytePtrFromString(messageJSON)
 	if err != nil {
@@ -128,18 +124,16 @@ func (c Conversation) SendMessage(messageJSON, extraContext string) (string, err
 		return "", err
 	}
 
-	var handle JsonResponse
-	conversationSendMessageFunc.Call(
-		unsafe.Pointer(&handle),
+	handle, err := callForHandle[JsonResponse](conversationSendMessageFunc,
+		"conversation_send_message",
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
 	)
-	if handle == 0 {
-		return "", errors.New("litertlm: conversation_send_message failed")
+	if err != nil {
+		return "", err
 	}
 	defer handle.Delete()
-
 	return handle.String(), nil
 }
 
@@ -151,18 +145,14 @@ func (c Conversation) Cancel() {
 	conversationCancelProcessFunc.Call(nil, unsafe.Pointer(&c))
 }
 
-// BenchmarkInfo returns conversation-level benchmark metrics. Requires the
-// engine to have been created with EnableBenchmark(). Caller must Delete().
+// BenchmarkInfo returns conversation-level benchmark metrics. Requires
+// EngineSettings.EnableBenchmark() at engine construction time.
 func (c Conversation) BenchmarkInfo() (BenchmarkInfo, error) {
 	if c == 0 {
-		return 0, errors.New("litertlm: benchmark_info: invalid conversation")
+		return 0, fmt.Errorf("litertlm: benchmark_info: invalid conversation")
 	}
-	var b BenchmarkInfo
-	conversationGetBenchmarkInfoFunc.Call(unsafe.Pointer(&b), unsafe.Pointer(&c))
-	if b == 0 {
-		return 0, errors.New("litertlm: conversation_get_benchmark_info failed")
-	}
-	return b, nil
+	return callForHandle[BenchmarkInfo](conversationGetBenchmarkInfoFunc,
+		"conversation_get_benchmark_info", unsafe.Pointer(&c))
 }
 
 // ---- JsonResponse --------------------------------------------------------
@@ -175,7 +165,7 @@ func (j JsonResponse) Delete() {
 	jsonResponseDeleteFunc.Call(nil, unsafe.Pointer(&j))
 }
 
-// String returns the JSON payload as a Go string, copied into Go memory.
+// String returns the JSON payload as a Go string (copied into Go memory).
 func (j JsonResponse) String() string {
 	if j == 0 {
 		return ""
@@ -186,15 +176,4 @@ func (j JsonResponse) String() string {
 		return ""
 	}
 	return utils.BytePtrToString(ptr)
-}
-
-// ---- helpers -------------------------------------------------------------
-
-// bytePtrOrNil returns a null-terminated byte pointer for s, or nil if s is
-// empty. Several C entry points accept NULL for "unset".
-func bytePtrOrNil(s string) (*byte, error) {
-	if s == "" {
-		return nil, nil
-	}
-	return utils.BytePtrFromString(s)
 }
