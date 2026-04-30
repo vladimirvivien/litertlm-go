@@ -78,6 +78,15 @@ var (
 	// JSON response
 	jsonResponseDeleteFunc    ffi.Fun
 	jsonResponseGetStringFunc ffi.Fun
+
+	// Tokenizer
+	engineTokenizeFunc             ffi.Fun
+	tokenizeResultDeleteFunc       ffi.Fun
+	tokenizeResultGetTokensFunc    ffi.Fun
+	tokenizeResultGetNumTokensFunc ffi.Fun
+	engineDetokenizeFunc           ffi.Fun
+	detokenizeResultDeleteFunc     ffi.Fun
+	detokenizeResultGetStringFunc  ffi.Fun
 )
 
 // loadFuncs registers every C entry point with the opened main library.
@@ -390,6 +399,50 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_json_response_get_string",
 		&ffi.TypePointer, &ffi.TypePointer); err != nil {
 		return loadError("litert_lm_json_response_get_string", err)
+	}
+
+	// ---- Tokenizer ----
+	if engineTokenizeFunc, err = lib.Prep(
+		"litert_lm_engine_tokenize",
+		&ffi.TypePointer,
+		&ffi.TypePointer, // engine
+		&ffi.TypePointer, // text (const char*)
+	); err != nil {
+		return loadError("litert_lm_engine_tokenize", err)
+	}
+	if tokenizeResultDeleteFunc, err = lib.Prep(
+		"litert_lm_tokenize_result_delete",
+		&ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_tokenize_result_delete", err)
+	}
+	if tokenizeResultGetTokensFunc, err = lib.Prep(
+		"litert_lm_tokenize_result_get_tokens",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_tokenize_result_get_tokens", err)
+	}
+	if tokenizeResultGetNumTokensFunc, err = lib.Prep(
+		"litert_lm_tokenize_result_get_num_tokens",
+		&ffiTypeSizeT, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_tokenize_result_get_num_tokens", err)
+	}
+	if engineDetokenizeFunc, err = lib.Prep(
+		"litert_lm_engine_detokenize",
+		&ffi.TypePointer,
+		&ffi.TypePointer, // engine
+		&ffi.TypePointer, // tokens (const int*)
+		&ffiTypeSizeT,    // num_tokens
+	); err != nil {
+		return loadError("litert_lm_engine_detokenize", err)
+	}
+	if detokenizeResultDeleteFunc, err = lib.Prep(
+		"litert_lm_detokenize_result_delete",
+		&ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_detokenize_result_delete", err)
+	}
+	if detokenizeResultGetStringFunc, err = lib.Prep(
+		"litert_lm_detokenize_result_get_string",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_detokenize_result_get_string", err)
 	}
 
 	return nil
