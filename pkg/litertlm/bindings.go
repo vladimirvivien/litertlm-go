@@ -18,8 +18,13 @@ var (
 	sessionConfigDeleteFunc              ffi.Fun
 
 	// Conversation config
-	conversationConfigCreateFunc ffi.Fun
-	conversationConfigDeleteFunc ffi.Fun
+	conversationConfigCreateFunc                       ffi.Fun
+	conversationConfigSetSessionConfigFunc             ffi.Fun
+	conversationConfigSetSystemMessageFunc             ffi.Fun
+	conversationConfigSetToolsFunc                     ffi.Fun
+	conversationConfigSetMessagesFunc                  ffi.Fun
+	conversationConfigSetEnableConstrainedDecodingFunc ffi.Fun
+	conversationConfigDeleteFunc                       ffi.Fun
 
 	// Logging
 	setMinLogLevelFunc ffi.Fun
@@ -104,17 +109,56 @@ func loadFuncs(lib ffi.Lib) error {
 	}
 
 	// ---- Conversation config ----
+	// litert_lm_conversation_config_create takes no arguments — the C API
+	// returns an empty config that must be populated via the per-field
+	// setters below. Earlier versions of this binding declared six extra
+	// pointer args; those values were silently ignored by the C side, so
+	// every system_message / tools / messages slot we passed was a no-op.
 	if conversationConfigCreateFunc, err = lib.Prep(
 		"litert_lm_conversation_config_create",
 		&ffi.TypePointer,
-		&ffi.TypePointer, // engine
-		&ffi.TypePointer, // session_config (nullable)
-		&ffi.TypePointer, // system_message_json
-		&ffi.TypePointer, // tools_json
-		&ffi.TypePointer, // messages_json
-		&ffi.TypeUint8,   // enable_constrained_decoding (bool)
 	); err != nil {
 		return loadError("litert_lm_conversation_config_create", err)
+	}
+	if conversationConfigSetSessionConfigFunc, err = lib.Prep(
+		"litert_lm_conversation_config_set_session_config",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // session_config
+	); err != nil {
+		return loadError("litert_lm_conversation_config_set_session_config", err)
+	}
+	if conversationConfigSetSystemMessageFunc, err = lib.Prep(
+		"litert_lm_conversation_config_set_system_message",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // system_message_json (const char*)
+	); err != nil {
+		return loadError("litert_lm_conversation_config_set_system_message", err)
+	}
+	if conversationConfigSetToolsFunc, err = lib.Prep(
+		"litert_lm_conversation_config_set_tools",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // tools_json (const char*)
+	); err != nil {
+		return loadError("litert_lm_conversation_config_set_tools", err)
+	}
+	if conversationConfigSetMessagesFunc, err = lib.Prep(
+		"litert_lm_conversation_config_set_messages",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // messages_json (const char*)
+	); err != nil {
+		return loadError("litert_lm_conversation_config_set_messages", err)
+	}
+	if conversationConfigSetEnableConstrainedDecodingFunc, err = lib.Prep(
+		"litert_lm_conversation_config_set_enable_constrained_decoding",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypeUint8,   // enable_constrained_decoding (bool)
+	); err != nil {
+		return loadError("litert_lm_conversation_config_set_enable_constrained_decoding", err)
 	}
 	if conversationConfigDeleteFunc, err = lib.Prep(
 		"litert_lm_conversation_config_delete",

@@ -11,9 +11,38 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
+
+// assistantMessage mirrors the JSON shape SendMessage returns for a chat
+// reply: {"role":"assistant","content":[{"type":"text","text":"..."}]}.
+// Other content types (image, audio) are surfaced for completeness but
+// only `text` items are printed by this example.
+type assistantMessage struct {
+	Role    string `json:"role"`
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text,omitempty"`
+	} `json:"content"`
+}
+
+// extractText concatenates every text content part. Returns the parse
+// error if the response wasn't valid JSON in the documented shape.
+func extractText(jsonResp string) (string, error) {
+	var m assistantMessage
+	if err := json.Unmarshal([]byte(jsonResp), &m); err != nil {
+		return "", fmt.Errorf("unmarshal assistant message: %w", err)
+	}
+	var b strings.Builder
+	for _, p := range m.Content {
+		if p.Type == "text" {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String(), nil
+}
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file")
@@ -51,7 +80,13 @@ func main() {
 	}
 	defer engine.Delete()
 
-	sysJSON, _ := json.Marshal(map[string]string{"role": "system", "content": *system})
+	// systemMessageJSON expects just the content (string or content array),
+	// not a full {role,content} envelope — the C side wraps it in a system
+	// message itself (see c/engine.cc:litert_lm_conversation_create). A
+	// JSON-encoded string is parsed as a JSON value and used as content
+	// directly; passing the envelope makes the chat template silently drop
+	// the system prompt.
+	sysJSON, _ := json.Marshal(*system)
 	cfg, err := litertlm.NewConversationConfig(engine, 0, string(sysJSON), "", "", false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "conv cfg: %v\n", err)
@@ -83,6 +118,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "send: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("bot>  %s\n\n", resp)
+		text, err := extractText(resp)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "parse reply: %v\n  raw: %s\n", err, resp)
+			os.Exit(1)
+		}
+		fmt.Printf("bot>  %s\n\n", text)
 	}
 }

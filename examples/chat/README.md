@@ -58,14 +58,14 @@ LITERTLM_LIB=/abs/path/to/dist/lib \
 
 ```
 user> Hi, what is your name?
-bot>  {"role":"assistant","content":[{"type":"text","text":"Hi, my name is Gemma 4. I am a Large Language Model developed by Google DeepMind."}]}
+bot>  Hi, my name is Gemma 4. I am a Large Language Model developed by Google DeepMind.
 
 user> Tell me a one-sentence fun fact about octopuses.
-bot>  {"role":"assistant","content":[{"type":"text","text":"Octopuses have three hearts and blue blood, and they can change the color of their skin to blend in or startle their prey!"}]}
+bot>  Octopuses have three hearts and blue blood, and they can change the color of their skin to blend in or startle their prey!
 ```
 
-The reply is JSON; pull `.content[0].text` out with `encoding/json` if you
-want just the prose.
+The example unmarshals the JSON response with a small `assistantMessage`
+struct in `main.go` and prints just the concatenated `text` parts.
 
 ## Notes
 
@@ -73,7 +73,8 @@ want just the prose.
   intentional, because chat-tuned models can also emit tool calls,
   multimodal segments, and reasoning channels (see Gemma 4's
   `<|channel>thought` blocks), all of which would need separate fields.
-  This example just prints the JSON; in real code you'd unmarshal it.
+  This example handles only `text` parts; for tool calls see the
+  [`conversation`](../conversation/) example.
 - For **streaming** Conversation output token-by-token, swap
   `conv.SendMessage(...)` for `conv.SendMessageStreamCh(messageJSON, "")`
   — same channel idiom as the [`stream`](../stream/) example.

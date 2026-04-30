@@ -9,8 +9,17 @@ import (
 
 // NewConversationConfig builds a ConversationConfig with the provided
 // metadata. Any of systemMessageJSON, toolsJSON, and messagesJSON may be
-// empty strings to omit them. sessionConfig may be 0 to let the C API pick
-// defaults.
+// empty strings to omit them. sessionConfig may be 0 to let the C API
+// pick defaults.
+//
+// The C API exposes config construction as `create()` returning an empty
+// handle, plus a setter per field (see c/engine.h: set_session_config,
+// set_system_message, set_tools, set_messages,
+// set_enable_constrained_decoding). The setters copy their string
+// arguments into std::string members of the underlying struct, so the
+// Go-side bytes do not need to outlive the call. The `engine` parameter
+// is retained for callsite symmetry with NewConversation but is not
+// actually consumed by the C config constructor.
 func NewConversationConfig(
 	engine Engine,
 	sessionConfig SessionConfig,
@@ -23,37 +32,68 @@ func NewConversationConfig(
 		return 0, errors.New("litertlm: conversation_config_create: invalid engine")
 	}
 
-	sysPtr, err := bytePtrOrNil(systemMessageJSON)
-	if err != nil {
-		return 0, err
-	}
-	toolsPtr, err := bytePtrOrNil(toolsJSON)
-	if err != nil {
-		return 0, err
-	}
-	msgsPtr, err := bytePtrOrNil(messagesJSON)
-	if err != nil {
-		return 0, err
-	}
-
-	var enable uint8
-	if enableConstrainedDecoding {
-		enable = 1
-	}
-
 	var c ConversationConfig
-	conversationConfigCreateFunc.Call(
-		unsafe.Pointer(&c),
-		unsafe.Pointer(&engine),
-		unsafe.Pointer(&sessionConfig),
-		unsafe.Pointer(&sysPtr),
-		unsafe.Pointer(&toolsPtr),
-		unsafe.Pointer(&msgsPtr),
-		unsafe.Pointer(&enable),
-	)
+	conversationConfigCreateFunc.Call(unsafe.Pointer(&c))
 	if c == 0 {
 		return 0, errors.New("litertlm: conversation_config_create failed")
 	}
+
+	if sessionConfig != 0 {
+		conversationConfigSetSessionConfigFunc.Call(
+			nil,
+			unsafe.Pointer(&c),
+			unsafe.Pointer(&sessionConfig),
+		)
+	}
+
+	if systemMessageJSON != "" {
+		sysPtr, err := utils.BytePtrFromString(systemMessageJSON)
+		if err != nil {
+			c.Delete()
+			return 0, err
+		}
+		conversationConfigSetSystemMessageFunc.Call(
+			nil,
+			unsafe.Pointer(&c),
+			unsafe.Pointer(&sysPtr),
+		)
+	}
+
+	if toolsJSON != "" {
+		toolsPtr, err := utils.BytePtrFromString(toolsJSON)
+		if err != nil {
+			c.Delete()
+			return 0, err
+		}
+		conversationConfigSetToolsFunc.Call(
+			nil,
+			unsafe.Pointer(&c),
+			unsafe.Pointer(&toolsPtr),
+		)
+	}
+
+	if messagesJSON != "" {
+		msgsPtr, err := utils.BytePtrFromString(messagesJSON)
+		if err != nil {
+			c.Delete()
+			return 0, err
+		}
+		conversationConfigSetMessagesFunc.Call(
+			nil,
+			unsafe.Pointer(&c),
+			unsafe.Pointer(&msgsPtr),
+		)
+	}
+
+	if enableConstrainedDecoding {
+		var enable uint8 = 1
+		conversationConfigSetEnableConstrainedDecodingFunc.Call(
+			nil,
+			unsafe.Pointer(&c),
+			unsafe.Pointer(&enable),
+		)
+	}
+
 	return c, nil
 }
 
