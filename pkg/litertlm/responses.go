@@ -42,3 +42,56 @@ func (r Responses) Text(i int) string {
 	}
 	return utils.BytePtrToString(ptr)
 }
+
+// Score returns the candidate's score at index i. ok mirrors the C
+// `has_score_at` predicate, which returns true whenever a score slot
+// exists for the index — *not* whether a meaningful score was computed.
+// Only ScoreTexts populates real values; GenerateContent / RunDecode
+// candidates report (0, true) as a placeholder. Use the producing
+// method to decide whether a returned score is meaningful.
+func (r Responses) Score(i int) (float32, bool) {
+	if r == 0 {
+		return 0, false
+	}
+	var has uint8
+	responsesHasScoreAtFunc.Call(
+		unsafe.Pointer(&has),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	if has == 0 {
+		return 0, false
+	}
+	var v float32
+	responsesGetScoreAtFunc.Call(
+		unsafe.Pointer(&v),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	return v, true
+}
+
+// TokenLength returns the candidate's tokenized length at index i. ok
+// is false when no length was stored — most often when ScoreTexts was
+// called with storeTokenLengths=false.
+func (r Responses) TokenLength(i int) (int, bool) {
+	if r == 0 {
+		return 0, false
+	}
+	var has uint8
+	responsesHasTokenLengthAtFunc.Call(
+		unsafe.Pointer(&has),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	if has == 0 {
+		return 0, false
+	}
+	var v int32
+	responsesGetTokenLengthAtFunc.Call(
+		unsafe.Pointer(&v),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	return int(v), true
+}

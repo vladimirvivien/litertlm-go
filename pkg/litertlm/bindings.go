@@ -59,6 +59,10 @@ var (
 	responsesDeleteFunc            ffi.Fun
 	responsesGetNumCandidatesFunc  ffi.Fun
 	responsesGetResponseTextAtFunc ffi.Fun
+	responsesHasScoreAtFunc        ffi.Fun
+	responsesGetScoreAtFunc        ffi.Fun
+	responsesHasTokenLengthAtFunc  ffi.Fun
+	responsesGetTokenLengthAtFunc  ffi.Fun
 
 	// Benchmark info
 	benchmarkInfoDeleteFunc                   ffi.Fun
@@ -342,6 +346,26 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_responses_get_response_text_at",
 		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
 		return loadError("litert_lm_responses_get_response_text_at", err)
+	}
+	if responsesHasScoreAtFunc, err = lib.Prep(
+		"litert_lm_responses_has_score_at",
+		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
+		return loadError("litert_lm_responses_has_score_at", err)
+	}
+	if responsesGetScoreAtFunc, err = lib.Prep(
+		"litert_lm_responses_get_score_at",
+		&ffi.TypeFloat, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
+		return loadError("litert_lm_responses_get_score_at", err)
+	}
+	if responsesHasTokenLengthAtFunc, err = lib.Prep(
+		"litert_lm_responses_has_token_length_at",
+		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
+		return loadError("litert_lm_responses_has_token_length_at", err)
+	}
+	if responsesGetTokenLengthAtFunc, err = lib.Prep(
+		"litert_lm_responses_get_token_length_at",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
+		return loadError("litert_lm_responses_get_token_length_at", err)
 	}
 
 	// ---- Benchmark info ----
