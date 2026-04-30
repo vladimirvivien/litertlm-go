@@ -1,7 +1,8 @@
-# Standard lint pack for litertlm-go.
+# Standard lint pack for litertlm-go (golangci-lint v2 schema).
 #
 # Run locally:  golangci-lint run ./...
-# Run in CI:    same, via golangci/golangci-lint-action in .github/workflows/ci.yml
+# Apply fixers: golangci-lint fmt
+# CI:           golangci/golangci-lint-action@v9 in .github/workflows/ci.yml
 #
 # Notes for FFI code (pkg/litertlm):
 #   - We use unsafe.Pointer extensively for purego FFI calls. The govet
@@ -9,44 +10,47 @@
 #     wiring, so we exclude it package-wide.
 #   - errcheck is satisfied by capturing errors at call sites; for the
 #     few intentional drops (e.g. JSON marshal of trivially-marshalable
-#     maps), use the `//nolint:errcheck` directive at the line.
+#     maps), use a `//nolint:errcheck` directive at the line.
+
+version: "2"
 
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - govet
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - ineffassign
     - misspell
     - unconvert
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        # Triggers on every purego FFI Call() — we deliberately pass
+        # &goValue as unsafe.Pointer because the FFI layer expects an
+        # address-of for each scalar argument.
+        - unsafeptr
+        # fieldalignment can be cleaned up later; not worth churn now.
+        - fieldalignment
+  exclusions:
+    rules:
+      # Examples are demos — they're allowed to ignore some errors for
+      # brevity (json.Marshal of trivially-marshalable types, etc.).
+      - path: examples/
+        linters:
+          - errcheck
 
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      # Triggers on every purego FFI Call() — we deliberately pass
-      # &goValue as unsafe.Pointer because the FFI layer expects an
-      # address-of for each scalar argument.
-      - unsafeptr
-      # fieldalignment can be cleaned up later; not worth churn now.
-      - fieldalignment
-  goimports:
-    local-prefixes: github.com/vladimirvivien/litertlm-go
-
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  exclude-rules:
-    # Examples are demos — they're allowed to ignore some errors for
-    # brevity (json.Marshal of trivially-marshalable types, etc.).
-    - path: examples/
-      linters:
-        - errcheck
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/vladimirvivien/litertlm-go

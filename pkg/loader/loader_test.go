@@ -62,3 +62,57 @@ func TestLoadLibraryNoPath(t *testing.T) {
 		t.Fatalf("error should mention env var, got %v", err)
 	}
 }
+
+// Spaces in paths must survive the filename composition. ffi.Load will
+// fail because the file doesn't exist, but the error must reference the
+// path including the spaces — proving they weren't dropped or split.
+func TestGetLibraryFilenameWithSpaces(t *testing.T) {
+	dir := filepath.Join("path with spaces", "lib")
+	got := GetLibraryFilename(dir, "litertlm_c_cpu")
+	if !strings.Contains(got, "path with spaces") {
+		t.Errorf("got %q, expected substring %q", got, "path with spaces")
+	}
+}
+
+func TestGetAuxLibraryFilenameWithSpaces(t *testing.T) {
+	dir := filepath.Join("my libs", "v1")
+	got := GetAuxLibraryFilename(dir, "GemmaModelConstraintProvider")
+	if !strings.Contains(got, "my libs") {
+		t.Errorf("got %q, expected substring %q", got, "my libs")
+	}
+}
+
+// LoadAuxLibrary against a directory that exists but doesn't contain
+// the expected lib should surface a load error rather than a panic.
+// Uses t.TempDir() so the directory exists, and a name we won't ship.
+func TestLoadAuxLibraryMissing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadAuxLibrary(dir, "DefinitelyNotARealLibrary")
+	if err == nil {
+		t.Fatal("expected error loading nonexistent aux library")
+	}
+}
+
+// Same for the main library loader.
+func TestLoadLibraryMissing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadLibrary(dir, "definitely_not_a_real_library")
+	if err == nil {
+		t.Fatal("expected error loading nonexistent main library")
+	}
+}
+
+// Env-var fallback must fire when path is empty.
+func TestLoadLibraryEnvFallback(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LITERTLM_LIB", dir)
+	// Library still doesn't exist, but the error should be a load error
+	// (not the "LITERTLM_LIB unset" sentinel) — proving the fallback fired.
+	_, err := LoadLibrary("", "definitely_not_a_real_library")
+	if err == nil {
+		t.Fatal("expected load error")
+	}
+	if strings.Contains(err.Error(), "LITERTLM_LIB env variable not set") {
+		t.Errorf("expected env fallback to fire; got sentinel error: %v", err)
+	}
+}

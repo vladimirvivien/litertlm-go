@@ -197,8 +197,8 @@ func main() {
 	fmt.Printf("(raw)     %s\n", rawReply)
 
 	var reply assistantMessage
-	if err := json.Unmarshal([]byte(rawReply), &reply); err != nil {
-		fmt.Fprintf(os.Stderr, "parse reply: %v\n", err)
+	if uerr := json.Unmarshal([]byte(rawReply), &reply); uerr != nil {
+		fmt.Fprintf(os.Stderr, "parse reply: %v\n", uerr)
 		os.Exit(1)
 	}
 
