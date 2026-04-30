@@ -60,4 +60,19 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("round-trip:  %q\n", roundTrip)
+
+	// Model-metadata token sequences.
+	start, err := engine.StartTokenIDs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start tokens: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("start token: %v\n", start)
+
+	stops, err := engine.StopTokenIDs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stop tokens: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("stop tokens: %v\n", stops)
 }

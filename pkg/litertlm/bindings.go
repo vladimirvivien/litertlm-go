@@ -87,6 +87,17 @@ var (
 	engineDetokenizeFunc           ffi.Fun
 	detokenizeResultDeleteFunc     ffi.Fun
 	detokenizeResultGetStringFunc  ffi.Fun
+
+	// Token unions / start+stop tokens
+	engineGetStartTokenFunc     ffi.Fun
+	engineGetStopTokensFunc     ffi.Fun
+	tokenUnionDeleteFunc        ffi.Fun
+	tokenUnionGetTypeFunc       ffi.Fun
+	tokenUnionGetStringFunc     ffi.Fun
+	tokenUnionGetIdsFunc        ffi.Fun
+	tokenUnionsDeleteFunc       ffi.Fun
+	tokenUnionsGetNumTokensFunc ffi.Fun
+	tokenUnionsGetTokenAtFunc   ffi.Fun
 )
 
 // loadFuncs registers every C entry point with the opened main library.
@@ -443,6 +454,60 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_detokenize_result_get_string",
 		&ffi.TypePointer, &ffi.TypePointer); err != nil {
 		return loadError("litert_lm_detokenize_result_get_string", err)
+	}
+
+	// ---- Token unions / start+stop tokens ----
+	if engineGetStartTokenFunc, err = lib.Prep(
+		"litert_lm_engine_get_start_token",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_engine_get_start_token", err)
+	}
+	if engineGetStopTokensFunc, err = lib.Prep(
+		"litert_lm_engine_get_stop_tokens",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_engine_get_stop_tokens", err)
+	}
+	if tokenUnionDeleteFunc, err = lib.Prep(
+		"litert_lm_token_union_delete",
+		&ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_token_union_delete", err)
+	}
+	if tokenUnionGetTypeFunc, err = lib.Prep(
+		"litert_lm_token_union_get_type",
+		&ffi.TypeSint32, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_token_union_get_type", err)
+	}
+	if tokenUnionGetStringFunc, err = lib.Prep(
+		"litert_lm_token_union_get_string",
+		&ffi.TypePointer, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_token_union_get_string", err)
+	}
+	if tokenUnionGetIdsFunc, err = lib.Prep(
+		"litert_lm_token_union_get_ids",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // token_union
+		&ffi.TypePointer, // out_tokens (**int)
+		&ffi.TypePointer, // out_num_tokens (*size_t)
+	); err != nil {
+		return loadError("litert_lm_token_union_get_ids", err)
+	}
+	if tokenUnionsDeleteFunc, err = lib.Prep(
+		"litert_lm_token_unions_delete",
+		&ffi.TypeVoid, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_token_unions_delete", err)
+	}
+	if tokenUnionsGetNumTokensFunc, err = lib.Prep(
+		"litert_lm_token_unions_get_num_tokens",
+		&ffiTypeSizeT, &ffi.TypePointer); err != nil {
+		return loadError("litert_lm_token_unions_get_num_tokens", err)
+	}
+	if tokenUnionsGetTokenAtFunc, err = lib.Prep(
+		"litert_lm_token_unions_get_token_at",
+		&ffi.TypePointer,
+		&ffi.TypePointer, // tokens
+		&ffiTypeSizeT,    // index
+	); err != nil {
+		return loadError("litert_lm_token_unions_get_token_at", err)
 	}
 
 	return nil
