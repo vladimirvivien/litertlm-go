@@ -72,12 +72,17 @@ LITERTLM_LIB=/path/to/shared-objects/lib \
 
 ## Examples
 
-| Path                 | What it shows                                                      |
-|----------------------|--------------------------------------------------------------------|
-| `examples/hello/`    | Minimal synchronous generation                                     |
-| `examples/stream/`   | Token-by-token streaming using the Go channel variant              |
-| `examples/chat/`     | Multi-turn Conversation API with JSON messages                     |
-| `examples/gpu/`      | GPU-backed generation + BenchmarkInfo metrics                      |
+| Path                          | What it shows                                                      |
+|-------------------------------|--------------------------------------------------------------------|
+| `examples/hello/`             | Minimal synchronous generation                                     |
+| `examples/stream/`            | Token-by-token streaming using the Go channel variant              |
+| `examples/chat/`              | Multi-turn Conversation API with JSON messages                     |
+| `examples/conversation/`      | System prompt + tools + structured tool_calls                      |
+| `examples/gpu/`               | GPU-backed generation + BenchmarkInfo metrics                      |
+| `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` round-trip + start/stop tokens    |
+| `examples/prefill-decode/`    | Explicit two-phase generation: `RunPrefill` → `RunDecode`          |
+| `examples/score/`             | Candidate scoring with `ScoreTexts` + `Score` / `TokenLength`      |
+| `examples/cancel/`            | Cancelling an in-flight streaming generation                       |
 
 
 
