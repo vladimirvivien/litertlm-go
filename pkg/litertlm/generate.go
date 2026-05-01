@@ -16,7 +16,14 @@ type Chunk struct {
 // candidate's text. Cancelling ctx aborts the in-flight inference (via
 // Session.Cancel) and returns ctx.Err.
 func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption) (string, error) {
-	sess, err := c.openSession(opts)
+	return c.generate(ctx, prompt, resolveGenConfig(opts))
+}
+
+// generate is the resolved-config sibling of Generate; called by
+// Generate (which resolves opts first) and by GenerateData (which has
+// already resolved opts and rejects re-applying them).
+func (c *Client) generate(ctx context.Context, prompt string, cfg genConfig) (string, error) {
+	sess, err := c.openSession(cfg)
 	if err != nil {
 		return "", err
 	}
@@ -40,33 +47,6 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption)
 	return resp.Text(0), nil
 }
 
-// GenerateResponse is the rich-output sibling of Generate. The
-// returned *Response exposes per-candidate text plus score and
-// token-length accessors. Lifetime is GC-managed via
-// runtime.AddCleanup — see the Response godoc.
-func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...GenOption) (*Response, error) {
-	sess, err := c.openSession(opts)
-	if err != nil {
-		return nil, err
-	}
-	defer sess.Delete()
-
-	stop := wireCancel(ctx, sess.Cancel)
-	defer stop()
-
-	handle, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
-	if err != nil {
-		if cerr := ctx.Err(); cerr != nil {
-			return nil, cerr
-		}
-		return nil, err
-	}
-	// Ownership of `handle` transfers to the *Response; do NOT defer
-	// handle.Delete() here. The runtime.AddCleanup registered by
-	// newResponse fires when the Response becomes unreachable.
-	return newResponse(handle), nil
-}
-
 // GenerateStream returns an iterator over response chunks. Cancelling
 // ctx aborts the stream via Session.Cancel; the iterator yields the
 // surfaced error and closes.
@@ -76,8 +56,12 @@ func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...Ge
 //	    fmt.Print(chunk.Text)
 //	}
 func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenOption) iter.Seq2[Chunk, error] {
+	return c.generateStream(ctx, prompt, resolveGenConfig(opts))
+}
+
+func (c *Client) generateStream(ctx context.Context, prompt string, cfg genConfig) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
-		sess, err := c.openSession(opts)
+		sess, err := c.openSession(cfg)
 		if err != nil {
 			yield(Chunk{}, err)
 			return
@@ -97,6 +81,37 @@ func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenO
 			}
 		}
 	}
+}
+
+// GenerateResponse is the rich-output sibling of Generate. The
+// returned *Response exposes per-candidate text plus score and
+// token-length accessors. Lifetime is GC-managed via
+// runtime.AddCleanup — see the Response godoc.
+func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...GenOption) (*Response, error) {
+	return c.generateResponse(ctx, prompt, resolveGenConfig(opts))
+}
+
+func (c *Client) generateResponse(ctx context.Context, prompt string, cfg genConfig) (*Response, error) {
+	sess, err := c.openSession(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer sess.Delete()
+
+	stop := wireCancel(ctx, sess.Cancel)
+	defer stop()
+
+	handle, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
+	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, cerr
+		}
+		return nil, err
+	}
+	// Ownership of `handle` transfers to the *Response; do NOT defer
+	// handle.Delete() here. The runtime.AddCleanup registered by
+	// newResponse fires when the Response becomes unreachable.
+	return newResponse(handle), nil
 }
 
 // wireCancel arranges for ctx cancellation to call cancelFn (typically

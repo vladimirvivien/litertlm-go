@@ -157,35 +157,43 @@ func (c *Client) Engine() Engine { return c.engine }
 // caveat as Engine — do not call Delete.
 func (c *Client) Settings() EngineSettings { return c.settings }
 
-// openSession creates a fresh single-use Session with the per-call
-// genConfig applied. Each Generate call gets its own session because
-// the C engine restricts session reuse across prefill/decode cycles.
+// resolveGenConfig applies opts to a fresh genConfig, returning the
+// result. Public entry points apply opts here once and pass the
+// resolved cfg into the internal helpers — that lets GenerateData
+// reuse the same cfg without re-applying options that don't matter
+// to the underlying generation path.
+func resolveGenConfig(opts []GenOption) genConfig {
+	cfg := genConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
+}
+
+// openSession creates a fresh single-use Session populated from cfg.
+// Each generation call gets its own session because the C engine
+// restricts session reuse across prefill/decode cycles.
 //
 // NewSession is serialised on the Client mutex out of an abundance of
 // caution; the C-side thread-safety contract for engine_create_session
 // is not documented and contention here is negligible (sessions are
 // cheap to construct relative to inference).
-func (c *Client) openSession(opts []GenOption) (Session, error) {
-	gcfg := genConfig{}
-	for _, opt := range opts {
-		opt(&gcfg)
-	}
-
+func (c *Client) openSession(cfg genConfig) (Session, error) {
 	// Resolve effective sampler: per-call > Client default > none.
-	sampler := gcfg.sampler
+	sampler := cfg.sampler
 	if sampler == nil {
 		sampler = c.cfg.defaultSampler
 	}
 
 	var sessCfg SessionConfig
-	if gcfg.maxOutputTokens > 0 || sampler != nil {
+	if cfg.maxOutputTokens > 0 || sampler != nil {
 		var err error
 		sessCfg, err = NewSessionConfig()
 		if err != nil {
 			return 0, err
 		}
-		if gcfg.maxOutputTokens > 0 {
-			sessCfg.SetMaxOutputTokens(gcfg.maxOutputTokens)
+		if cfg.maxOutputTokens > 0 {
+			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
 		}
 		if sampler != nil {
 			sessCfg.SetSamplerParams(*sampler)

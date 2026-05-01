@@ -37,6 +37,10 @@ type clientConfig struct {
 type genConfig struct {
 	maxOutputTokens int
 	sampler         *SamplerParams
+
+	// GenerateData-specific. Generate ignores these fields.
+	retries           int
+	schemaInstruction string
 }
 
 // ---- constructor options ----
@@ -152,4 +156,20 @@ func WithSampler(p SamplerParams) GenOption {
 		pp := p
 		c.sampler = &pp
 	}
+}
+
+// WithRetries caps the number of retry attempts after a parse failure
+// in GenerateData. n=0 means no retries (one total attempt). Retries
+// only fire on parse-phase failures; generate-phase errors propagate
+// immediately. Ignored by Generate / GenerateStream.
+func WithRetries(n int) GenOption {
+	return func(c *genConfig) { c.retries = n }
+}
+
+// WithSchemaInstruction overrides the default instruction GenerateData
+// inserts before the user prompt. The value must be a Printf format
+// string with one %s placeholder where the shape hint will be
+// rendered. Ignored by Generate / GenerateStream.
+func WithSchemaInstruction(s string) GenOption {
+	return func(c *genConfig) { c.schemaInstruction = s }
 }
