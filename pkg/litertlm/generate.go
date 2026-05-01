@@ -40,6 +40,33 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption)
 	return resp.Text(0), nil
 }
 
+// GenerateResponse is the rich-output sibling of Generate. The
+// returned *Response exposes per-candidate text plus score and
+// token-length accessors. Lifetime is GC-managed via
+// runtime.AddCleanup — see the Response godoc.
+func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...GenOption) (*Response, error) {
+	sess, err := c.openSession(opts)
+	if err != nil {
+		return nil, err
+	}
+	defer sess.Delete()
+
+	stop := wireCancel(ctx, sess.Cancel)
+	defer stop()
+
+	handle, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
+	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, cerr
+		}
+		return nil, err
+	}
+	// Ownership of `handle` transfers to the *Response; do NOT defer
+	// handle.Delete() here. The runtime.AddCleanup registered by
+	// newResponse fires when the Response becomes unreachable.
+	return newResponse(handle), nil
+}
+
 // GenerateStream returns an iterator over response chunks. Cancelling
 // ctx aborts the stream via Session.Cancel; the iterator yields the
 // surfaced error and closes.

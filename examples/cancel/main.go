@@ -1,12 +1,14 @@
-// cancel demonstrates aborting an in-flight streaming generation.
-// We start a long-running generation, read the first N chunks, then
-// call Session.Cancel() to ask the engine to stop. The stream channel
-// closes shortly after with the in-progress final chunk.
+// cancel demonstrates aborting an in-flight streaming generation
+// using the high-level Client.GenerateStream API and context
+// cancellation. After N chunks have been received, we call cancel()
+// on the context; wireCancel inside Client.GenerateStream sees
+// ctx.Done() fire and calls Session.Cancel() under the hood.
 //
 // See README.md in this directory for prerequisites and usage.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -29,57 +31,38 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := litertlm.Load(*libPath, *backend); err != nil {
-		fmt.Fprintf(os.Stderr, "load: %v\n", err)
-		os.Exit(1)
-	}
-	defer litertlm.Close()
-	litertlm.SetMinLogLevel(litertlm.LogError)
-
-	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
+	rootCtx := context.Background()
+	client, err := litertlm.New(rootCtx,
+		litertlm.WithLib(*libPath),
+		litertlm.WithModel(*model),
+		litertlm.WithBackend(*backend),
+		litertlm.WithMaxTokens(*maxTokens),
+	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
+		fmt.Fprintf(os.Stderr, "new client: %v\n", err)
 		os.Exit(1)
 	}
-	defer settings.Delete()
-	settings.SetMaxNumTokens(*maxTokens)
+	defer client.Close()
 
-	engine, err := litertlm.NewEngine(settings)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "engine: %v\n", err)
-		os.Exit(1)
-	}
-	defer engine.Delete()
-
-	session, err := engine.NewSession(0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "session: %v\n", err)
-		os.Exit(1)
-	}
-	defer session.Delete()
+	ctx, cancel := context.WithCancel(rootCtx)
+	defer cancel()
 
 	fmt.Printf("prompt:  %s\n", *prompt)
 	fmt.Println("output:")
 
 	start := time.Now()
-	stream := session.GenerateContentStreamCh([]litertlm.InputData{
-		litertlm.NewTextInputString(*prompt),
-	})
-
 	count := 0
-	cancelled := false
-	for chunk := range stream {
-		if chunk.Err != nil {
-			fmt.Fprintf(os.Stderr, "\nstream error: %v\n", chunk.Err)
+	for chunk, err := range client.GenerateStream(ctx, *prompt) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nstream error: %v\n", err)
 			break
 		}
 		fmt.Print(chunk.Text)
 		count++
-		if !cancelled && count >= *cancelAfter && !chunk.Final {
-			cancelled = true
+		if count == *cancelAfter && !chunk.Final {
 			fmt.Printf("\n\n[%v] cancelling after %d chunks ...\n",
 				time.Since(start).Round(time.Millisecond), count)
-			session.Cancel()
+			cancel()
 		}
 		if chunk.Final {
 			fmt.Println()
