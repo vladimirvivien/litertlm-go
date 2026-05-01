@@ -22,7 +22,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption)
 	}
 	defer sess.Delete()
 
-	stop := wireCancel(ctx, sess)
+	stop := wireCancel(ctx, sess.Cancel)
 	defer stop()
 
 	resp, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
@@ -57,7 +57,7 @@ func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenO
 		}
 		defer sess.Delete()
 
-		stop := wireCancel(ctx, sess)
+		stop := wireCancel(ctx, sess.Cancel)
 		defer stop()
 
 		for sc := range sess.GenerateContentStreamCh([]InputData{NewTextInputString(prompt)}) {
@@ -72,11 +72,11 @@ func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenO
 	}
 }
 
-// wireCancel arranges for ctx cancellation to call Session.Cancel.
-// Returns a stop function that the caller defers to release the
-// watcher goroutine. No-op (returns a no-op stop) when ctx is a
-// background-style context that cannot be cancelled.
-func wireCancel(ctx context.Context, sess Session) (stop func()) {
+// wireCancel arranges for ctx cancellation to call cancelFn (typically
+// Session.Cancel or Conversation.Cancel). Returns a stop function the
+// caller defers to release the watcher goroutine. No-op (returns a
+// no-op stop) when ctx cannot be cancelled.
+func wireCancel(ctx context.Context, cancelFn func()) (stop func()) {
 	if ctx == nil || ctx.Done() == nil {
 		return func() {}
 	}
@@ -84,7 +84,7 @@ func wireCancel(ctx context.Context, sess Session) (stop func()) {
 	go func() {
 		select {
 		case <-ctx.Done():
-			sess.Cancel()
+			cancelFn()
 		case <-done:
 		}
 	}()
