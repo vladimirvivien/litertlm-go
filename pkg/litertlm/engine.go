@@ -126,6 +126,18 @@ func (s EngineSettings) SetNumDecodeTokens(n int) {
 	engineSettingsSetNumDecodeTokensFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
 }
 
+// SetEnableSpeculativeDecoding toggles speculative decoding on the engine.
+func (s EngineSettings) SetEnableSpeculativeDecoding(on bool) {
+	if s == 0 {
+		return
+	}
+	var v uint8
+	if on {
+		v = 1
+	}
+	engineSettingsSetEnableSpeculativeDecodingFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
+}
+
 // NewEngine loads the model described by settings. The caller still owns
 // the settings handle and may Delete() it once the engine is created.
 func NewEngine(settings EngineSettings) (Engine, error) {

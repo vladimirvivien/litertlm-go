@@ -31,6 +31,19 @@ func (c SessionConfig) SetMaxOutputTokens(n int) {
 	sessionConfigSetMaxOutputTokensFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(new(int32(n))))
 }
 
+// SetApplyPromptTemplate toggles whether session-level inputs run through
+// the model's prompt template before reaching the engine.
+func (c SessionConfig) SetApplyPromptTemplate(on bool) {
+	if c == 0 {
+		return
+	}
+	var v uint8
+	if on {
+		v = 1
+	}
+	sessionConfigSetApplyPromptTemplateFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(&v))
+}
+
 // SetSamplerParams attaches sampler parameters to the session config.
 func (c SessionConfig) SetSamplerParams(p SamplerParams) {
 	if c == 0 {

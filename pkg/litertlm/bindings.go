@@ -11,10 +11,11 @@ var ffiTypeSizeT = ffi.TypeUint64
 // in loadFuncs().
 var (
 	// Session config
-	sessionConfigCreateFunc             ffi.Fun
-	sessionConfigSetMaxOutputTokensFunc ffi.Fun
-	sessionConfigSetSamplerParamsFunc   ffi.Fun
-	sessionConfigDeleteFunc             ffi.Fun
+	sessionConfigCreateFunc                 ffi.Fun
+	sessionConfigSetMaxOutputTokensFunc     ffi.Fun
+	sessionConfigSetSamplerParamsFunc       ffi.Fun
+	sessionConfigSetApplyPromptTemplateFunc ffi.Fun
+	sessionConfigDeleteFunc                 ffi.Fun
 
 	// Conversation config
 	conversationConfigCreateFunc                       ffi.Fun
@@ -39,6 +40,7 @@ var (
 	engineSettingsEnableBenchmarkFunc               ffi.Fun
 	engineSettingsSetNumPrefillTokensFunc           ffi.Fun
 	engineSettingsSetNumDecodeTokensFunc            ffi.Fun
+	engineSettingsSetEnableSpeculativeDecodingFunc  ffi.Fun
 
 	// Engine
 	engineCreateFunc        ffi.Fun
@@ -128,6 +130,11 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_session_config_set_sampler_params",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer); err != nil {
 		return loadError("litert_lm_session_config_set_sampler_params", err)
+	}
+	if sessionConfigSetApplyPromptTemplateFunc, err = lib.Prep(
+		"litert_lm_session_config_set_apply_prompt_template",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8); err != nil {
+		return loadError("litert_lm_session_config_set_apply_prompt_template", err)
 	}
 	if sessionConfigDeleteFunc, err = lib.Prep(
 		"litert_lm_session_config_delete",
@@ -251,6 +258,11 @@ func loadFuncs(lib ffi.Lib) error {
 		"litert_lm_engine_settings_set_num_decode_tokens",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32); err != nil {
 		return loadError("litert_lm_engine_settings_set_num_decode_tokens", err)
+	}
+	if engineSettingsSetEnableSpeculativeDecodingFunc, err = lib.Prep(
+		"litert_lm_engine_settings_set_enable_speculative_decoding",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8); err != nil {
+		return loadError("litert_lm_engine_settings_set_enable_speculative_decoding", err)
 	}
 
 	// ---- Engine ----
