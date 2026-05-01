@@ -1,0 +1,138 @@
+package litertlm
+
+import (
+	"testing"
+)
+
+// TestOption_Defaults verifies the unconfigured config keeps zero
+// values for everything except the fields New() initialises before
+// applying user options.
+func TestOption_Defaults(t *testing.T) {
+	cfg := clientConfig{}
+	for _, opt := range []Option{} {
+		opt(&cfg)
+	}
+	if cfg.libPath != "" {
+		t.Errorf("libPath = %q, want empty", cfg.libPath)
+	}
+	if cfg.modelPath != "" {
+		t.Errorf("modelPath = %q, want empty", cfg.modelPath)
+	}
+	if cfg.activationDataType != nil {
+		t.Errorf("activationDataType should default to nil")
+	}
+	if cfg.enableSpeculative != nil {
+		t.Errorf("enableSpeculative should default to nil")
+	}
+}
+
+// TestOption_LibAndModel exercises the simple string Options.
+func TestOption_LibAndModel(t *testing.T) {
+	cfg := clientConfig{}
+	WithLib("/tmp/lib")(&cfg)
+	WithModel("/tmp/model.litertlm")(&cfg)
+	if cfg.libPath != "/tmp/lib" {
+		t.Errorf("libPath = %q", cfg.libPath)
+	}
+	if cfg.modelPath != "/tmp/model.litertlm" {
+		t.Errorf("modelPath = %q", cfg.modelPath)
+	}
+}
+
+// TestOption_LastWriteWins ensures composing the same option twice
+// keeps the last value (per standard functional-options semantics).
+func TestOption_LastWriteWins(t *testing.T) {
+	cfg := clientConfig{}
+	WithBackend("cpu")(&cfg)
+	WithBackend("gpu")(&cfg)
+	if cfg.backend != "gpu" {
+		t.Errorf("backend = %q, want gpu", cfg.backend)
+	}
+}
+
+// TestOption_OptionalBackends verifies the *string fields toggle
+// between unset and set correctly.
+func TestOption_OptionalBackends(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.visionBackend != nil {
+		t.Fatalf("visionBackend should start nil")
+	}
+	WithVisionBackend("vision-cpu")(&cfg)
+	if cfg.visionBackend == nil || *cfg.visionBackend != "vision-cpu" {
+		t.Errorf("visionBackend = %v", cfg.visionBackend)
+	}
+	WithVisionBackend("")(&cfg)
+	if cfg.visionBackend != nil {
+		t.Errorf("empty string should clear visionBackend; got %v", cfg.visionBackend)
+	}
+}
+
+// TestOption_Toggles confirms the bool-toggle options leave the
+// config field nil when unset, and set true/false correctly when
+// invoked.
+func TestOption_Toggles(t *testing.T) {
+	cfg := clientConfig{}
+
+	if cfg.enableSpeculative != nil || cfg.parallelFileLoading != nil || cfg.enableBenchmark != nil {
+		t.Fatal("toggles should default to nil")
+	}
+
+	WithEnableSpeculativeDecoding(true)(&cfg)
+	if cfg.enableSpeculative == nil || !*cfg.enableSpeculative {
+		t.Errorf("enableSpeculative = %v", cfg.enableSpeculative)
+	}
+
+	WithParallelFileLoading(false)(&cfg)
+	if cfg.parallelFileLoading == nil || *cfg.parallelFileLoading {
+		t.Errorf("parallelFileLoading = %v", cfg.parallelFileLoading)
+	}
+
+	WithEnableBenchmark()(&cfg)
+	if cfg.enableBenchmark == nil || !*cfg.enableBenchmark {
+		t.Errorf("enableBenchmark = %v", cfg.enableBenchmark)
+	}
+}
+
+// TestOption_LogLevel covers the explicit logLevelSet flag.
+func TestOption_LogLevel(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.logLevelSet {
+		t.Fatal("logLevelSet should default false")
+	}
+	WithLogLevel(LogVerbose)(&cfg)
+	if !cfg.logLevelSet || cfg.logLevel != LogVerbose {
+		t.Errorf("logLevel=%d set=%v", cfg.logLevel, cfg.logLevelSet)
+	}
+}
+
+// TestOption_DefaultSampler captures by value, so later mutations to
+// the caller's struct don't bleed into the Client.
+func TestOption_DefaultSampler(t *testing.T) {
+	cfg := clientConfig{}
+	p := SamplerParams{Type: SamplerGreedy, TopK: 1, Temperature: 0.5}
+	WithDefaultSampler(p)(&cfg)
+	if cfg.defaultSampler == nil {
+		t.Fatal("defaultSampler should be populated")
+	}
+	if cfg.defaultSampler.Temperature != 0.5 {
+		t.Errorf("Temperature = %v", cfg.defaultSampler.Temperature)
+	}
+	// Mutate caller's struct; client copy must be unaffected.
+	p.Temperature = 1.0
+	if cfg.defaultSampler.Temperature != 0.5 {
+		t.Errorf("expected client copy isolated from caller mutation")
+	}
+}
+
+// TestGenOption_Composition checks per-call options.
+func TestGenOption_Composition(t *testing.T) {
+	g := genConfig{}
+	WithMaxOutputTokens(256)(&g)
+	if g.maxOutputTokens != 256 {
+		t.Errorf("maxOutputTokens = %d", g.maxOutputTokens)
+	}
+	WithSampler(SamplerParams{Type: SamplerTopP, TopP: 0.9})(&g)
+	if g.sampler == nil || g.sampler.TopP != 0.9 {
+		t.Errorf("sampler = %v", g.sampler)
+	}
+}

@@ -1,10 +1,12 @@
-// hello demonstrates a minimal synchronous inference with litertlm-go using
-// the low-level Session API.
+// hello demonstrates a minimal synchronous inference using the
+// high-level Client API. For the equivalent low-level (Session-based)
+// flow, see examples/prefill-decode.
 //
 // See README.md in this directory for prerequisites and usage.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -25,62 +27,27 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := litertlm.Load(*libPath, *backend); err != nil {
-		fmt.Fprintf(os.Stderr, "load: %v\n", err)
-		os.Exit(1)
-	}
-	defer litertlm.Close()
-
-	// Silence LiteRT-LM's INFO/WARN chatter. Drop to LogInfo to see it.
-	litertlm.SetMinLogLevel(litertlm.LogError)
-
-	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
+	ctx := context.Background()
+	client, err := litertlm.New(ctx,
+		litertlm.WithLib(*libPath),
+		litertlm.WithModel(*model),
+		litertlm.WithBackend(*backend),
+		litertlm.WithMaxTokens(*maxTokens),
+	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
+		fmt.Fprintf(os.Stderr, "new client: %v\n", err)
 		os.Exit(1)
 	}
-	defer settings.Delete()
-	settings.SetMaxNumTokens(*maxTokens)
+	defer client.Close()
 
-	engine, err := litertlm.NewEngine(settings)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "engine: %v\n", err)
-		os.Exit(1)
-	}
-	defer engine.Delete()
-
-	session, err := engine.NewSession(0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "session: %v\n", err)
-		os.Exit(1)
-	}
-	defer session.Delete()
-
-	resp, err := session.GenerateContent([]litertlm.InputData{
-		litertlm.NewTextInputString(*prompt),
-	})
+	text, err := client.Generate(ctx, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "generate: %v\n", err)
 		os.Exit(1)
 	}
-	defer resp.Delete()
+	fmt.Println(text)
 
-	n := resp.NumCandidates()
-	if n == 0 {
-		fmt.Fprintln(os.Stderr, "no candidates returned")
-		os.Exit(1)
-	}
-
-	emptyAll := true
-	for i := 0; i < n; i++ {
-		text := resp.Text(i)
-		fmt.Printf("[%d] %s\n", i, text)
-		if text != "" {
-			emptyAll = false
-		}
-	}
-
-	if emptyAll {
+	if text == "" {
 		fmt.Fprintln(os.Stderr, `
 hint: the model returned an empty completion. This typically means the
 prompt was sent to a chat-tuned model without its chat template, so the
