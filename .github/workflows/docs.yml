@@ -1,0 +1,39 @@
+name: Deploy docs
+
+# Triggers on tagged pushes (e.g. v1.0.0) so the published site
+# tracks releases rather than every main commit. Re-run manually
+# from the Actions tab if you need to refresh after a non-tagged
+# doc-only change.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write  # mkdocs gh-deploy pushes to the gh-pages branch
+
+concurrency:
+  group: docs
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material
+
+      - name: Build (strict)
+        run: mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force --no-history

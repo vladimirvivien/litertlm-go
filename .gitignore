@@ -22,6 +22,10 @@ go.work.sum
 .env
 .env.local
 
+# MkDocs build output
+/site/
+.cache/
+
 # Editor / OS noise
 .vscode/
 .idea/

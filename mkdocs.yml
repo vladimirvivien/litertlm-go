@@ -1,0 +1,65 @@
+site_name: litertlm-go
+site_description: A purego-backed Go wrapper for Google's LiteRT-LM C API.
+site_url: https://vladimirvivien.github.io/litertlm-go/
+repo_url: https://github.com/vladimirvivien/litertlm-go
+repo_name: vladimirvivien/litertlm-go
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+# All source files live flat under docs/ — easy for both humans and
+# repo-crawling agents to find without descending. Logical grouping
+# happens via this nav, not via filesystem nesting.
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - High-level API:
+      - Client: client.md
+      - Chat: chat.md
+      - Structured output: structured-output.md
+  - Low-level API: low-level.md
+  - Troubleshooting: troubleshooting.md

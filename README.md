@@ -1,18 +1,15 @@
 # litertlm-go
 
-A Go wrapper for Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) for running
-local LLM inference.
+A purego-backed, cgo-free Go wrapper for Google's
+[LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) C API. Run
+local LLM inference from Go without a C toolchain — the C library is
+loaded dynamically at runtime via
+[`ebitengine/purego`](https://github.com/ebitengine/purego).
 
-`litertlm-go` uses `ebitengine/purego` to 
-dynamically load the LiteRT-LM C API shared library at runtime.
-No CGo toolchain is required to build applications with this package.
-Note: this approach was inspired by project Hybridgroup's project [Yzma](https://github.com/hybridgroup/yzma).
+> Inspired by Hybridgroup's [Yzma](https://github.com/hybridgroup/yzma).
 
-## Building LiteRT-LM C shared object libraries
-LiteRT-LM is a C++ project and does not distribute a C API by default.
-However, you can folllow instructions [here](./LITERTLM-BUILD.md) to build 
-the LiteRT-ML source code with C shared object libraries.
-
+📖 **Full documentation:**
+[vladimirvivien.github.io/litertlm-go](https://vladimirvivien.github.io/litertlm-go/)
 
 ## Install
 
@@ -20,18 +17,13 @@ the LiteRT-ML source code with C shared object libraries.
 go get github.com/vladimirvivien/litertlm-go@latest
 ```
 
-### Model files
-You will need to download the `*.litertlm` model
-that you want to use for inference. You can get the models from Hugging Face's 
-[LiteRT Community](https://huggingface.co/litert-community). For
-the example below, we will use `litert-community/gemma-4-E2B-it-litert-lm`.
-
-## Using `litertlm-go`
+## Quickstart
 
 ```go
 package main
 
 import (
+    "context"
     "fmt"
     "os"
 
@@ -39,78 +31,70 @@ import (
 )
 
 func main() {
-    if err := litertlm.Load(os.Getenv("LITERTLM_LIB"), "cpu"); err != nil {
+    ctx := context.Background()
+    client, err := litertlm.New(ctx,
+        litertlm.WithLib(os.Getenv("LITERTLM_LIB")),
+        litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
+    )
+    if err != nil {
         panic(err)
     }
-    defer litertlm.Close()
+    defer client.Close()
 
-    settings, _ := litertlm.NewEngineSettings(
-        os.Getenv("LITERTLM_MODEL"), "cpu", nil, nil)
-    defer settings.Delete()
-
-    engine, _ := litertlm.NewEngine(settings)
-    defer engine.Delete()
-
-    session, _ := engine.NewSession(0)
-    defer session.Delete()
-
-    resp, _ := session.GenerateContent([]litertlm.InputData{
-        litertlm.NewTextInputString("Write a haiku about the sea."),
-    })
-    defer resp.Delete()
-
-    fmt.Println(resp.Text(0))
+    text, err := client.Generate(ctx, "Write a haiku about the sea.")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(text)
 }
 ```
 
-### Running the snippet
-
-In a fresh directory, save the code above as `main.go`, then:
-
 ```bash
-
 LITERTLM_LIB=/abs/path/to/dist/lib \
 LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
     go run main.go
 ```
 
-The output should be a short haiku written by the model.
+Full walkthrough → [docs/getting-started](https://vladimirvivien.github.io/litertlm-go/getting-started/).
 
-For the full set of runnable demos see [`examples/`](#examples).
+## Building the C library
 
-## API map
+LiteRT-LM doesn't ship a prebuilt C API. Build it yourself:
 
-The package surface is small; this is what to reach for:
-
-| You want to…                          | Use                                                                            |
-|---------------------------------------|--------------------------------------------------------------------------------|
-| Load and run a model                  | `Load`, `NewEngineSettings`, `NewEngine`, `Engine.NewSession`                  |
-| One-shot generation                   | `Session.GenerateContent` ([hello](examples/hello/))                           |
-| Token-by-token streaming              | `Session.GenerateContentStreamCh` ([stream](examples/stream/))                 |
-| Multi-turn chat with a system prompt  | `Engine.NewConversation` + `Conversation.SendMessage` ([chat](examples/chat/)) |
-| Tool-using agents                     | `NewConversationConfig` with `toolsJSON` ([conversation](examples/conversation/)) |
-| Tokenize / detokenize                 | `Engine.Tokenize`, `Engine.Detokenize` ([tokenize](examples/tokenize/))        |
-| Inspect model start/stop tokens       | `Engine.StartTokenIDs`, `Engine.StopTokenIDs` ([tokenize](examples/tokenize/)) |
-| Manual prefill→decode                 | `Session.RunPrefill`, `Session.RunDecode` ([prefill-decode](examples/prefill-decode/)) |
-| Score candidate completions           | `Session.ScoreTexts`, `Responses.Score` ([score](examples/score/))             |
-| Cancel an in-flight stream            | `Session.Cancel` ([cancel](examples/cancel/))                                  |
-| GPU + benchmark metrics               | `EngineSettings.EnableBenchmark`, `Session.BenchmarkInfo` ([gpu](examples/gpu/)) |
+- Linux / macOS — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
+- Windows — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 
 ## Examples
 
 | Path                          | What it shows                                                      |
 |-------------------------------|--------------------------------------------------------------------|
-| `examples/hello/`             | Minimal synchronous generation                                     |
-| `examples/stream/`            | Token-by-token streaming using the Go channel variant              |
-| `examples/chat/`              | Multi-turn Conversation API with JSON messages                     |
-| `examples/conversation/`      | System prompt + tools + structured tool_calls                      |
-| `examples/gpu/`               | GPU-backed generation + BenchmarkInfo metrics                      |
-| `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` round-trip + start/stop tokens    |
-| `examples/prefill-decode/`    | Explicit two-phase generation: `RunPrefill` → `RunDecode`          |
-| `examples/score/`             | Candidate scoring with `ScoreTexts` + `Score` / `TokenLength`      |
-| `examples/cancel/`            | Cancelling an in-flight streaming generation                       |
+| `examples/hello/`             | Minimal `Generate`                                                 |
+| `examples/stream/`            | `GenerateStream` with range-over-func                              |
+| `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
+| `examples/conversation/`      | `Chat` + tools + structured tool_calls                             |
+| `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection + retries)     |
+| `examples/cancel/`            | Cancelling a streaming generation via `context.WithCancel`         |
+| `examples/prefill-decode/`    | Explicit two-phase generation (low-level)                          |
+| `examples/score/`             | `ScoreTexts` + `Score` / `TokenLength` (low-level)                 |
+| `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level)   |
+| `examples/gpu/`               | GPU-backed generation + benchmark metrics                          |
 
+## Documentation
 
+The high-level API (recommended for most use cases) is documented at
+[vladimirvivien.github.io/litertlm-go](https://vladimirvivien.github.io/litertlm-go/):
+
+- [Getting started](https://vladimirvivien.github.io/litertlm-go/getting-started/)
+- [Client](https://vladimirvivien.github.io/litertlm-go/client/) — `New`, `Generate`, `GenerateStream`, `GenerateResponse`
+- [Chat](https://vladimirvivien.github.io/litertlm-go/chat/) — multi-turn, system prompts, tool calling
+- [Structured output](https://vladimirvivien.github.io/litertlm-go/structured-output/) — `GenerateData[T]`
+- [Low-level API](https://vladimirvivien.github.io/litertlm-go/low-level/) — when to drop down
+- [Troubleshooting](https://vladimirvivien.github.io/litertlm-go/troubleshooting/)
+
+The site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)
+and published from the `docs/` directory on tagged pushes (see
+`.github/workflows/docs.yml`). Preview locally with
+`pip install mkdocs-material && mkdocs serve`.
 
 ## License
 
