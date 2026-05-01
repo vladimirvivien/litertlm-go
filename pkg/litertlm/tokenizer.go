@@ -18,6 +18,8 @@ type (
 )
 
 // Tokenize splits text into the engine tokenizer's id sequence.
+// The returned slice is owned by the caller and survives any
+// subsequent engine operations.
 func (e Engine) Tokenize(text string) ([]int32, error) {
 	if e == 0 {
 		return nil, fmt.Errorf("litertlm: engine_tokenize: invalid engine")
@@ -56,6 +58,9 @@ func (e Engine) Tokenize(text string) ([]int32, error) {
 }
 
 // Detokenize reverses Tokenize, decoding ids into a UTF-8 string.
+// LiteRT-LM passes through SentencePiece's internal space marker
+// (U+2581 ▁) without normalising; replace with " " on the Go side
+// if you need plain ASCII spaces.
 func (e Engine) Detokenize(tokens []int32) (string, error) {
 	if e == 0 {
 		return "", fmt.Errorf("litertlm: engine_detokenize: invalid engine")

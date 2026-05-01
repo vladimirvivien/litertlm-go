@@ -146,10 +146,14 @@ func (s Session) RunDecode() (Responses, error) {
 		unsafe.Pointer(&s))
 }
 
-// ScoreTexts scores each candidate string against the prefilled prompt.
-// storeTokenLengths attaches the per-target tokenized length to the
-// returned Responses (retrievable via Responses.TokenLength once that
-// accessor lands in 4d). Caller must Delete() the result.
+// ScoreTexts scores each candidate string against the prefilled
+// prompt. storeTokenLengths attaches the per-target tokenized length
+// to the returned Responses (read via Responses.TokenLength). Caller
+// must Delete() the result.
+//
+// The current CPU engine refuses len(targets) > 1 with
+// INVALID_ARGUMENT; pass exactly one candidate per call until the
+// upstream limit is relaxed.
 func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses, error) {
 	if s == 0 {
 		return 0, fmt.Errorf("litertlm: session_run_text_scoring: invalid session")

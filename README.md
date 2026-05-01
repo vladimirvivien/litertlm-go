@@ -45,7 +45,7 @@ func main() {
     defer litertlm.Close()
 
     settings, _ := litertlm.NewEngineSettings(
-        "/abs/path/to/gemma.litertlm", "cpu", nil, nil)
+        os.Getenv("LITERTLM_MODEL"), "cpu", nil, nil)
     defer settings.Delete()
 
     engine, _ := litertlm.NewEngine(settings)
@@ -63,12 +63,38 @@ func main() {
 }
 ```
 
-Run the code with:
+### Running the snippet
+
+In a fresh directory, save the code above as `main.go`, then:
 
 ```bash
-LITERTLM_LIB=/path/to/shared-objects/lib \
-    go run ./examples/hello -model /abs/path/to/model.litertlm
+
+LITERTLM_LIB=/abs/path/to/dist/lib \
+LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
+    go run main.go
 ```
+
+Expected output: a short haiku written by the model, e.g.
+
+For the full set of runnable demos see [`examples/`](#examples).
+
+## API map
+
+The package surface is small; this is what to reach for:
+
+| You want to…                          | Use                                                                            |
+|---------------------------------------|--------------------------------------------------------------------------------|
+| Load and run a model                  | `Load`, `NewEngineSettings`, `NewEngine`, `Engine.NewSession`                  |
+| One-shot generation                   | `Session.GenerateContent` ([hello](examples/hello/))                           |
+| Token-by-token streaming              | `Session.GenerateContentStreamCh` ([stream](examples/stream/))                 |
+| Multi-turn chat with a system prompt  | `Engine.NewConversation` + `Conversation.SendMessage` ([chat](examples/chat/)) |
+| Tool-using agents                     | `NewConversationConfig` with `toolsJSON` ([conversation](examples/conversation/)) |
+| Tokenize / detokenize                 | `Engine.Tokenize`, `Engine.Detokenize` ([tokenize](examples/tokenize/))        |
+| Inspect model start/stop tokens       | `Engine.StartTokenIDs`, `Engine.StopTokenIDs` ([tokenize](examples/tokenize/)) |
+| Manual prefill→decode                 | `Session.RunPrefill`, `Session.RunDecode` ([prefill-decode](examples/prefill-decode/)) |
+| Score candidate completions           | `Session.ScoreTexts`, `Responses.Score` ([score](examples/score/))             |
+| Cancel an in-flight stream            | `Session.Cancel` ([cancel](examples/cancel/))                                  |
+| GPU + benchmark metrics               | `EngineSettings.EnableBenchmark`, `Session.BenchmarkInfo` ([gpu](examples/gpu/)) |
 
 ## Examples
 
