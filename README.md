@@ -74,7 +74,7 @@ LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
     go run main.go
 ```
 
-Expected output: a short haiku written by the model, e.g.
+The output should be a short haiku written by the model.
 
 For the full set of runnable demos see [`examples/`](#examples).
 
