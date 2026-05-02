@@ -142,6 +142,35 @@ defaults to 4096, which works for every Gemma 4 variant.
 
 ---
 
+## Panic: `litertlm: missing C symbol "..." in loaded library`
+
+**Symptom.** A call into the Go API panics with a message like:
+
+```
+panic: litertlm: missing C symbol "litert_lm_session_config_set_apply_prompt_template"
+in loaded library (refresh the prebuilt LiteRT-LM libs to a build that
+exports it): symbol not found
+```
+
+`litertlm.Load` succeeds — the panic fires the first time a method
+whose underlying C symbol is missing actually runs (which may be
+during `litertlm.New`, or later when you invoke a specific feature).
+
+**Cause.** The Go bindings resolve C symbols lazily, on first call.
+The LiteRT-LM library staged in `$LITERTLM_LIB` predates the named
+symbol — typically because the prebuilt libs were copied from an
+older upstream build than this `litertlm-go` release was compiled
+against.
+
+**Fix.** Re-stage the prebuilt LiteRT-LM libraries from a current
+upstream build per
+[`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md).
+Symbols not invoked by your code path stay harmless — only the
+methods that actually call into a missing symbol panic, so a partial
+upgrade can be enough if you don't use the affected feature.
+
+---
+
 ## GPU run falls back to CPU
 
 **Symptom.** Running with `WithBackend("gpu")` logs
