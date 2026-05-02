@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/jupiterrider/ffi"
-
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
@@ -25,9 +23,9 @@ func bytePtrOrNil(s string) (*byte, error) {
 // repeat. sym is the bare C symbol name; the formatted error reads
 // `litertlm: <sym> failed`.
 //
-// ffi.Fun.Call's signature is `(ret any, args ...any)` so we widen the
+// lazyFun.Call's signature is `(ret any, args ...any)` so we widen the
 // typed unsafe.Pointer args here rather than at every callsite.
-func callForHandle[H ~uintptr](f ffi.Fun, sym string, args ...unsafe.Pointer) (H, error) {
+func callForHandle[H ~uintptr](f *lazyFun, sym string, args ...unsafe.Pointer) (H, error) {
 	var h H
 	anyArgs := make([]any, len(args))
 	for i, a := range args {
