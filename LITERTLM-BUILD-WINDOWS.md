@@ -118,6 +118,7 @@ copy bazel-bin\c\litertlm_c_api\litertlm_c_cpu.dll $Env:LITERTLM_LIB\
 
 ```powershell
 $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+$Env:LLVM_PROFILE_FILE = "NUL"   # see Troubleshooting; otherwise each run drops default.profraw
 go run .\examples\hello -model C:\path\to\gemma-4-E4B-it.litertlm
 ```
 
@@ -171,13 +172,33 @@ copy "$SDK\dxil.dll"       $Env:LITERTLM_LIB\
 ### Run with GPU
 
 ```powershell
-$Env:LITERTLM_LIB = $Env:LITERTLM_LIB
+$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib-gpu"
+$Env:LLVM_PROFILE_FILE = "NUL"
 go run .\examples\chat -model C:\path\to\gemma-4-E4B-it.litertlm -backend gpu
 ```
 
 On boot you should see WebGPU adapter selection logs naming your discrete
 GPU (e.g. `Selected adapter: NVIDIA GeForce RTX 4070 Laptop GPU, ...
 backend=Direct3D 12`) followed by normal chat output.
+
+### One staging dir for both backends (optional)
+
+The GPU build (`litertlm_c.dll`) is a superset of the CPU build — it can
+satisfy `-backend cpu` calls too. If you'd rather not maintain two
+staging directories, build only `litertlm_c` and create a hardlink so
+the wrapper's CPU-backend lookup (`litertlm_c_cpu.dll`) resolves to the
+same file:
+
+```powershell
+# Inside $Env:LITERTLM_LIB after copying litertlm_c.dll:
+New-Item -ItemType HardLink `
+    -Path   "$Env:LITERTLM_LIB\litertlm_c_cpu.dll" `
+    -Target "$Env:LITERTLM_LIB\litertlm_c.dll"
+```
+
+Hardlinks don't require admin rights; symbolic links via `mklink` do.
+After this, the same `$LITERTLM_LIB` works for both `-backend cpu` and
+`-backend gpu`.
 
 ## Verified examples
 
@@ -193,11 +214,13 @@ backend=Direct3D 12`) followed by normal chat output.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `load: ... lib<name>.dll: error loading library: The specified module could not be found.` | Plugin DLL missing from `$LITERTLM_LIB`, or you copied the unprefixed name | Re-copy `prebuilt\windows_x86_64\*.dll` (lib-prefixed) into `$LITERTLM_LIB` — the wrapper preloads them under their original `lib<name>.dll` filenames |
+| `litertlm: New: ...\litertlm_c_cpu.dll: error loading library: The specified module could not be found.` | Only the GPU/full build (`litertlm_c.dll`) was staged; `-backend cpu` looks for `litertlm_c_cpu.dll` | Either build `litertlm_c_cpu` (§3) and copy it in, or hardlink the GPU build under the CPU name (see §6 *One staging dir for both backends*) |
 | `load: could not load "litert_lm_*": The specified procedure could not be found.` | Built without `/WHOLEARCHIVE` and/or `/EXPORT` linkopts | Apply step 2 and rebuild |
 | `objdump -p ... litertlm_c_cpu.dll` shows ~357 `LiteRtDispatch*` exports but no `litert_lm_*` | Same as above | Same as above |
 | `ERROR: Skipping '/c:litertlm_c_cpu': invalid package name '/c'` (Git Bash) | MSYS rewrote `//c:...` as a Windows path | `MSYS_NO_PATHCONV=1 bazelisk build //c/litertlm_c_api:litertlm_c_cpu --config=windows` |
 | Build fails with `LongPathsEnabled` errors | NTFS long path support disabled | Enable it in the registry, or use a shorter `--output_base` (e.g. `C:\bzl`) |
 | `cp: cannot create regular file ...: Permission denied` when restaging | Bazel marks outputs read-only | `chmod u+w` the destination first, or use `copy /Y` in PowerShell |
 | GPU run crashes with `Exception 0xc0000005` after `delegate_webgpu.cc:644 # of threads to compile kernels = 1` | Staging used the freshly-built `libLiteRt.dll` from `bazel-bin\` instead of the prebuilt one (ABI mismatch with the prebuilt accelerator plugins) | Replace with `prebuilt\windows_x86_64\libLiteRt.dll` |
-| GPU run logs `WARNING: GPU accelerator could not be loaded and registered` then falls back to CPU | One of `libLiteRtWebGpuAccelerator.dll` / `libLiteRtTopKWebGpuSampler.dll` / DXC missing from `$LITERTLM_LIB_GPU` | Re-run the §6 staging step |
+| GPU run logs `WARNING: GPU accelerator could not be loaded and registered` then falls back to CPU | One of `libLiteRtWebGpuAccelerator.dll` / `libLiteRtTopKWebGpuSampler.dll` / DXC missing from `$LITERTLM_LIB` | Re-run the §6 staging step |
+| GPU run aborts in `engine_create` with `DynamicLib.Open: dxil.dll Windows Error: 87` / `Failed to create WebGPU environment` | `dxcompiler.dll` and/or `dxil.dll` not staged into `$LITERTLM_LIB` (these ship with the Windows SDK, not the LiteRT-LM prebuilts) | Copy both from `C:\Program Files (x86)\Windows Kits\10\bin\<sdk-version>\x64\` per §6 *Stage GPU runtime files* |
 | Empty `default.profraw` files appear in your working directory after each run | The prebuilt LiteRT-LM deps inherit LLVM `-fprofile-instr-generate` instrumentation; the embedded `__llvm_profile_*` runtime writes a coverage dump to `.\default.profraw` on exit | Set `LLVM_PROFILE_FILE=NUL` in the environment to discard the dump: `$Env:LLVM_PROFILE_FILE = "NUL"; go run …` |

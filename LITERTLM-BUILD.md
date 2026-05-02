@@ -117,6 +117,24 @@ cp prebuilt/macos_arm64/*.dylib $LITERTLM_LIB
 cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.dylib $LITERTLM_LIB
 ```
 
+#### One staging dir for both backends (optional)
+
+The GPU build (`liblitertlm_c.{so,dylib}`) is a superset of the CPU
+build — it satisfies `-backend cpu` calls too. If you'd rather not
+maintain two staging directories, build only `litertlm_c` and symlink
+the wrapper's CPU-backend lookup name onto it:
+
+```bash
+# Linux
+ln -sf liblitertlm_c.so    $LITERTLM_LIB/liblitertlm_c_cpu.so
+
+# macOS
+ln -sf liblitertlm_c.dylib $LITERTLM_LIB/liblitertlm_c_cpu.dylib
+```
+
+After this, the same `$LITERTLM_LIB` works for both `-backend cpu` and
+`-backend gpu`.
+
 ## Get a model
 Next, you will need to download an LLM. This document 
 uses Gemma 4 model prepared for LiteRT-LM.
@@ -146,6 +164,7 @@ LITERTLM_LIB=~/include/litertlm/lib go run ./examples/hello \
 | `clang: error: unknown argument: '-mavxvnniint8'` | clang ≤ 14; XNNPACK needs clang ≥ 16 | Install `clang-16+` (Ubuntu 22.04 / Debian 12 default `clang` is too old) |
 | Bazel: *"requires Bazel 7.6.1 …"* | Wrong Bazel on `PATH` | Use Bazelisk |
 | Runtime: *"error while loading shared libraries: libLiteRt.so"* | GPU plugins not in `LITERTLM_LIB` | Re-run §4 |
+| `litertlm: New: ...liblitertlm_c_cpu.{so,dylib}: cannot open shared object file` | Only the GPU/full build was staged; `-backend cpu` looks for `liblitertlm_c_cpu.*` | Either build `litertlm_c_cpu` (§3) and copy it in, or symlink the GPU build under the CPU name (see §4 *One staging dir for both backends*) |
 | `engine_create` returns NULL early in setup | LFS deps missing or stale | `git lfs pull`; check file sizes |
 | `engine_create` returns NULL with `DYNAMIC_UPDATE_SLICE` in logs | `max_num_tokens` below the model's smallest prefill signature (often 128) | Raise `max_num_tokens` to ≥1024 |
 | `NumCandidates() == 1` but `Text(0) == ""` | Chat-tuned model got raw text without its template | Use the `chat` example / Conversation API |
