@@ -93,8 +93,12 @@ The high-level API (recommended for most use cases) is documented at
 
 The site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)
 and published from the `docs/` directory on tagged pushes (see
-`.github/workflows/docs.yml`). Preview locally with
-`pip install mkdocs-material && mkdocs serve`.
+`.github/workflows/docs.yml`). Preview locally:
+
+```bash
+pip install -r docs/requirements.txt
+mkdocs serve  # http://localhost:8000/
+```
 
 ## License
 
