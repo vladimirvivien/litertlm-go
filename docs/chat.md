@@ -1,9 +1,10 @@
 # Chat
 
-Multi-turn conversations with optional system prompt and tool
-calling. Built on the C-side Conversation API, which applies the
-model's chat template (e.g. Gemma's `<|turn>user … <turn|>`) so the
-bot output looks like a proper assistant reply.
+The `Chat` API provides support for multi-turn conversations with 
+with optional system prompt and tool calling. 
+The API wraps the C-side `Conversation` API, which applies the
+model's chat template (e.g. Gemma's `<|turn>user … <turn|>`) for 
+proper multi-turn conversations.
 
 ```go
 chat, err := client.NewChat(ctx,
@@ -21,9 +22,11 @@ fmt.Println(reply.Text())
 `Chat` keeps dialogue history internally — successive `Send` calls
 have access to prior turns.
 
-## `NewChat(ctx, opts...)`
+## Creating `NewChat(ctx, opts...)`
 
-Construct from a `Client`. Always `Close()` when done.
+You start your chat sessions from a `Client` instance. Once you have a chat instance, always remember to `Close()` it when done.
+
+Chat configuration:
 
 | Option                          | Effect                                                                                          |
 |---------------------------------|-------------------------------------------------------------------------------------------------|
@@ -32,20 +35,10 @@ Construct from a `Client`. Always `Close()` when done.
 | `WithInitialMessages(msgs)`     | Seed history with prior turns.                                                                  |
 | `WithConstrainedDecoding(on)`   | Toggle the engine's constrained-decoding mode (boolean only — schema delivery is upstream-pending). |
 
-!!! warning "System prompt shape"
+## `Send(ctx, message)` and `Reply`
 
-    `WithSystemPrompt(s)` takes the **content** string. Don't pass a
-    full `{"role":"system","content":"..."}` envelope; the C-side
-    wrapping makes the chat template silently drop the prompt
-    (verified failure mode). Plain text is what you want:
-
-    ```go
-    litertlm.WithSystemPrompt("You are a calculator assistant.")
-    ```
-
-## `Send(ctx, message)`
-
-Synchronous user-role message. Returns a `*Reply`.
+Use the `Send` method to synchronously send user-role messages. Each send returns a `*Reply`
+which gives you access to chat session resources.
 
 ```go
 type Reply struct{ /* unexported */ }
@@ -55,14 +48,10 @@ func (r *Reply) HasToolCalls() bool
 func (r *Reply) Raw() string          // original C-side JSON, for debugging
 ```
 
-`ctx` cancellation flows through to `Conversation.Cancel` internally.
-
 ## `SendStream(ctx, message)`
 
-Streaming variant. Returns `iter.Seq2[Chunk, error]` — same shape as
-`Client.GenerateStream`. Tool-using replies arrive as raw text chunks
-with the model's native tool-call markers; for structured `tool_calls`,
-prefer `Send`.
+`SendStream` is the Streaming variant of `Send`. It returns an iterator of type `iter.Seq2[Chunk, error]`.
+This allows programs to easily accessing streamed replies from the engine.
 
 ```go
 for chunk, err := range chat.SendStream(ctx, message) {
@@ -72,6 +61,8 @@ for chunk, err := range chat.SendStream(ctx, message) {
 ```
 
 ## Tool calling
+Tool calling starts with the definition of a `litertlm.Tool` which is then
+handed the `Client` when creating a new chat.
 
 ```go
 tools := []litertlm.Tool{
@@ -104,18 +95,20 @@ if reply.HasToolCalls() {
     // call.Function.Name        == "calc_add"
     // call.Function.Arguments   == map[string]any{"a": 17.0, "b": 25.0}
 
-    // Execute locally.
+    // Execute requested tool call.
     a := call.Function.Arguments["a"].(float64)
     b := call.Function.Arguments["b"].(float64)
     result := map[string]int{"result": int(a + b)}
 
-    // Send the result back as a tool-role message.
+    // Send the tool-call result back as a tool-role message.
     final, _ := chat.SendToolResult(ctx, call.Function.Name, result)
     fmt.Println(final.Text())  // "The sum of 17 and 25 is 42."
 }
 ```
 
 ### `Tool` and `ToolCall` types
+The Parameters `map` is similar to OpenAI / Anthropic function-calling
+schemas;
 
 ```go
 type Tool struct {
@@ -140,35 +133,9 @@ type ToolCallFunction struct {
 }
 ```
 
-The Parameters map mirrors OpenAI / Anthropic function-calling
-schemas; the C-side chat template renders them into the model's
-native declaration format.
-
-### `SendToolResult(ctx, name, result)`
-
-`result` is JSON-marshaled directly — pass a struct or `map[string]any`
-so the C-side template renders the response object faithfully. The
-chat template expects the response field to be a JSON object, not a
-string.
-
-## Argument-quote stripping
-
-Some tool-using models (especially smaller ones on Gemma 4) leak
-their internal quote markers (`<|"|>`) into string-typed argument
-values:
-
-```
-{"location": "<|\"|>Boston, MA<|\"|>"}
-```
-
-`*Reply` strips these markers automatically on parse, so by the time
-your code reads `Arguments["location"]` you get clean
-`"Boston, MA"`. Numeric and boolean arguments are passed through
-unchanged.
-
 ## Multi-turn
 
-A single `Chat` handle preserves history across calls. Successive
+A single `Chat` instance preserves history across calls. Successive
 `Send` calls let the model see prior turns:
 
 ```go
@@ -177,7 +144,7 @@ chat.Send(ctx, "Suggest a 3-day itinerary.")  // model knows "Tokyo"
 chat.Send(ctx, "What about the third day?")   // model knows the prior itinerary
 ```
 
-If you need a fresh context, open a new `Chat`.
+When you need a fresh context, open a new `Chat`.
 
 ## See also
 

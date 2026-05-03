@@ -1,22 +1,17 @@
 # Building the LiteRT-LM C Shared Libraries on Linux and macOS
 
 `litertlm-go` is a Go wrapper API that loads LiteRT-LM shared libraries
-(`*.so` on Linux, `*.dylib` on macOS) at runtime. Currently, the project is
-not distributed with pre-built shared libraries that expose a C API. So,
+(`*.so` on Linux, `*.dylib` on macOS) at runtime. Currently, LiteRT-LM is
+not distributed with pre-built shared libraries. So,
 you must build them yourself.
-
-This guide walks you through the steps to build the libraries from source
-so you can use them in your Go programs on **Linux and macOS**.
 
 > **Building on Windows?** The Windows toolchain (MSVC) needs additional
 > linker options and runtime staging steps that this guide does not cover.
 > See [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md) instead.
 
-Find more information about building (C++) [here](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md).
-
 ## Prerequisites
 
-Install your Linux/MacOS prerequisites per [LiteRT-LM's official 
+First, install your Linux/MacOS prerequisites per [LiteRT-LM's official 
 guide](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md):
 
 | Platform | Install |
@@ -24,7 +19,7 @@ guide](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-starte
 | Linux    | `sudo apt install clang git-lfs` |
 | macOS    | `xcode-select --install` and `brew install git-lfs` |
 
-## Build via Docker (optional)
+## Build via Docker
 
 For convenience, this repo ships a `Dockerfile` that downloads the required tools
 to build C library files automatically. The following snippet shows the build steps
@@ -41,11 +36,11 @@ docker build --target cpu -o $LITERTLM_LIB .
 docker build --target gpu -o $LITERTLM_LIB .
 ```
 
-`$LITERTLM_LIB` ends up with `liblitertlm_c[_cpu].so` alongside the prebuilt
+`$LITERTLM_LIB` should contain `liblitertlm_c[_cpu].so` alongside the prebuilt
 runtime dependencies.
 
 ## Build from source
-If you want to build manually, instead of using Docker, follow the instructions in this section.
+If you want to build manually, follow the instructions in this section.
 
 ### 1. Clone the LiteRT-LM repo
 ```bash
@@ -95,12 +90,11 @@ bazel build //c/litertlm_c_api:litertlm_c \
 By default, the built files are stored at `bazel-bin/c/litertlm_c_api/*.so` on Linux
 and `*.dylib` on macOS.
 
-Use `bazel clean --expunge` if you need to clear the build and start over.
+If you need to start over with a clean build, use `bazel clean --expunge` to clear previous builds.
 
 ### 4. Stage the libraries
 
-You will need to store all library files in their dependencies in a known location.
-Store that location in environment variable `LITERTLM_LIB` for easy reference:
+Next, store all library files in a known location (`LITERTLM_LIB`) to make them easy to find:
 
 ```bash
 export LITERTLM_LIB=~/include/litertlm/lib
@@ -109,41 +103,22 @@ mkdir -p $LITERTLM_LIB
 
 ```bash
 # Linux
-cp prebuilt/linux_x86_64/*.so $LITERTLM_LIB              # all runtime deps
-cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.so $LITERTLM_LIB  # ONLY your build
+cp prebuilt/linux_x86_64/*.so $LITERTLM_LIB                    # all runtime deps
+cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.so $LITERTLM_LIB  # your C API build
 
 # macOS
 cp prebuilt/macos_arm64/*.dylib $LITERTLM_LIB
 cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.dylib $LITERTLM_LIB
 ```
 
-#### One staging dir for both backends (optional)
-
-The GPU build (`liblitertlm_c.{so,dylib}`) is a superset of the CPU
-build — it satisfies `-backend cpu` calls too. If you'd rather not
-maintain two staging directories, build only `litertlm_c` and symlink
-the wrapper's CPU-backend lookup name onto it:
-
-```bash
-# Linux
-ln -sf liblitertlm_c.so    $LITERTLM_LIB/liblitertlm_c_cpu.so
-
-# macOS
-ln -sf liblitertlm_c.dylib $LITERTLM_LIB/liblitertlm_c_cpu.dylib
-```
-
-After this, the same `$LITERTLM_LIB` works for both `-backend cpu` and
-`-backend gpu`.
-
 ## Get a model
 Next, you will need to download an LLM. This document 
-uses Gemma 4 model prepared for LiteRT-LM.
+uses the Gemma 4 model from Hugging Face.
 
-You can download a `.litertlm` model from the
+You can download the Gemma 4 `.litertlm` model from the
 [LiteRT Community](https://huggingface.co/litert-community) on Hugging Face.
-The examples below use `gemma-4-E2B-it.litertlm`.
 
-## Run an examples
+## Test your build
 
 Assuming `LITERTLM_LIB` points to the location of your shared libraries, you can
 test your setup with the following example:
@@ -155,7 +130,6 @@ LITERTLM_LIB=~/include/litertlm/lib go run ./examples/hello \
 ```
 
 ## Troubleshooting
-
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|

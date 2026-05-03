@@ -1,29 +1,22 @@
 # Building the LiteRT-LM C Shared Libraries on Windows
 
-This guide complements [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md), which only
-covers Linux and macOS, and provides steps to build the necessary C API libraries
-needed for Go integration. 
-
-The Windows build needs additional Windows-specific adjustments to the local Bazel 
-package and one extra runtime step when launching examples.
-
-> Tested on Windows 11 with MSVC 2022, Bazel 7.6.1 (via Bazelisk), Python 3.13,
-> Git for Windows + Git LFS, and the JDK. The CPU build was
-> verified end-to-end against `gemma-4-E4B-it.litertlm`.
+This guide complements [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md) (which only
+covers Linux and macOS) and provides steps to build the necessary C API libraries
+to use on the Windows operating system. 
 
 ## Prerequisites
 
-Install per [LiteRT-LM's official Windows build
+Install your pre-requisites per [LiteRT-LM's official Windows build
 guide](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/getting-started/build-and-run.md#deploy_to_windows):
 
 - Visual Studio 2022 with the MSVC toolchain (installed for all users).
 - Git for Windows (includes Git Bash).
 - Python 3.13.
-- Bazelisk (`winget install --id=Bazel.Bazelisk -e`).
-- JDK with `JAVA_HOME` pointing at it.
-- `LongPathsEnabled` set to `true` in the registry.
+- Bazelisk
+- JDK 
+- Don't forget `LongPathsEnabled` set to `true` in the registry.
 
-## 1. Clone LiteRT-LM and pull LFS binaries
+## 1. Clone the LiteRT-LM repo
 
 ```powershell
 git clone https://github.com/google-ai-edge/LiteRT-LM.git
@@ -32,16 +25,17 @@ git lfs install --local
 git lfs pull
 ```
 
-Confirm the Windows prebuilts are pulled down:
+Confirm the Windows prebuilt dependencies are pulled down:
 
 ```powershell
 dir prebuilt\windows_x86_64
 ```
 
-## 2. Create (or update) `c/litertlm_c_api/BUILD`
-For windows builds, use the Bazel BUILD shown below 
-with configurations added to bypass issues with the 
-upstream project: 
+## 2. Create (or update) Bazel BUILD file
+Create Bazel file `c/litertlm_c_api/BUILD` if you haven't done so.
+For windows builds, use the Bazel BUILD snippet shown below 
+(with some additional configurations added to bypass issues with the 
+upstream project): 
 
 ```python
 package(default_visibility = ["//visibility:public"])
@@ -72,142 +66,73 @@ cc_binary(
 )
 ```
 
-## 3. Build the CPU shared library
+## 3. Build the shared library
 
-Use the short `--output_base` flag to keep paths shorter to avoid Windows' length limit
-issues. Under Git Bash you must also set `MSYS_NO_PATHCONV=1` so the leading `//` 
-is not rewritten as a path.
+Use s short `--output_base` flag to keep paths shorter to avoid Windows' length limit
+issues.You must also set `MSYS_NO_PATHCONV=1` so the leading `//` is not rewritten as a path.
 
 ```powershell
 $Env:MSYS_NO_PATHCONV = 1
 
+# build CPU-only
 bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c_cpu --config=windows
-```
 
-Output: `bazel-bin\c\litertlm_c_api\litertlm_c_cpu.dll` (~12 MB). 
-
-Verify the C API is exported:
-
-```bash
-objdump -p bazel-bin/c/litertlm_c_api/litertlm_c_cpu.dll | grep -E "litert_lm_engine_create|litert_lm_set_min_log_level"
-```
-
-You should see ~400 exports including `litert_lm_engine_create`,
-`litert_lm_session_config_create`, `litert_lm_set_min_log_level`, etc.
-
-
-## 4. Stage the libraries (CPU)
-
-Copy the shared library files in a known location `$Env:LITERTLM_LIB`
-- Copy the pulled prebuilt library files from `prebuilt/<os_arc_dir>`
-- Copy the freshly built CPU API library `litertlm_c_cpu.dll`
-
-```powershell
-$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
-mkdir $Env:LITERTLM_LIB -Force | Out-Null
-
-# Prebuilt runtime DLLs (lib-prefixed names, exactly as shipped).
-copy prebuilt\windows_x86_64\*.dll $Env:LITERTLM_LIB\
-
-# Freshly-built C API DLL 
-copy bazel-bin\c\litertlm_c_api\litertlm_c_cpu.dll $Env:LITERTLM_LIB\
-```
-
-## 5. Run an example
-
-
-```powershell
-$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
-$Env:LLVM_PROFILE_FILE = "NUL"   # see Troubleshooting; otherwise each run drops default.profraw
-go run .\examples\hello -model C:\path\to\gemma-4-E4B-it.litertlm
-```
-
-## 6. Build GPU shared libraries
-
-Building the GPU C shared libraries require some additional flags.
-The build will produce `bazel-bin\c\litertlm_c_api\litertlm_c.dll`
-(instead of `litertlm_c_cpu.dll`). Again, use the short `--output_base` 
-flag to keep paths shorter to avoid Windows' length limit issues. 
-The Bazel command adds `--define` flag to futher configure the build.
-
-
-### Build
-
-```powershell
-$Env:MSYS_NO_PATHCONV = 1
-
+# build GPU
 bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c `
-    --config=windows `
-    --define=litert_link_capi_so=true `
+    --config=windows 
+    --define=litert_link_capi_so=true 
     --define=resolve_symbols_in_exec=false
 ```
 
-### Stage GPU runtime files
+By default, the built files are stored at `bazel-bin/c/litertlm_c_api/*.dll` on Windows.
 
-For GPU support on Windows, the DirectX Shader Compiler is required at runtime; 
-it ships with the Windows 10/11 SDK at:
+If you need to start over with a clean build, use `bazelisk clean --expunge` to clear previous builds.
 
-```
-C:\Program Files (x86)\Windows Kits\10\bin\<sdk-version>\x64\
-```
+## 4. Stage the library files
 
-Next, copy the required shared libraries to directory `LITERTLM_LIB`:
+Next, store all library files in a known location (`$env:LITERTLM_LIB`) to make them easy to find:
 
 ```powershell
-$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib-gpu"
+# Create staging directory
+$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
 mkdir $Env:LITERTLM_LIB -Force | Out-Null
 
-# All prebuilt runtime DLLs (including libLiteRt.dll — the prebuilt one!).
+# Copy the prebuilt runtime DLLs 
 copy prebuilt\windows_x86_64\*.dll $Env:LITERTLM_LIB\
 
-# Freshly-built GPU C API DLL.
+# Copy the newly-built C API DLL (CPU-only)
+copy bazel-bin\c\litertlm_c_api\litertlm_c_cpu.dll $Env:LITERTLM_LIB\
+```
+
+For GPU use copy the followings:
+
+```powershell
+# Copy the C API DLL for GPU use 
 copy bazel-bin\c\litertlm_c_api\litertlm_c.dll $Env:LITERTLM_LIB\
 
-# DirectX Shader Compiler (adjust SDK version to match what's installed).
+# Additionally, copy DirectX Shader Compiler (adjust SDK version for your environment).
 $SDK = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
 copy "$SDK\dxcompiler.dll" $Env:LITERTLM_LIB\
 copy "$SDK\dxil.dll"       $Env:LITERTLM_LIB\
 ```
 
-### Run with GPU
+## 5. Run an example
+Run the examples to validate your setup.
+
+CPU inference:
+
+```powershell
+$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+go run .\examples\hello -model C:\path\to\gemma-4-E4B-it.litertlm -backend cpu
+```
+
+GPU-backed inference:
 
 ```powershell
 $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib-gpu"
 $Env:LLVM_PROFILE_FILE = "NUL"
 go run .\examples\chat -model C:\path\to\gemma-4-E4B-it.litertlm -backend gpu
 ```
-
-On boot you should see WebGPU adapter selection logs naming your discrete
-GPU (e.g. `Selected adapter: NVIDIA GeForce RTX 4070 Laptop GPU, ...
-backend=Direct3D 12`) followed by normal chat output.
-
-### One staging dir for both backends (optional)
-
-The GPU build (`litertlm_c.dll`) is a superset of the CPU build — it can
-satisfy `-backend cpu` calls too. If you'd rather not maintain two
-staging directories, build only `litertlm_c` and create a hardlink so
-the wrapper's CPU-backend lookup (`litertlm_c_cpu.dll`) resolves to the
-same file:
-
-```powershell
-# Inside $Env:LITERTLM_LIB after copying litertlm_c.dll:
-New-Item -ItemType HardLink `
-    -Path   "$Env:LITERTLM_LIB\litertlm_c_cpu.dll" `
-    -Target "$Env:LITERTLM_LIB\litertlm_c.dll"
-```
-
-Hardlinks don't require admin rights; symbolic links via `mklink` do.
-After this, the same `$LITERTLM_LIB` works for both `-backend cpu` and
-`-backend gpu`.
-
-## Verified examples
-
-| Example | Backend | Status |
-|---|---|---|
-| `hello` | `cpu` | ✅ Synchronous Session API works |
-| `chat`  | `cpu` | ✅ Conversation API two-turn demo works |
-| `chat`  | `gpu` | ✅ NVIDIA RTX 4070 via WebGPU/D3D12 |
-| `stream` | `cpu` | ✅ Token-by-token streaming works |
 
 ## Troubleshooting
 
