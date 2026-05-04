@@ -35,64 +35,11 @@ block character `▁` where you'd expect ASCII spaces:
 faithfully passes through the tokenizer's raw output without
 post-processing it.
 
-**Fix.** Normalise on the Go side if you want plain spaces:
+**Fix.** Fix in Go if you want plain spaces:
 
 ```go
 out = strings.ReplaceAll(out, "▁", " ")
 ```
-
-The high-level `Generate` path doesn't hit this because it doesn't
-expose detokenize directly.
-
----
-
-## `ScoreTexts` rejects `len(targets) > 1`
-
-**Symptom.** `Session.ScoreTexts` returns
-`INVALID_ARGUMENT: Target text size should be 1`.
-
-**Cause.** The current LiteRT-LM CPU engine restricts
-`run_text_scoring` to exactly one candidate per call. The Go API
-accepts `[]string` for forward compatibility.
-
-**Fix.** Score one target at a time. Open a fresh `Session` between
-calls if needed (the engine doesn't allow re-prefill on a session
-that has already scored or decoded).
-
----
-
-## `Responses.Score(i)` returns `(0, true)` for non-scoring sources
-
-**Symptom.** A `Responses` produced by `Session.GenerateContent` /
-`Client.Generate` / `Session.RunDecode` reports `Score(0) == (0, true)`
-— `ok=true` but the value is zero.
-
-**Cause.** The C `has_score_at` predicate fires for any in-range
-index, *not* only when a real score was computed. It's a "slot
-exists" predicate. Non-scoring sources report `(0, true)` as a
-placeholder.
-
-**Fix.** Only treat `Score` values as meaningful when they came from
-`Session.ScoreTexts`. The producing method is the source of truth
-for whether a real score was computed.
-
----
-
-## "Session reuse" engine error
-
-**Symptom.**
-`Failed to run decode: INTERNAL: new_step must be less than or equal
-to TokenCount(), got X vs Y` — typically when running a second
-prefill / decode / score on the same session.
-
-**Cause.** The C engine restricts each `Session` to one prefill→decode
-or prefill→score cycle. Trying to run a second cycle on the same
-session corrupts internal state.
-
-**Fix.** Open a fresh `Session` for each independent generation. The
-high-level `Client.Generate` / `GenerateStream` / `GenerateResponse`
-do this automatically — each call gets its own session.
-
 ---
 
 ## Empty `default.profraw` files appear in working directory
@@ -123,10 +70,6 @@ running:
     $Env:LITERTLM_LIB = "C:\path\to\lib"
     go run main.go
     ```
-
-The proper fix is upstream — rebuilding the prebuilt libs without
-the profile flag. Until then, the env-var workaround is harmless.
-
 ---
 
 ## `engine_create` returns nil with `DYNAMIC_UPDATE_SLICE` errors
@@ -165,9 +108,6 @@ against.
 **Fix.** Re-stage the prebuilt LiteRT-LM libraries from a current
 upstream build per
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md).
-Symbols not invoked by your code path stay harmless — only the
-methods that actually call into a missing symbol panic, so a partial
-upgrade can be enough if you don't use the affected feature.
 
 ---
 
@@ -204,9 +144,6 @@ declared.
 n := int(reply.ToolCalls()[0].Function.Arguments["count"].(float64))
 ```
 
-The conversation example's `toInt` helper covers this plus the
-string fallback for cases where the model wraps numbers in quotes.
-
 ---
 
 ## Markers `<|"|>` in tool-call argument values
@@ -220,7 +157,7 @@ JSON.
 
 **Fix.** The high-level `*Reply` strips these automatically on
 parse, so callers see clean values. If you're working at the low
-level (`Conversation.SendMessage`), strip them yourself:
+level (`Conversation.SendMessage`), you will need to strip them yourself:
 
 ```go
 strings.ReplaceAll(arg, `<|"|>`, "")
