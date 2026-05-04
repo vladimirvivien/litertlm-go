@@ -3,8 +3,8 @@
 The `Chat` API provides support for multi-turn conversations with 
 with optional system prompt and tool calling. 
 The API wraps the C-side `Conversation` API, which applies the
-model's chat template (e.g. Gemma's `<|turn>user … <turn|>`) for 
-proper multi-turn conversations.
+model's chat template (e.g. Gemma's `<|turn>user … <turn|>`) 
+appropriately for proper multi-turn conversations.
 
 ```go
 chat, err := client.NewChat(ctx,
