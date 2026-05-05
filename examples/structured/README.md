@@ -1,30 +1,25 @@
-# structured — type-safe structured-output extraction
+# Example: Typed Structured Output
 
-Asks the model for a `Recipe` (title + ingredients + steps), parses
-the response into the typed Go struct, and pretty-prints it. Uses
-`litertlm.GenerateData[Recipe]` under the hood — Tier A
-implementation: prompt-engineered JSON instruction + tolerant parse +
-optional retry on failure.
+This example shows `litertlm-go` can generate type-safe structured output from 
+the model output. In the example, the code promps the model for `Recipe` 
+(title + ingredients + steps), and it automatically parses
+the response into a typed Go struct.
 
 ## What this example shows
-
-- `litertlm.GenerateData[T]` — generic helper that returns `*T`
-  populated from the model's JSON output.
-- `WithRetries(n)` — retry loop for parse failures. Local LLMs
-  occasionally emit invalid JSON; bumping retries usually fixes it.
+- Create and configure a new instance of `litertlm.Client`.
+- Uses `litertlm.GenerateData[T]` to generate a one-shot response that
+  automatically populate a value of type `*T` from the model's JSON output.
+- `litertlm.WithRetries(n)` — can retry if there are parse failures, in cases
+  where the model emits improperly formatted JSON.
 - `*GenerateDataError` — distinguishes parse failures (model returned
   text that couldn't unmarshal) from generate failures (FFI / ctx
   cancellation).
-- The shape hint is auto-derived via reflection from the `Recipe`
-  struct's exported fields and `json` tags.
 
 ## Prerequisites
 
-1. Native shared library + `libGemmaModelConstraintProvider.*` staged
-   in `$LITERTLM_LIB`.
-2. A chat-tuned `.litertlm` model. E4B is recommended for reliability;
-   E2B works but may need higher `-retries`.
-3. Go 1.26+.
+1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
+2. A `.litertlm` model (i.e. Gemma 4). 
+3. `litertlm-go`
 
 ## Run
 
@@ -72,19 +67,11 @@ A JSON-pretty-printed Recipe struct, e.g.:
 
 ## Notes
 
-- **Reliability is model-dependent.** E4B (4B parameters) follows the
-  "JSON only, no fences" instruction reliably on the first try in
-  most cases. E2B (2B parameters) is less consistent — start with
-  `-retries 3` or higher.
-- **Tier A is best-effort.** The prompt-injection approach has no
-  hard guarantee that the model emits valid JSON. The proper fix is
-  constrained decoding driven by a JSON schema, which requires the
-  C-API hook upstream LiteRT-LM does not yet expose. When that lands,
-  `GenerateData[T]` swaps to Tier B internally with no caller
-  changes.
-- **Customising the instruction.** `WithSchemaInstruction(s)` lets
-  you override the default preamble. `s` must be a `fmt.Sprintf`
-  format string with one `%s` placeholder where the shape hint goes:
+- **Model reliability** E4B (4B parameters) follows the
+  "JSON" instructions in most cases. The E2B Gemma model (the smallest model) 
+  can be less consistent and may require retries.
+- **Customising the instruction** - use `WithSchemaInstruction(s)` to
+  override the default preamble.
 
   ```go
   litertlm.WithSchemaInstruction(
@@ -98,7 +85,3 @@ A JSON-pretty-printed Recipe struct, e.g.:
   {"title": <string>, "ingredients": [<string>], "steps": [<string>]}
   ```
 
-  Models follow this short form more reliably than full JSON Schema.
-- **Top-level slices** are supported: `GenerateData[[]Recipe]` asks
-  the model for a JSON array. The shape hint becomes
-  `[{"title": <string>, ...}]`.

@@ -47,15 +47,4 @@ func main() {
 	}
 	fmt.Println(text)
 
-	if text == "" {
-		fmt.Fprintln(os.Stderr, `
-hint: the model returned an empty completion. This typically means the
-prompt was sent to a chat-tuned model without its chat template, so the
-model produced an end-of-sequence token immediately. Either:
-  - try a "completion-style" prompt that the model can extend (the default
-    "The capital of France is" works on Gemma 4 base + many models), or
-  - run the chat example, which uses the Conversation API and applies the
-    model's chat template automatically:
-      go run ./examples/chat -model `+*model)
-	}
 }
