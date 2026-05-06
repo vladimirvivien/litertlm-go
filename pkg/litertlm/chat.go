@@ -115,9 +115,13 @@ type Chat struct {
 
 // NewChat creates a Chat rooted in the Client's engine. Caller must
 // Close the returned Chat when done.
+//
+// Cancelling ctx during NewChat returns ctx.Err() to the caller
+// promptly. The underlying C work has no cancel hook and runs to
+// completion in the background; if it eventually succeeds after
+// cancellation, the resulting handles are released automatically so
+// nothing leaks.
 func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error) {
-	_ = ctx // reserved for future cancellation of the create step
-
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -143,8 +147,19 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
 
+	return runCancellable(ctx,
+		func() (*Chat, error) {
+			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON, cfg.constrainedDecoding)
+		},
+		func(ch *Chat) { _ = ch.Close() },
+	)
+}
+
+// buildChat performs the synchronous C-side work of constructing a
+// Chat. Split out so NewChat can run it under runCancellable.
+func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, constrainedDecoding bool) (*Chat, error) {
 	convCfg, err := NewConversationConfig(c.engine, 0,
-		systemMessageJSON, toolsJSON, messagesJSON, cfg.constrainedDecoding)
+		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}

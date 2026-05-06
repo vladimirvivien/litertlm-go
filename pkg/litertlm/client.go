@@ -36,8 +36,11 @@ type Client struct {
 // constructs an Engine. The returned Client is ready for Generate /
 // GenerateStream / NewChat. Close must be called when done.
 //
-// ctx is reserved for future cancellation of the load step; the
-// current C API runs the load synchronously and ignores ctx.
+// Cancelling ctx during New returns ctx.Err() to the caller promptly.
+// The underlying C work (library load, model file mmap, engine
+// construction) has no cancel hook and runs to completion in the
+// background; if it eventually succeeds after cancellation, the
+// resulting handles are released automatically so nothing leaks.
 //
 // New uses these defaults:
 //   - backend: "cpu"
@@ -50,8 +53,6 @@ type Client struct {
 // NewEngineSettings, NewEngine, Engine.NewSession) remain available
 // and are what New itself uses internally.
 func New(ctx context.Context, opts ...Option) (*Client, error) {
-	_ = ctx // reserved for future use
-
 	cfg := clientConfig{
 		backend:   defaultBackend,
 		maxTokens: defaultMaxTokens,
@@ -73,15 +74,20 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("litertlm: New: model path required (WithModel or %s env)", envModel)
 	}
 
+	return runCancellable(ctx,
+		func() (*Client, error) { return buildClient(cfg) },
+		func(c *Client) { _ = c.Close() },
+	)
+}
+
+// buildClient performs the synchronous C-side work of constructing a
+// Client. Split out so New can run it under runCancellable.
+func buildClient(cfg clientConfig) (*Client, error) {
 	if err := Load(cfg.libPath, cfg.backend); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 
-	if !cfg.logLevelSet {
-		SetMinLogLevel(cfg.logLevel)
-	} else {
-		SetMinLogLevel(cfg.logLevel)
-	}
+	SetMinLogLevel(cfg.logLevel)
 
 	settings, err := NewEngineSettings(cfg.modelPath, cfg.backend, cfg.visionBackend, cfg.audioBackend)
 	if err != nil {
