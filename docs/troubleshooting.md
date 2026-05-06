@@ -2,6 +2,36 @@
 
 Quirks and known limitations, with their root causes and fixes.
 
+## Library not found
+
+**Symptom.** `litertlm.New` (or `litertlm.Load`) returns
+`"litertlm_c_cpu" not found; checked: ...` listing several paths.
+
+**Cause.** The LiteRT-LM shared library is not at any of the locations
+the loader searches.
+
+**Search order (when `WithLib` is empty):**
+
+1. `LITERTLM_LIB` environment variable.
+2. Platform default paths:
+    - Linux/macOS/FreeBSD: `$XDG_DATA_HOME/litertlm/lib`,
+      `~/.litertlm/lib`, `/opt/litertlm/lib`,
+      `/opt/homebrew/lib` (macOS only), `/usr/local/lib`.
+    - Windows: `%LOCALAPPDATA%\litertlm\lib`,
+      `%PROGRAMFILES%\litertlm\lib`.
+
+The default library short-name is selected by backend
+(`litertlm_c_cpu` for cpu, `litertlm_c` for gpu). Override it with
+`WithLibName("...")` or `LITERTLM_LIB_NAME`.
+
+**Fix.** Either:
+
+- Pass `WithLib("/abs/path/to/lib")` to `litertlm.New`.
+- Set `LITERTLM_LIB=/abs/path/to/lib`.
+- Symlink your lib directory into one of the default paths above.
+
+---
+
 ## Empty completion from a chat-tuned model
 
 **Symptom.** `Generate` returns `""`. `NumCandidates() == 1` but

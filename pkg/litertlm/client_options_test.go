@@ -39,6 +39,23 @@ func TestOption_LibAndModel(t *testing.T) {
 	}
 }
 
+// TestOption_LibName verifies WithLibName threads through to the
+// resolved config and respects last-write-wins.
+func TestOption_LibName(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.libName != "" {
+		t.Fatalf("libName should start empty")
+	}
+	WithLibName("litertlm_c_arm64")(&cfg)
+	if cfg.libName != "litertlm_c_arm64" {
+		t.Errorf("libName = %q", cfg.libName)
+	}
+	WithLibName("")(&cfg)
+	if cfg.libName != "" {
+		t.Errorf("empty WithLibName should clear; got %q", cfg.libName)
+	}
+}
+
 // TestOption_LastWriteWins ensures composing the same option twice
 // keeps the last value (per standard functional-options semantics).
 func TestOption_LastWriteWins(t *testing.T) {

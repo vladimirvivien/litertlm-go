@@ -11,6 +11,7 @@ type GenOption func(*genConfig)
 // defaults, environment fallbacks, and user-supplied Options.
 type clientConfig struct {
 	libPath       string
+	libName       string
 	modelPath     string
 	backend       string
 	visionBackend *string
@@ -46,8 +47,17 @@ type genConfig struct {
 // ---- constructor options ----
 
 // WithLib sets the directory holding the LiteRT-LM shared libraries.
-// Empty string falls back to the LITERTLM_LIB environment variable.
+// Empty string falls back to the LITERTLM_LIB environment variable,
+// then the platform default paths (see loader.DefaultPaths).
 func WithLib(dir string) Option { return func(c *clientConfig) { c.libPath = dir } }
+
+// WithLibName overrides the main C-API library short-name. By default
+// the name is selected by backend ("litertlm_c_cpu" for cpu,
+// "litertlm_c" for gpu). Set this when your build produces a library
+// with a non-standard name (e.g. "litertlm_c_arm64"). Empty string
+// falls back to the LITERTLM_LIB_NAME environment variable, then the
+// backend default.
+func WithLibName(name string) Option { return func(c *clientConfig) { c.libName = name } }
 
 // WithModel sets the path to the .litertlm model file. Empty string
 // falls back to the LITERTLM_MODEL environment variable.

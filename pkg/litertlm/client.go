@@ -83,7 +83,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 // buildClient performs the synchronous C-side work of constructing a
 // Client. Split out so New can run it under runCancellable.
 func buildClient(cfg clientConfig) (*Client, error) {
-	if err := Load(cfg.libPath, cfg.backend); err != nil {
+	if err := Load(cfg.libPath, cfg.backend, cfg.libName); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 

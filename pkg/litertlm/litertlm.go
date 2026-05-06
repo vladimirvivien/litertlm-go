@@ -3,7 +3,7 @@
 //
 // The flow for local inference is:
 //
-//	litertlm.Load(libDir, "cpu")                 // once; "" auto-picks
+//	litertlm.Load(libDir, "cpu", "")             // once; "" auto-picks
 //	defer litertlm.Close()
 //
 //	s := litertlm.NewEngineSettings(modelPath, "cpu", nil, nil)
@@ -27,12 +27,16 @@
 package litertlm
 
 import (
+	"os"
 	"sync"
 
 	"github.com/jupiterrider/ffi"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/loader"
 )
+
+// envLibName is consulted by Load when libName is empty.
+const envLibName = "LITERTLM_LIB_NAME"
 
 // libByBackend maps the backend selector to the main C-API shared lib:
 // "cpu" → litertlm_c_cpu, "gpu" → litertlm_c. Unknown values fall back
@@ -73,17 +77,40 @@ func LibPath() string {
 }
 
 // Load opens the LiteRT-LM shared libraries and binds C entry points.
-// path is the directory containing the libs; "" consults LITERTLM_LIB.
-// backend selects "cpu" or "gpu"; "" or unknown picks GPU then CPU.
+//
+//   - path is the directory containing the libs; "" triggers a search
+//     of $LITERTLM_LIB and the platform default paths (see
+//     loader.DefaultPaths).
+//   - backend selects "cpu" or "gpu"; "" or unknown picks GPU then CPU.
+//   - libName overrides the main C-API library short-name; "" falls
+//     back to $LITERTLM_LIB_NAME, then the backend default.
 //
 // Auxiliary libs are dlopen'd before the main lib so DT_NEEDED references
 // resolve without requiring LD_LIBRARY_PATH / DYLD_LIBRARY_PATH. Load is
 // safe to call concurrently; subsequent successful calls are no-ops.
-func Load(path, backend string) error {
+func Load(path, backend, libName string) error {
 	loadMu.Lock()
 	defer loadMu.Unlock()
 	if loadedOnce {
 		return nil
+	}
+
+	if libName == "" {
+		libName = os.Getenv(envLibName)
+	}
+
+	if path == "" {
+		searchName := libName
+		if searchName == "" {
+			searchName = defaultLibName(backend)
+		}
+		candidates := []string{os.Getenv(loader.EnvVar)}
+		candidates = append(candidates, loader.DefaultPaths()...)
+		found, err := loader.Find(searchName, candidates)
+		if err != nil {
+			return err
+		}
+		path = found
 	}
 
 	for _, name := range optionalLibs {
@@ -95,7 +122,7 @@ func Load(path, backend string) error {
 		}
 	}
 
-	mainLib, err := loadMainLib(path, backend)
+	mainLib, err := loadMainLib(path, backend, libName)
 	if err != nil {
 		return err
 	}
@@ -108,9 +135,23 @@ func Load(path, backend string) error {
 	return nil
 }
 
-// loadMainLib opens the C-API library matching backend, falling back
-// from GPU to CPU when backend is empty/unknown.
-func loadMainLib(path, backend string) (ffi.Lib, error) {
+// defaultLibName returns the main C-API library short-name picked by
+// the given backend. Used when libName is empty and a search needs a
+// concrete filename to look for.
+func defaultLibName(backend string) string {
+	if short, ok := libByBackend[backend]; ok {
+		return short
+	}
+	return "litertlm_c_cpu"
+}
+
+// loadMainLib opens the C-API library. When libName is non-empty it
+// is used verbatim; otherwise the name is selected by backend, with a
+// GPU-then-CPU fallback for unknown backends.
+func loadMainLib(path, backend, libName string) (ffi.Lib, error) {
+	if libName != "" {
+		return loader.LoadLibrary(path, libName)
+	}
 	if short, ok := libByBackend[backend]; ok {
 		return loader.LoadLibrary(path, short)
 	}
