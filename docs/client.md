@@ -128,8 +128,47 @@ score, ok := resp.Score(0)                  // (placeholder, always ok=true for 
 length, ok := resp.TokenLength(0)           // (false unless ScoreTexts populated it)
 ```
 
+## Multimodal inputs
+
+When the model supports vision or audio (and `WithVisionBackend` /
+`WithAudioBackend` are set), use the `*Multi` methods. They take a
+`[]litertlm.Part` instead of a string prompt; everything else (opts,
+streaming, cancellation, response shape) is identical.
+
+| Method                       | Returns                       |
+|------------------------------|-------------------------------|
+| `GenerateMulti`              | `(string, error)`             |
+| `GenerateMultiStream`        | `iter.Seq2[Chunk, error]`     |
+| `GenerateMultiResponse`      | `(*Response, error)`          |
+
+### Building Parts
+
+| Constructor                          | Purpose                                                 |
+|--------------------------------------|---------------------------------------------------------|
+| `Text(s)`                            | Text prompt segment.                                    |
+| `Image(b)`                           | Image bytes (no MIME claimed).                          |
+| `ImageWithMime(b, "image/jpeg")`     | Explicit MIME (jpeg / png / webp / gif / bmp).          |
+| `ImageFromFile(path)`                | Read file; MIME from extension.                         |
+| `Audio(b)` / `AudioWithMime(b, mime)` / `AudioFromFile(path)` | Audio analogues. |
+
+### Example — vision Q&A
+
+```go
+img, err := litertlm.ImageFromFile("/path/to/photo.jpg")
+if err != nil { return err }
+
+text, err := client.GenerateMulti(ctx, []litertlm.Part{
+    img,
+    litertlm.Text("What objects are visible?"),
+})
+```
+
+The Image / Audio Parts emit their C-side end-marker
+(`InputImageEnd` / `InputAudioEnd`) automatically — callers don't
+need to think about segment terminators.
+
 ## See also
 
 - [Chat](chat.md) — multi-turn with system prompts and tools.
-- [Structured output](structured-output.md) — `GenerateData[T]`.
+- [Structured output](structured-output.md) — `GenerateData[T]` and `GenerateDataMulti[T]`.
 - [Low-level API](low-level.md) — when to drop down.

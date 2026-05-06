@@ -16,13 +16,23 @@ type Chunk struct {
 // candidate's text. Cancelling ctx aborts the in-flight inference (via
 // Session.Cancel) and returns ctx.Err.
 func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption) (string, error) {
-	return c.generate(ctx, prompt, resolveGenConfig(opts))
+	return c.generateMulti(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
 }
 
-// generate is the resolved-config sibling of Generate; called by
-// Generate (which resolves opts first) and by GenerateData (which has
-// already resolved opts and rejects re-applying them).
-func (c *Client) generate(ctx context.Context, prompt string, cfg genConfig) (string, error) {
+// GenerateMulti is the multimodal sibling of Generate. parts may
+// contain text, image, and audio Parts in any order; the model
+// requires at least one text part to drive generation.
+//
+// Image and audio Parts require WithVisionBackend / WithAudioBackend
+// at New time and a model whose .litertlm package includes the
+// corresponding tower.
+func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...GenOption) (string, error) {
+	return c.generateMulti(ctx, parts, resolveGenConfig(opts))
+}
+
+// generateMulti is the resolved-config sibling of GenerateMulti.
+// Generate, GenerateMulti, and GenerateData all funnel through here.
+func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
 	sess, err := c.openSession(cfg)
 	if err != nil {
 		return "", err
@@ -32,7 +42,7 @@ func (c *Client) generate(ctx context.Context, prompt string, cfg genConfig) (st
 	stop := wireCancel(ctx, sess.Cancel)
 	defer stop()
 
-	resp, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
+	resp, err := sess.GenerateContent(partsToInputs(parts))
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return "", cerr
@@ -56,10 +66,16 @@ func (c *Client) generate(ctx context.Context, prompt string, cfg genConfig) (st
 //	    fmt.Print(chunk.Text)
 //	}
 func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenOption) iter.Seq2[Chunk, error] {
-	return c.generateStream(ctx, prompt, resolveGenConfig(opts))
+	return c.generateMultiStream(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
 }
 
-func (c *Client) generateStream(ctx context.Context, prompt string, cfg genConfig) iter.Seq2[Chunk, error] {
+// GenerateMultiStream is the multimodal sibling of GenerateStream.
+// See GenerateMulti for parts semantics.
+func (c *Client) GenerateMultiStream(ctx context.Context, parts []Part, opts ...GenOption) iter.Seq2[Chunk, error] {
+	return c.generateMultiStream(ctx, parts, resolveGenConfig(opts))
+}
+
+func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg genConfig) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		sess, err := c.openSession(cfg)
 		if err != nil {
@@ -71,7 +87,7 @@ func (c *Client) generateStream(ctx context.Context, prompt string, cfg genConfi
 		stop := wireCancel(ctx, sess.Cancel)
 		defer stop()
 
-		for sc := range sess.GenerateContentStreamCh([]InputData{NewTextInputString(prompt)}) {
+		for sc := range sess.GenerateContentStreamCh(partsToInputs(parts)) {
 			ch := Chunk{Text: sc.Text, Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return
@@ -88,10 +104,16 @@ func (c *Client) generateStream(ctx context.Context, prompt string, cfg genConfi
 // token-length accessors. Lifetime is GC-managed via
 // runtime.AddCleanup — see the Response godoc.
 func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...GenOption) (*Response, error) {
-	return c.generateResponse(ctx, prompt, resolveGenConfig(opts))
+	return c.generateMultiResponse(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
 }
 
-func (c *Client) generateResponse(ctx context.Context, prompt string, cfg genConfig) (*Response, error) {
+// GenerateMultiResponse is the multimodal sibling of GenerateResponse.
+// See GenerateMulti for parts semantics.
+func (c *Client) GenerateMultiResponse(ctx context.Context, parts []Part, opts ...GenOption) (*Response, error) {
+	return c.generateMultiResponse(ctx, parts, resolveGenConfig(opts))
+}
+
+func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg genConfig) (*Response, error) {
 	sess, err := c.openSession(cfg)
 	if err != nil {
 		return nil, err
@@ -101,7 +123,7 @@ func (c *Client) generateResponse(ctx context.Context, prompt string, cfg genCon
 	stop := wireCancel(ctx, sess.Cancel)
 	defer stop()
 
-	handle, err := sess.GenerateContent([]InputData{NewTextInputString(prompt)})
+	handle, err := sess.GenerateContent(partsToInputs(parts))
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr

@@ -13,7 +13,10 @@ Common reasons to drop down:
 - **Deterministic resource lifetimes.** - Use low-level controls for resource
 creation and releases.
 - **Multimodal inputs.** Fine control over multi-modal input data with 
-`[]InputData` with `NewBinaryInput(InputImage, …)`.
+`[]InputData` with `NewBinaryInput(InputImage, …)`. For ergonomic
+high-level multimodal calls, prefer `Client.GenerateMulti` /
+`GenerateDataMulti[T]` with `Part` constructors — see
+[Client → Multimodal inputs](client.md#multimodal-inputs).
 - **Custom Conversation flows.** - Sequencing tool-call and tool-response
   messages directly with prefilled message histories, etc.
 

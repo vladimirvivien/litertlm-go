@@ -124,8 +124,48 @@ type GenerateDataError struct {
 **Retries fire only on parse failures.** Generate-phase errors
 (`ctx.Err()`, FFI failures, model crashes) propagate the error and fails immediately.
 
+## Multimodal: `GenerateDataMulti[T]`
+
+Use `GenerateDataMulti[T]` to extract structured data from
+inputs that include images or audio (vision-language model required;
+configure with `WithVisionBackend` at `New` time).
+
+```go
+img, err := litertlm.ImageFromFile("/path/to/recipe-card.jpg")
+if err != nil { return err }
+
+recipe, err := litertlm.GenerateDataMulti[Recipe](ctx, client,
+    []litertlm.Part{
+        img,
+        litertlm.Text("Extract the recipe shown in the image."),
+    },
+    litertlm.WithRetries(2),
+)
+```
+
+Behavior matches `GenerateData[T]` exactly except for the schema-injection
+step: the JSON-shape instruction is **prepended to the last text Part**
+in `parts`, not to a single string prompt. If `parts` contains no
+text Part, a synthesized `Text(instruction)` is appended at the end.
+
+The caller's `parts` slice is never mutated.
+
+```go
+func GenerateDataMulti[T any](
+    ctx context.Context,
+    c *Client,
+    parts []Part,
+    opts ...GenOption,
+) (*T, error)
+```
+
+`GenerateData[T]` itself is now a thin wrapper around `GenerateDataMulti[T]`
+that wraps the prompt in `[]Part{Text(prompt)}`.
+
 ## See also
 
 - [`examples/structured/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/structured)
-  — full Recipe extraction demo.
-- [Client](client.md) — the underlying `Generate` path.
+  — text-only Recipe extraction.
+- [`examples/extract/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/extract)
+  — image-to-JSON extraction with `GenerateDataMulti`.
+- [Client](client.md#multimodal-inputs) — the underlying multimodal API.
