@@ -143,12 +143,10 @@ recipe, err := litertlm.GenerateDataMulti[Recipe](ctx, client,
 )
 ```
 
-Behavior matches `GenerateData[T]` exactly except for the schema-injection
-step: the JSON-shape instruction is **prepended to the last text Part**
-in `parts`, not to a single string prompt. If `parts` contains no
-text Part, a synthesized `Text(instruction)` is appended at the end.
-
-The caller's `parts` slice is never mutated.
+Schema-injection rule: the JSON-shape instruction is **prepended to
+the last text Part** in `parts`. If `parts` contains no text Part, a
+synthesized `Text(instruction)` is appended at the end. The caller's
+slice is never mutated.
 
 ```go
 func GenerateDataMulti[T any](
@@ -159,8 +157,8 @@ func GenerateDataMulti[T any](
 ) (*T, error)
 ```
 
-`GenerateData[T]` itself is now a thin wrapper around `GenerateDataMulti[T]`
-that wraps the prompt in `[]Part{Text(prompt)}`.
+`GenerateData[T]` is the text-only convenience over
+`GenerateDataMulti[T]` — pass a string prompt instead of `[]Part`.
 
 ## See also
 

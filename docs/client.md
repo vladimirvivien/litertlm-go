@@ -163,10 +163,6 @@ text, err := client.GenerateMulti(ctx, []litertlm.Part{
 })
 ```
 
-The Image / Audio Parts emit their C-side end-marker
-(`InputImageEnd` / `InputAudioEnd`) automatically — callers don't
-need to think about segment terminators.
-
 ## See also
 
 - [Chat](chat.md) — multi-turn with system prompts and tools.

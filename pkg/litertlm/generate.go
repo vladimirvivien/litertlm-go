@@ -32,7 +32,15 @@ func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...GenOpt
 
 // generateMulti is the resolved-config sibling of GenerateMulti.
 // Generate, GenerateMulti, and GenerateData all funnel through here.
+//
+// Routing: text-only parts use Session.GenerateContent. Parts
+// containing image or audio go through a Conversation, whose
+// pipeline preprocesses the bytes before invoking the session.
 func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
+	if partsHasBinary(parts) {
+		return c.runMultimodalConversation(ctx, parts, cfg)
+	}
+
 	sess, err := c.openSession(cfg)
 	if err != nil {
 		return "", err
@@ -57,6 +65,81 @@ func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig)
 	return resp.Text(0), nil
 }
 
+// runMultimodalConversation builds a Conversation, sends the
+// content-array message produced from parts, and returns the
+// assistant's text. Used when parts contains image or audio Parts.
+func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
+	conv, convCfg, err := c.openMultimodalConversation(cfg)
+	if err != nil {
+		return "", err
+	}
+	defer conv.Delete()
+	defer convCfg.Delete()
+
+	stop := wireCancel(ctx, conv.Cancel)
+	defer stop()
+
+	msgJSON, err := partsToConversationMessage(parts)
+	if err != nil {
+		return "", err
+	}
+
+	raw, err := conv.SendMessage(msgJSON, "")
+	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return "", cerr
+		}
+		return "", fmt.Errorf("litertlm: GenerateMulti: %w", err)
+	}
+	return assistantText(raw)
+}
+
+// openMultimodalConversation creates a fresh ConversationConfig +
+// Conversation pair with cfg's per-call SessionConfig (sampler,
+// max-output-tokens) attached. Caller must Delete both handles.
+func (c *Client) openMultimodalConversation(cfg genConfig) (Conversation, ConversationConfig, error) {
+	sampler := cfg.sampler
+	if sampler == nil {
+		sampler = c.cfg.defaultSampler
+	}
+
+	var sessCfg SessionConfig
+	if cfg.maxOutputTokens > 0 || sampler != nil {
+		var err error
+		sessCfg, err = NewSessionConfig()
+		if err != nil {
+			return 0, 0, err
+		}
+		if cfg.maxOutputTokens > 0 {
+			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
+		}
+		if sampler != nil {
+			sessCfg.SetSamplerParams(*sampler)
+		}
+	}
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		sessCfg.Delete()
+		return 0, 0, fmt.Errorf("litertlm: Client is closed")
+	}
+	convCfg, err := NewConversationConfig(c.engine, sessCfg, "", "", "", false)
+	c.mu.Unlock()
+	// ConversationConfig copies sessCfg's relevant fields; safe to delete now.
+	sessCfg.Delete()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	conv, err := c.engine.NewConversation(convCfg)
+	if err != nil {
+		convCfg.Delete()
+		return 0, 0, err
+	}
+	return conv, convCfg, nil
+}
+
 // GenerateStream returns an iterator over response chunks. Cancelling
 // ctx aborts the stream via Session.Cancel; the iterator yields the
 // surfaced error and closes.
@@ -76,6 +159,9 @@ func (c *Client) GenerateMultiStream(ctx context.Context, parts []Part, opts ...
 }
 
 func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg genConfig) iter.Seq2[Chunk, error] {
+	if partsHasBinary(parts) {
+		return c.streamMultimodalConversation(ctx, parts, cfg)
+	}
 	return func(yield func(Chunk, error) bool) {
 		sess, err := c.openSession(cfg)
 		if err != nil {
@@ -88,6 +174,39 @@ func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg genC
 		defer stop()
 
 		for sc := range sess.GenerateContentStreamCh(partsToInputs(parts)) {
+			ch := Chunk{Text: sc.Text, Final: sc.Final}
+			if !yield(ch, sc.Err) {
+				return
+			}
+			if sc.Err != nil {
+				return
+			}
+		}
+	}
+}
+
+// streamMultimodalConversation drives a Conversation streaming send
+// for multimodal parts. Mirrors the Session-path streamer.
+func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) iter.Seq2[Chunk, error] {
+	return func(yield func(Chunk, error) bool) {
+		conv, convCfg, err := c.openMultimodalConversation(cfg)
+		if err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+		defer conv.Delete()
+		defer convCfg.Delete()
+
+		stop := wireCancel(ctx, conv.Cancel)
+		defer stop()
+
+		msgJSON, err := partsToConversationMessage(parts)
+		if err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+
+		for sc := range conv.SendMessageStreamCh(msgJSON, "") {
 			ch := Chunk{Text: sc.Text, Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return
@@ -114,6 +233,14 @@ func (c *Client) GenerateMultiResponse(ctx context.Context, parts []Part, opts .
 }
 
 func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg genConfig) (*Response, error) {
+	if partsHasBinary(parts) {
+		text, err := c.runMultimodalConversation(ctx, parts, cfg)
+		if err != nil {
+			return nil, err
+		}
+		return newTextResponse(text), nil
+	}
+
 	sess, err := c.openSession(cfg)
 	if err != nil {
 		return nil, err

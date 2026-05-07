@@ -2,23 +2,25 @@ package litertlm
 
 import "runtime"
 
-// Response is a rich wrapper around the C-side Responses handle.
-// It exposes per-candidate text plus the score and token-length
-// accessors that landed in Phase 4d.
+// Response wraps a generation result, exposing per-candidate text
+// plus optional score and token-length accessors.
 //
-// Lifetime: a Response owns its underlying C handle. When the
-// *Response becomes unreachable, a runtime.AddCleanup-registered
-// callback frees the handle automatically. Callers do not (and
-// should not) call Delete on a Response.
+// Lifetime: when the *Response becomes unreachable, a
+// runtime.AddCleanup-registered callback frees any underlying C
+// handle automatically. Callers do not (and should not) call Delete
+// on a Response.
 //
 // runtime.AddCleanup is best-effort — the cleanup may run a few GC
-// cycles later than the variable goes out of scope. The C engine is
-// content to outlive a stale Responses for a brief window. If
-// deterministic release matters (tight loop generating many
-// responses, memory-bound), drop down to the low-level
-// Session.GenerateContent API and call .Delete() yourself.
+// cycles later than the variable goes out of scope. If deterministic
+// release matters (tight loop generating many responses,
+// memory-bound), drop down to the low-level Session API and call
+// .Delete() yourself.
 type Response struct {
 	handle Responses
+	// text holds a synthesized single-candidate reply when no C
+	// handle is available; Score / TokenLength return (0, false) in
+	// that case.
+	text string
 }
 
 // newResponse wraps a freshly-created Responses handle and registers
@@ -33,18 +35,34 @@ func newResponse(h Responses) *Response {
 	return r
 }
 
+// newTextResponse constructs a Response carrying a single text
+// candidate without a backing C handle. Score and TokenLength
+// return (0, false) on the resulting Response.
+func newTextResponse(s string) *Response {
+	return &Response{text: s}
+}
+
 // Text returns the first candidate's text. Returns "" when the
 // underlying handle is null or no candidates were produced.
 func (r *Response) Text() string {
-	if r == nil || r.handle == 0 {
+	if r == nil {
 		return ""
+	}
+	if r.handle == 0 {
+		return r.text
 	}
 	return r.handle.Text(0)
 }
 
 // NumCandidates returns the number of candidates the engine emitted.
 func (r *Response) NumCandidates() int {
-	if r == nil || r.handle == 0 {
+	if r == nil {
+		return 0
+	}
+	if r.handle == 0 {
+		if r.text != "" {
+			return 1
+		}
 		return 0
 	}
 	return r.handle.NumCandidates()
@@ -53,7 +71,13 @@ func (r *Response) NumCandidates() int {
 // Candidate returns the text of the i-th candidate. Returns "" for
 // out-of-range indices.
 func (r *Response) Candidate(i int) string {
-	if r == nil || r.handle == 0 {
+	if r == nil {
+		return ""
+	}
+	if r.handle == 0 {
+		if i == 0 {
+			return r.text
+		}
 		return ""
 	}
 	return r.handle.Text(i)

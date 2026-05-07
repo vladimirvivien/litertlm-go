@@ -11,14 +11,17 @@ A Go binding for Google's
 ## Features
 
 - **`Client`** — single-call `Generate`, range-over-func `GenerateStream`,
-  rich `GenerateResponse`. Functional options for every engine setting.
-  Context-driven cancellation. → [Client guide](client.md)
+  rich `GenerateResponse`, plus the `*Multi` variants for image and
+  audio inputs (`Text` / `Image` / `ImageFromFile` / `Audio` Parts).
+  Functional options for every engine setting. Context-driven
+  cancellation. → [Client guide](client.md)
 - **`Chat`** — multi-turn conversations with system prompts, tool
   declarations, and structured `tool_calls` parsing.
   → [Chat guide](chat.md)
-- **`GenerateData[T]`** — generic helper that returns `*T` populated
-  from the model's JSON output, with retry and tolerant parsing.
-  → [Structured output](structured-output.md)
+- **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
+  that return `*T` populated from the model's JSON output, with retry
+  and tolerant parsing. The `Multi` variant accepts image and audio
+  Parts. → [Structured output](structured-output.md)
 - **Low-level API** — every C-API symbol exposed as a Go method.
   Useful when you need explicit prefill→decode, scoring, token
   introspection, or deterministic resource lifetimes.
@@ -90,6 +93,8 @@ The followings walk you through how to build them:
 | `examples/chat/`           | Multi-turn `Chat` with a system prompt                         |
 | `examples/conversation/`   | `Chat` + tools + structured `tool_calls`                       |
 | `examples/structured/`     | `GenerateData[Recipe]` with retries                            |
+| `examples/vision/`         | `GenerateMulti` (image + text) with self-comparison            |
+| `examples/extract/`        | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison |
 | `examples/cancel/`         | Mid-stream cancel via `context.WithCancel`                     |
 | `examples/prefill-decode/` | Explicit two-phase generation (low-level)                      |
 | `examples/score/`          | `Session.ScoreTexts` + `Score` / `TokenLength` (low-level)     |

@@ -1,6 +1,8 @@
 package litertlm
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,12 +13,6 @@ import (
 // GenerateMultiStream / GenerateMultiResponse / GenerateDataMulti.
 // Construct via Text, Image, ImageWithMime, ImageFromFile, Audio,
 // AudioWithMime, or AudioFromFile.
-//
-// Part deliberately wraps the C-side InputData rather than aliasing
-// it: image and audio segments need an end-marker on the C side
-// (InputImageEnd / InputAudioEnd), and a Go-side struct lets
-// GenerateDataMulti rewrite the schema instruction into a text part
-// without round-tripping through C-allocated memory.
 type Part struct {
 	kind partKind
 	text string
@@ -122,6 +118,75 @@ var audioMimeByExt = map[string]string{
 
 func mimeForExt(ext string, table map[string]string) string {
 	return table[strings.ToLower(ext)]
+}
+
+// partsHasBinary reports whether parts contains an image or audio
+// Part.
+func partsHasBinary(parts []Part) bool {
+	for _, p := range parts {
+		if p.kind == partImage || p.kind == partAudio {
+			return true
+		}
+	}
+	return false
+}
+
+// partsToConversationMessage builds the JSON user-message envelope
+// the Conversation API expects for multimodal turns. Image and audio
+// bytes are base64-encoded and delivered as `{"type":"image","blob":...}`
+// / `{"type":"audio","blob":...}`. Text Parts become
+// `{"type":"text","text":...}`.
+func partsToConversationMessage(parts []Part) (string, error) {
+	content := make([]map[string]any, 0, len(parts))
+	for _, p := range parts {
+		switch p.kind {
+		case partText:
+			content = append(content, map[string]any{
+				"type": "text",
+				"text": p.text,
+			})
+		case partImage:
+			content = append(content, map[string]any{
+				"type": "image",
+				"blob": base64.StdEncoding.EncodeToString(p.data),
+			})
+		case partAudio:
+			content = append(content, map[string]any{
+				"type": "audio",
+				"blob": base64.StdEncoding.EncodeToString(p.data),
+			})
+		}
+	}
+	msg := map[string]any{
+		"role":    "user",
+		"content": content,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return "", fmt.Errorf("litertlm: marshal multimodal message: %w", err)
+	}
+	return string(b), nil
+}
+
+// assistantText extracts the first text-typed content item from the
+// assistant reply envelope returned by Conversation.SendMessage:
+// `{"role":"assistant","content":[{"type":"text","text":"..."}]}`.
+func assistantText(envelope string) (string, error) {
+	var env struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(envelope), &env); err != nil {
+		return "", fmt.Errorf("litertlm: parse assistant envelope: %w", err)
+	}
+	for _, p := range env.Content {
+		if p.Type == "text" {
+			return p.Text, nil
+		}
+	}
+	return "", fmt.Errorf("litertlm: no text part in assistant reply: %s", envelope)
 }
 
 // partsToInputs converts a high-level []Part to the low-level
