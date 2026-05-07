@@ -30,6 +30,7 @@ type Client struct {
 
 	mu     sync.Mutex
 	closed bool
+	tools  map[string]ToolDefinition // populated by RegisterTool
 }
 
 // New loads the LiteRT-LM library, applies the supplied Options, and

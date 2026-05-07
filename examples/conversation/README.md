@@ -6,13 +6,17 @@ This examples shows the use of the **Chat API** with tool calls.
 
 ## What this example shows
 
-- **Tool declaration** - Use the `litertlm.Tool` to define an OpenAI/Anthropic-style
-  tool schema into the model's native tool-call format template.
-- **Go function** that will be invoked when the model requests a tool call in its reponse.
-- **Structured tool call request** - Use the chat `Reply` to access structured tool call
-  request using either instructed or native markers (i.e. Gemma 4's `<|tool_call>...<tool_call|>`).
-- **Tool response message** - After running the tool function locally, `Chat.SendToolResult` is used 
-  to send the result to the LLM.
+- **Tool declaration** — `litertlm.NewRawTool` builds an OpenAI/Anthropic-style
+  tool schema. The chat template renders it into the model's native
+  tool-call markers.
+- **Manual dispatch** — `Reply.ToolCalls()` surfaces the model's
+  function-invocation request; the example dispatches it in Go.
+- **Tool response message** — after running the function locally,
+  `Chat.SendToolResult` posts the result back to the model so it
+  can continue the turn.
+
+For typed handlers and framework-managed dispatch (no manual
+`SendToolResult` step), see `litertlm.RegisterTool`.
 
 ## Prerequisites
 

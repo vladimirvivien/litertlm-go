@@ -31,7 +31,7 @@ Chat configuration:
 | Option                          | Effect                                                                                          |
 |---------------------------------|-------------------------------------------------------------------------------------------------|
 | `WithSystemPrompt(s)`           | The system message. **Pass just the content** — the C side wraps it in a `{role,content}` envelope itself. |
-| `WithTools(tools)`              | A slice of `litertlm.Tool` declarations the model may call.                                     |
+| `WithTool(defs ...)`            | One or more `ToolDefinition`s the model may call. Mix `RawTool` (hand-built) and `ManagedTool` (typed handler) freely. |
 | `WithInitialMessages(msgs)`     | Seed history with prior turns.                                                                  |
 | `WithConstrainedDecoding(on)`   | Toggle the engine's constrained-decoding mode (boolean only — schema delivery is upstream-pending). |
 
@@ -61,31 +61,36 @@ for chunk, err := range chat.SendStream(ctx, message) {
 ```
 
 ## Tool calling
-Tool calling starts with the definition of a `litertlm.Tool` which is then
-handed the `Client` when creating a new chat.
+
+Two flavors of tool can be attached to a Chat. Both implement
+`ToolDefinition` and may be mixed in the same `WithTool` call:
+
+| Flavor       | Constructor      | Dispatch                                             |
+|--------------|------------------|------------------------------------------------------|
+| `RawTool`    | `NewRawTool`     | Manual — `Reply.ToolCalls()` + `Chat.SendToolResult` |
+| `ManagedTool`| `RegisterTool`   | Framework dispatches the typed handler               |
+
+### `RawTool` — hand-built declaration
+
+Pass a hand-rolled JSON-Schema `parameters` map:
 
 ```go
-tools := []litertlm.Tool{
-    {
-        Type: "function",
-        Function: litertlm.ToolFunction{
-            Name:        "calc_add",
-            Description: "Add two integers and return their sum.",
-            Parameters: map[string]any{
-                "type": "object",
-                "properties": map[string]any{
-                    "a": map[string]any{"type": "integer"},
-                    "b": map[string]any{"type": "integer"},
-                },
-                "required": []string{"a", "b"},
-            },
+calcAdd := litertlm.NewRawTool(
+    "calc_add",
+    "Add two integers and return their sum.",
+    map[string]any{
+        "type": "object",
+        "properties": map[string]any{
+            "a": map[string]any{"type": "integer"},
+            "b": map[string]any{"type": "integer"},
         },
+        "required": []string{"a", "b"},
     },
-}
+)
 
 chat, _ := client.NewChat(ctx,
     litertlm.WithSystemPrompt("You are a calculator. Always call the tool."),
-    litertlm.WithTools(tools),
+    litertlm.WithTool(calcAdd),
 )
 defer chat.Close()
 
@@ -95,31 +100,53 @@ if reply.HasToolCalls() {
     // call.Function.Name        == "calc_add"
     // call.Function.Arguments   == map[string]any{"a": 17.0, "b": 25.0}
 
-    // Execute requested tool call.
     a := call.Function.Arguments["a"].(float64)
     b := call.Function.Arguments["b"].(float64)
     result := map[string]int{"result": int(a + b)}
 
-    // Send the tool-call result back as a tool-role message.
     final, _ := chat.SendToolResult(ctx, call.Function.Name, result)
     fmt.Println(final.Text())  // "The sum of 17 and 25 is 42."
 }
 ```
 
-### `Tool` and `ToolCall` types
-The Parameters `map` is similar to OpenAI / Anthropic function-calling
-schemas;
+### `ManagedTool` — typed handler
+
+`RegisterTool` reflects over the input struct to build the
+`parameters` schema, registers the tool on the Client, and returns a
+`*ManagedTool[I, O]` that the framework dispatches automatically.
 
 ```go
-type Tool struct {
-    Type     string       // always "function"
-    Function ToolFunction
+type WeatherInput struct {
+    Location string `description:"city and state, e.g. 'Boston, MA'"`
+}
+type WeatherOutput struct {
+    Forecast string `json:"forecast"`
 }
 
-type ToolFunction struct {
-    Name        string
-    Description string
-    Parameters  map[string]any  // JSON-Schema-shaped
+weather, _ := litertlm.RegisterTool(client, "get_weather",
+    "Fetch a weather forecast",
+    func(ctx context.Context, in WeatherInput) (WeatherOutput, error) {
+        return WeatherOutput{Forecast: forecastFor(in.Location)}, nil
+    })
+
+chat, _ := client.NewChat(ctx, litertlm.WithTool(weather, calcAdd))
+```
+
+Field rules for the input struct:
+
+- Exported fields only.
+- Field name from `json:"name"` tag, else lowercased Go name. `json:"-"` excludes.
+- Description from `description:"..."` tag, optional.
+- Pointer fields are optional; non-pointer fields are required.
+- Supported kinds: string, bool, all int/uint/float widths, slice/array, nested struct, pointer (unwrapped). Nesting capped at depth 32.
+
+### `ToolDefinition` and `ToolCall` types
+
+```go
+type ToolDefinition interface {
+    Name() string
+    Description() string
+    Parameters() map[string]any  // JSON-Schema-shaped
 }
 
 type ToolCall struct {

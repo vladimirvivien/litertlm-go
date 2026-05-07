@@ -37,20 +37,18 @@ func TestChatOption_SystemPrompt(t *testing.T) {
 	}
 }
 
-func TestChatOption_ToolsCopy(t *testing.T) {
-	t1 := Tool{Type: "function", Function: ToolFunction{Name: "a"}}
-	tools := []Tool{t1}
+func TestChatOption_WithToolAccumulates(t *testing.T) {
+	a := NewRawTool("a", "", nil)
+	b := NewRawTool("b", "", nil)
 	cfg := chatConfig{}
-	WithTools(tools)(&cfg)
+	WithTool(a)(&cfg)
+	WithTool(b)(&cfg)
 
-	if len(cfg.tools) != 1 || cfg.tools[0].Function.Name != "a" {
-		t.Fatalf("tools not copied: %+v", cfg.tools)
+	if len(cfg.tools) != 2 {
+		t.Fatalf("tools = %d, want 2", len(cfg.tools))
 	}
-
-	// Mutate caller's slice; the chatConfig copy must be unaffected.
-	tools[0].Function.Name = "mutated"
-	if cfg.tools[0].Function.Name != "a" {
-		t.Errorf("expected chatConfig.tools to be a defensive copy")
+	if cfg.tools[0].Name() != "a" || cfg.tools[1].Name() != "b" {
+		t.Errorf("tool order broken: got %q, %q", cfg.tools[0].Name(), cfg.tools[1].Name())
 	}
 }
 
@@ -90,21 +88,14 @@ func TestChatOption_EncodeSystemPromptUnset(t *testing.T) {
 }
 
 func TestChatOption_EncodeToolsArray(t *testing.T) {
-	tools := []Tool{{
-		Type: "function",
-		Function: ToolFunction{
-			Name:        "calc_add",
-			Description: "Add two ints",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"a": map[string]any{"type": "integer"},
-					"b": map[string]any{"type": "integer"},
-				},
-			},
+	defs := []ToolDefinition{NewRawTool("calc_add", "Add two ints", map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"a": map[string]any{"type": "integer"},
+			"b": map[string]any{"type": "integer"},
 		},
-	}}
-	got, err := encodeTools(tools)
+	})}
+	got, err := encodeTools(defs)
 	if err != nil {
 		t.Fatalf("encodeTools: %v", err)
 	}
@@ -113,5 +104,8 @@ func TestChatOption_EncodeToolsArray(t *testing.T) {
 	}
 	if !strings.Contains(got, `"calc_add"`) {
 		t.Errorf("expected function name in encoded tools: %q", got)
+	}
+	if !strings.Contains(got, `"type":"function"`) {
+		t.Errorf("expected `type:function` envelope: %q", got)
 	}
 }

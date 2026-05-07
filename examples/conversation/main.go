@@ -18,27 +18,23 @@ import (
 
 const systemPrompt = "You are a calculator assistant. When the user asks for an arithmetic result, ALWAYS call the appropriate tool — never compute the answer in your head."
 
-// toolDefinitions returns the calc_add tool the model is allowed to
-// call. The Parameters map mirrors the OpenAI / Anthropic
-// function-calling schema.
-func toolDefinitions() []litertlm.Tool {
-	return []litertlm.Tool{
-		{
-			Type: "function",
-			Function: litertlm.ToolFunction{
-				Name:        "calc_add",
-				Description: "Add two integers and return their sum.",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"a": map[string]any{"type": "integer", "description": "First addend"},
-						"b": map[string]any{"type": "integer", "description": "Second addend"},
-					},
-					"required": []string{"a", "b"},
-				},
+// calcAddTool returns the calc_add tool the model is allowed to call.
+// It uses NewRawTool — the parameters map is the OpenAI / Anthropic
+// function-calling schema, hand-built. For typed handlers and
+// auto-dispatch, see RegisterTool.
+func calcAddTool() *litertlm.RawTool {
+	return litertlm.NewRawTool(
+		"calc_add",
+		"Add two integers and return their sum.",
+		map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"a": map[string]any{"type": "integer", "description": "First addend"},
+				"b": map[string]any{"type": "integer", "description": "Second addend"},
 			},
+			"required": []string{"a", "b"},
 		},
-	}
+	)
 }
 
 // executeToolCall dispatches on the function name and returns a value
@@ -106,7 +102,7 @@ func main() {
 
 	chat, err := client.NewChat(ctx,
 		litertlm.WithSystemPrompt(systemPrompt),
-		litertlm.WithTools(toolDefinitions()),
+		litertlm.WithTool(calcAddTool()),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "new chat: %v\n", err)

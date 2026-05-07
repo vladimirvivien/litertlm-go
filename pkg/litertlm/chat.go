@@ -10,22 +10,6 @@ import (
 
 // ---- public types used by Chat ------------------------------------------
 
-// Tool is a function declaration the model is told it can call. The
-// JSON shape mirrors the OpenAI / Anthropic function-calling schema,
-// which the LiteRT-LM chat template renders into the model's native
-// tool-declaration markers.
-type Tool struct {
-	Type     string       `json:"type"` // always "function"
-	Function ToolFunction `json:"function"`
-}
-
-// ToolFunction describes a single callable function.
-type ToolFunction struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-}
-
 // ToolCall is a function invocation requested by the model. Returned
 // by Reply.ToolCalls() when the assistant's turn is a tool-call
 // rather than free text.
@@ -57,7 +41,7 @@ type ChatOption func(*chatConfig)
 type chatConfig struct {
 	systemPrompt        string
 	systemPromptSet     bool
-	tools               []Tool
+	tools               []ToolDefinition
 	initialMessages     []Message
 	constrainedDecoding bool
 }
@@ -73,13 +57,15 @@ func WithSystemPrompt(s string) ChatOption {
 	}
 }
 
-// WithTools attaches a list of Tool declarations the model may call.
-// The C side renders them into the model's native tool-declaration
-// format; assistant replies with tool calls are surfaced via
-// Reply.ToolCalls().
-func WithTools(tools []Tool) ChatOption {
+// WithTool attaches one or more ToolDefinitions to the chat. RawTool
+// (built with NewRawTool) and ManagedTool[I, O] (built with
+// RegisterTool) both satisfy ToolDefinition and may be mixed in the
+// same call. The C side renders them into the model's native
+// tool-declaration markers; ManagedTool entries also populate the
+// chat's dispatch registry.
+func WithTool(defs ...ToolDefinition) ChatOption {
 	return func(c *chatConfig) {
-		c.tools = append([]Tool(nil), tools...)
+		c.tools = append(c.tools, defs...)
 	}
 }
 
@@ -111,6 +97,7 @@ type Chat struct {
 
 	mu     sync.Mutex
 	closed bool
+	tools  map[string]ToolDefinition // populated from WithTool defs
 }
 
 // NewChat creates a Chat rooted in the Client's engine. Caller must
@@ -134,6 +121,11 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 		opt(&cfg)
 	}
 
+	registry, err := buildToolRegistry(cfg.tools)
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+	}
+
 	systemMessageJSON, err := encodeSystemPrompt(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
@@ -149,7 +141,7 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 
 	return runCancellable(ctx,
 		func() (*Chat, error) {
-			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON, cfg.constrainedDecoding)
+			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON, cfg.constrainedDecoding, registry)
 		},
 		func(ch *Chat) { _ = ch.Close() },
 	)
@@ -157,7 +149,7 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 
 // buildChat performs the synchronous C-side work of constructing a
 // Chat. Split out so NewChat can run it under runCancellable.
-func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, constrainedDecoding bool) (*Chat, error) {
+func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, constrainedDecoding bool, registry map[string]ToolDefinition) (*Chat, error) {
 	convCfg, err := NewConversationConfig(c.engine, 0,
 		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
 	if err != nil {
@@ -170,7 +162,24 @@ func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, co
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
 
-	return &Chat{cfg: convCfg, conv: conv}, nil
+	return &Chat{cfg: convCfg, conv: conv, tools: registry}, nil
+}
+
+// buildToolRegistry walks defs and returns a name → def map for chat
+// dispatch lookups. Errors when names collide or are empty.
+func buildToolRegistry(defs []ToolDefinition) (map[string]ToolDefinition, error) {
+	registry := map[string]ToolDefinition{}
+	for _, d := range defs {
+		name := d.Name()
+		if name == "" {
+			return nil, fmt.Errorf("tool with empty name")
+		}
+		if _, dup := registry[name]; dup {
+			return nil, fmt.Errorf("duplicate tool name %q", name)
+		}
+		registry[name] = d
+	}
+	return registry, nil
 }
 
 // Close releases the underlying Conversation and ConversationConfig.
@@ -291,11 +300,26 @@ func encodeSystemPrompt(cfg chatConfig) (string, error) {
 	return string(b), nil
 }
 
-func encodeTools(tools []Tool) (string, error) {
-	if len(tools) == 0 {
+// encodeTools renders defs as the JSON tool-declaration list the C
+// side expects. Each definition becomes:
+//
+//	{"type": "function", "function": {"name": ..., "description": ..., "parameters": ...}}
+func encodeTools(defs []ToolDefinition) (string, error) {
+	if len(defs) == 0 {
 		return "", nil
 	}
-	b, err := json.Marshal(tools)
+	list := make([]map[string]any, len(defs))
+	for i, d := range defs {
+		list[i] = map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        d.Name(),
+				"description": d.Description(),
+				"parameters":  d.Parameters(),
+			},
+		}
+	}
+	b, err := json.Marshal(list)
 	if err != nil {
 		return "", fmt.Errorf("marshal tools: %w", err)
 	}
