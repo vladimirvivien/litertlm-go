@@ -1,8 +1,7 @@
 # Example: Multimodal vision Q&A
 
-Demonstrates `Client.GenerateMulti` — a single high-level call that
-mixes image and text Parts — followed by a text-only `Client.Generate`
-self-evaluation against a Markdown ground-truth sidecar.
+Asks the model to describe an image, then asks it to assess how well
+its description aligns with a reference description loaded from disk.
 
 ## What this example shows
 
@@ -10,9 +9,9 @@ self-evaluation against a Markdown ground-truth sidecar.
   extension).
 - Calling `client.GenerateMulti(ctx, []Part{Image, Text})` against a
   multimodal `.litertlm` model.
-- A second-pass self-evaluation: the model re-reads its own output
-  alongside an external reference and produces a structured
-  comparison.
+- A follow-up text-only `client.Generate` call that produces a brief
+  alignment assessment between the model's description and the
+  reference.
 
 ## Prerequisites
 
@@ -22,64 +21,48 @@ self-evaluation against a Markdown ground-truth sidecar.
 
 ## Run
 
-From inside this directory:
-
-```bash
-LITERTLM_LIB=/abs/path/to/dist/lib \
-    go run . \
-    -model /abs/path/to/gemma-4-mm.litertlm
-```
-
-From the repo root, point `--testdata` at the shared directory:
-
 ```bash
 LITERTLM_LIB=/abs/path/to/dist/lib \
     go run ./examples/vision \
-    -model /abs/path/to/gemma-4-mm.litertlm \
-    -testdata ./examples/testdata
+    -model       /abs/path/to/gemma-4-mm.litertlm \
+    -image       /abs/path/to/photo.png \
+    -description /abs/path/to/photo.md
 ```
 
 ## Flags
 
-| Flag              | Default                                  | Notes                                      |
-| ----------------- | ---------------------------------------- | ------------------------------------------ |
-| `-model`          | (required)                               | Path to a multimodal `.litertlm` model.    |
-| `-lib`            | `$LITERTLM_LIB`                          |                                            |
-| `-backend`        | `"cpu"`                                  | Text-side backend.                         |
-| `-vision-backend` | `"cpu"`                                  | Vision-side backend.                       |
-| `-testdata`       | `"../testdata"`                          | Directory holding `<name>.<ext>` + `<name>.md`. |
-| `-name`           | `"img1"`                                 | Basename of the image and `.md` sidecar.   |
-| `-prompt`         | `"Describe this image in 2-3 sentences."`| Instruction sent with the image.           |
-| `-max-tokens`     | `4096`                                   | Engine token budget. Vision needs ≥4096 — image patches expand into many tokens. |
-
-The example tries `<name>.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`
-in order until it finds a file. The matching `<name>.md` is loaded
-verbatim and used as the reference description in step 2.
+| Flag              | Default                                  | Notes                                       |
+| ----------------- | ---------------------------------------- | ------------------------------------------- |
+| `-model`          | (required)                               | Path to a multimodal `.litertlm` model.     |
+| `-image`          | (required)                               | Path to the image file (jpg/png/webp/gif/bmp). |
+| `-description`    | (required)                               | Path to the reference description file.     |
+| `-lib`            | `$LITERTLM_LIB`                          |                                             |
+| `-backend`        | `"cpu"`                                  | Text-side backend.                          |
+| `-vision-backend` | `"cpu"`                                  | Vision-side backend.                        |
+| `-prompt`         | `"Describe this image in 2-3 sentences."`| Instruction sent with the image.            |
+| `-max-tokens`     | `4096`                                   | Engine token budget; vision needs ≥4096 because image patches expand into many tokens. |
 
 ## Expected output
 
 ```
-=== Image: ../testdata/img1.png ===
+=== Image: /abs/path/to/photo.png ===
 
 === Model description ===
 <the model's free-text description of the scene>
 
-=== Reference (ground truth) ===
-<contents of img1.md>
+=== Reference description ===
+<contents of the description file>
 
-=== Model self-comparison ===
-<the model's discussion of agreements and differences>
+=== Alignment assessment ===
+<2-3 sentences from the model on how well its description matches the reference>
 ```
 
 ## Notes
 
-- **Self-comparison reliability.** The compare step is a normal text
-  generation — the model can be wrong in either direction (claim
-  agreement when it disagrees, or vice versa). Treat it as a
-  qualitative signal, not an evaluation harness.
-- **Custom images.** Drop a `myscene.jpg` and `myscene.md` into
-  `examples/testdata/` and pass `-name myscene`.
-- **Vision backend.** The C side of LiteRT-LM keeps text and vision
-  backends in independent slots; you can run text on GPU and the
-  vision tower on CPU (or vice-versa) by setting the two flags
+- **Alignment is a qualitative signal.** The assessment step is a
+  normal text generation; the model can be wrong in either direction.
+  Treat it as a sanity check, not an evaluation harness.
+- **Vision and text backends are independent.** LiteRT-LM keeps text
+  and vision backends in separate slots; you can run text on GPU and
+  the vision tower on CPU (or vice-versa) by setting the two flags
   differently.

@@ -1,1 +1,2 @@
-img2.md is a photobrah that depicts a small corner table in a room. The table has a lamp, a set of reading glasses, and a wallet sitting on top of the table.
+The photograph depicts an aerial shot, taken directly overhead, of a busy urban parking lot with three horizontal rows cars of many colors.
+Each row of cars has two rows of cars facing each other vertically.
