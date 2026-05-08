@@ -7,6 +7,21 @@ import (
 	"reflect"
 )
 
+// Constrained-decoding integration is upstream-pending. As of
+// LiteRT-LM commit 758faf2d (2026-05-08), the C API exposes
+// litert_lm_conversation_config_set_enable_constrained_decoding to
+// turn the feature on, but no companion symbol to deliver the JSON
+// schema the runtime should constrain to. Until that lands,
+// GenerateData[T] / GenerateDataMulti[T] rely on prompt augmentation
+// + extractJSON tolerance.
+//
+// When the schema-delivery symbol appears upstream:
+//   1. Bind it in pkg/litertlm/bindings.go.
+//   2. Add a WithSchema(jsonSchema) GenOption.
+//   3. Apply it before generateMulti when set; the runtime guarantees
+//      valid JSON output.
+//   4. Skip the extractJSON path on success.
+
 // defaultSchemaInstruction is a Printf format string with one %s
 // placeholder for the shape hint. Tuned for instruction-following
 // local LLMs — short, imperative, calls out the no-fences rule
@@ -19,14 +34,11 @@ const defaultSchemaInstruction = "Respond with valid JSON only — no commentary
 // derived from T, generates, extracts the JSON from the (possibly
 // markdown-fenced, prose-padded) reply, and unmarshals into *T.
 //
-// Tier A (this implementation): the augmentation is purely
-// prompt-engineered; nothing prevents the model from emitting invalid
-// JSON. Tier B (constrained decoding) is gated on upstream LiteRT-LM
-// exposing a schema-delivery hook.
-//
-// Use WithRetries(n) to retry on parse failures (default 0 — one
-// attempt). Generate-phase errors (ctx cancellation, FFI failure) are
-// returned immediately and do NOT trigger retries.
+// The augmentation is prompt-engineered; nothing in the runtime
+// prevents the model from emitting invalid JSON. Use WithRetries(n)
+// to retry on parse failures (default 0 — one attempt). Generate-phase
+// errors (ctx cancellation, FFI failure) propagate immediately and
+// do NOT trigger retries.
 //
 // On parse failure after the final attempt the caller receives a
 // *GenerateDataError; use errors.As to inspect Phase / Raw / Attempts.
@@ -39,8 +51,7 @@ func GenerateData[T any](ctx context.Context, c *Client, prompt string, opts ...
 // is prepended to the LAST text Part (or appended as a new Text part
 // when none exists).
 //
-// All other semantics — retries, GenerateDataError, Tier A vs B —
-// match GenerateData.
+// Retries, error reporting, and parse semantics match GenerateData.
 func GenerateDataMulti[T any](ctx context.Context, c *Client, parts []Part, opts ...GenOption) (*T, error) {
 	if c == nil {
 		return nil, fmt.Errorf("litertlm: GenerateDataMulti: nil client")

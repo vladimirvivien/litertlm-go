@@ -21,6 +21,19 @@ func TestExtractJSON_Object(t *testing.T) {
 		{"string with escaped close brace", `{"msg":"\"close: }"}`, `{"msg":"\"close: }"}`},
 		{"first balanced wins", `{"a":1} then {"b":2}`, `{"a":1}`},
 		{"multiline pretty", "{\n  \"a\": 1,\n  \"b\": 2\n}", "{\n  \"a\": 1,\n  \"b\": 2\n}"},
+		{"empty object", `{}`, `{}`},
+		{"deeply nested", `{"a":{"b":{"c":{"d":1}}}}`, `{"a":{"b":{"c":{"d":1}}}}`},
+		{"multi-line preamble", "Sure, here is the recipe:\n\n{\"a\":1}", `{"a":1}`},
+		{"markdown bold preamble", "**Result:**\n{\"a\":1}", `{"a":1}`},
+		{"markdown bold around json", `**{"a":1}**`, `{"a":1}`},
+		{"uppercase fence lang", "```JSON\n{\"a\":1}\n```", `{"a":1}`},
+		{"fence with trailing prose", "```json\n{\"a\":1}\n```\n\nLet me know if you need more!", `{"a":1}`},
+		{"whitespace inside fence", "```json\n   {\"a\":1}   \n```", `{"a":1}`},
+		{"fence on single line", "```json {\"a\":1} ```", `{"a":1}`},
+		{"unicode escape in string", `{"x":"é"}`, `{"x":"é"}`},
+		{"emoji in string", `{"label":"🎯 target"}`, `{"label":"🎯 target"}`},
+		{"second fence ignored", "```json\n{\"a\":1}\n```\n\nAnd: ```\n{\"b\":2}\n```", `{"a":1}`},
+		{"key with brace literal", `{"open":"{","close":"}"}`, `{"open":"{","close":"}"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,6 +58,11 @@ func TestExtractJSON_Array(t *testing.T) {
 		{"fenced array", "```json\n[1,2,3]\n```", `[1,2,3]`},
 		{"array of objects", `[{"a":1},{"a":2}]`, `[{"a":1},{"a":2}]`},
 		{"preamble + array", `Result: [1,2,3]`, `[1,2,3]`},
+		{"empty array", `[]`, `[]`},
+		{"nested arrays", `[[1,2],[3,4]]`, `[[1,2],[3,4]]`},
+		{"array with bracket-in-string", `["[bracket]","plain"]`, `["[bracket]","plain"]`},
+		{"first array wins", `[1,2] and [3,4]`, `[1,2]`},
+		{"trailing newline after fenced array", "```json\n[1,2,3]\n```\n", `[1,2,3]`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

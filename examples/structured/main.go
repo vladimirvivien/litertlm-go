@@ -4,9 +4,8 @@
 // JSON from the (possibly markdown-fenced, prose-padded) reply, and
 // unmarshals into the typed Go struct.
 //
-// Tier A internals: prompt-engineered, tolerant parsing, retry-on-
-// parse-failure. Local LLMs occasionally produce invalid JSON; bump
-// `-retries` if the first try fails.
+// Local LLMs occasionally produce invalid JSON; bump `-retries` if
+// the first attempt fails.
 //
 // See README.md in this directory for prerequisites and usage.
 package main
