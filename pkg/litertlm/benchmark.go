@@ -1,6 +1,58 @@
 package litertlm
 
-import "unsafe"
+import (
+	"time"
+	"unsafe"
+)
+
+// Benchmark is a pure-Go snapshot of a BenchmarkInfo handle. Time
+// fields use time.Duration; per-turn slices are sized from the
+// recorded turn counts.
+type Benchmark struct {
+	TimeToFirstToken    time.Duration
+	TotalInitTime       time.Duration
+	PrefillTurns        int
+	DecodeTurns         int
+	PrefillTokenCounts  []int
+	DecodeTokenCounts   []int
+	PrefillTokensPerSec []float64
+	DecodeTokensPerSec  []float64
+}
+
+// snapshotBenchmark walks h's getters and returns a pure-Go copy.
+// Caller still owns h and must Delete() it. Returns nil for the
+// zero handle.
+func snapshotBenchmark(h BenchmarkInfo) *Benchmark {
+	if h == 0 {
+		return nil
+	}
+	prefillTurns := h.NumPrefillTurns()
+	decodeTurns := h.NumDecodeTurns()
+
+	b := &Benchmark{
+		TimeToFirstToken:    seconds(h.TimeToFirstToken()),
+		TotalInitTime:       seconds(h.TotalInitTime()),
+		PrefillTurns:        prefillTurns,
+		DecodeTurns:         decodeTurns,
+		PrefillTokenCounts:  make([]int, prefillTurns),
+		DecodeTokenCounts:   make([]int, decodeTurns),
+		PrefillTokensPerSec: make([]float64, prefillTurns),
+		DecodeTokensPerSec:  make([]float64, decodeTurns),
+	}
+	for i := 0; i < prefillTurns; i++ {
+		b.PrefillTokenCounts[i] = h.PrefillTokenCount(i)
+		b.PrefillTokensPerSec[i] = h.PrefillTokensPerSec(i)
+	}
+	for i := 0; i < decodeTurns; i++ {
+		b.DecodeTokenCounts[i] = h.DecodeTokenCount(i)
+		b.DecodeTokensPerSec[i] = h.DecodeTokensPerSec(i)
+	}
+	return b
+}
+
+func seconds(s float64) time.Duration {
+	return time.Duration(s * float64(time.Second))
+}
 
 // Delete releases a BenchmarkInfo handle.
 func (b BenchmarkInfo) Delete() {

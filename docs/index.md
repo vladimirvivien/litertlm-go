@@ -100,7 +100,8 @@ The followings walk you through how to build them:
 | `examples/prefill-decode/` | Explicit two-phase generation (low-level)                      |
 | `examples/score/`          | `Session.ScoreTexts` + `Score` / `TokenLength` (low-level)     |
 | `examples/tokenize/`       | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level) |
-| `examples/gpu/`            | GPU backend + benchmark metrics                                |
+| `examples/gpu/`            | GPU backend                                                    |
+| `examples/benchmarks/`     | Per-generation benchmark capture (`Response.Benchmark()`)      |
 
 ## License
 

@@ -260,7 +260,24 @@ func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg ge
 	// Ownership of `handle` transfers to the *Response; do NOT defer
 	// handle.Delete() here. The runtime.AddCleanup registered by
 	// newResponse fires when the Response becomes unreachable.
-	return newResponse(handle), nil
+	resp := newResponse(handle)
+	resp.bench = captureSessionBenchmark(c, sess)
+	return resp, nil
+}
+
+// captureSessionBenchmark snapshots sess's BenchmarkInfo into a
+// *Benchmark when c was constructed with WithBenchmarkEnabled.
+// Returns nil otherwise.
+func captureSessionBenchmark(c *Client, sess Session) *Benchmark {
+	if c.cfg.benchmarkEnabled == nil || !*c.cfg.benchmarkEnabled {
+		return nil
+	}
+	bi, err := sess.BenchmarkInfo()
+	if err != nil {
+		return nil
+	}
+	defer bi.Delete()
+	return snapshotBenchmark(bi)
 }
 
 // wireCancel arranges for ctx cancellation to call cancelFn (typically

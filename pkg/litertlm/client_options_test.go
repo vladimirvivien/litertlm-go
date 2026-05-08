@@ -21,8 +21,8 @@ func TestOption_Defaults(t *testing.T) {
 	if cfg.activationDataType != nil {
 		t.Errorf("activationDataType should default to nil")
 	}
-	if cfg.enableSpeculative != nil {
-		t.Errorf("enableSpeculative should default to nil")
+	if cfg.speculativeDecodingEnabled != nil {
+		t.Errorf("speculativeDecodingEnabled should default to nil")
 	}
 }
 
@@ -90,13 +90,13 @@ func TestOption_OptionalBackends(t *testing.T) {
 func TestOption_Toggles(t *testing.T) {
 	cfg := clientConfig{}
 
-	if cfg.enableSpeculative != nil || cfg.parallelFileLoading != nil || cfg.enableBenchmark != nil {
+	if cfg.speculativeDecodingEnabled != nil || cfg.parallelFileLoading != nil || cfg.benchmarkEnabled != nil {
 		t.Fatal("toggles should default to nil")
 	}
 
-	WithEnableSpeculativeDecoding(true)(&cfg)
-	if cfg.enableSpeculative == nil || !*cfg.enableSpeculative {
-		t.Errorf("enableSpeculative = %v", cfg.enableSpeculative)
+	WithSpeculativeDecodingEnabled(true)(&cfg)
+	if cfg.speculativeDecodingEnabled == nil || !*cfg.speculativeDecodingEnabled {
+		t.Errorf("speculativeDecodingEnabled = %v", cfg.speculativeDecodingEnabled)
 	}
 
 	WithParallelFileLoading(false)(&cfg)
@@ -104,9 +104,9 @@ func TestOption_Toggles(t *testing.T) {
 		t.Errorf("parallelFileLoading = %v", cfg.parallelFileLoading)
 	}
 
-	WithEnableBenchmark()(&cfg)
-	if cfg.enableBenchmark == nil || !*cfg.enableBenchmark {
-		t.Errorf("enableBenchmark = %v", cfg.enableBenchmark)
+	WithBenchmarkEnabled()(&cfg)
+	if cfg.benchmarkEnabled == nil || !*cfg.benchmarkEnabled {
+		t.Errorf("benchmarkEnabled = %v", cfg.benchmarkEnabled)
 	}
 }
 

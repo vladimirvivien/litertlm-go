@@ -126,10 +126,10 @@ func applySettings(s EngineSettings, cfg *clientConfig) {
 	if cfg.prefillChunkSize != nil {
 		s.SetPrefillChunkSize(*cfg.prefillChunkSize)
 	}
-	if cfg.enableSpeculative != nil {
-		s.SetEnableSpeculativeDecoding(*cfg.enableSpeculative)
+	if cfg.speculativeDecodingEnabled != nil {
+		s.SetEnableSpeculativeDecoding(*cfg.speculativeDecodingEnabled)
 	}
-	if cfg.enableBenchmark != nil && *cfg.enableBenchmark {
+	if cfg.benchmarkEnabled != nil && *cfg.benchmarkEnabled {
 		s.EnableBenchmark()
 	}
 	if cfg.parallelFileLoading != nil {

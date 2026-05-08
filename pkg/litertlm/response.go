@@ -21,6 +21,9 @@ type Response struct {
 	// handle is available; Score / TokenLength return (0, false) in
 	// that case.
 	text string
+	// bench is populated when WithBenchmarkEnabled was set at New
+	// time; nil otherwise.
+	bench *Benchmark
 }
 
 // newResponse wraps a freshly-created Responses handle and registers
@@ -103,4 +106,13 @@ func (r *Response) TokenLength(i int) (int, bool) {
 		return 0, false
 	}
 	return r.handle.TokenLength(i)
+}
+
+// Benchmark returns the captured per-generation benchmark, or nil if
+// the Client wasn't constructed with WithBenchmarkEnabled.
+func (r *Response) Benchmark() *Benchmark {
+	if r == nil {
+		return nil
+	}
+	return r.bench
 }

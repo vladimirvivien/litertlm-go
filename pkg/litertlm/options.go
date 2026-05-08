@@ -24,9 +24,9 @@ type clientConfig struct {
 
 	// *bool fields stay nil until the user opts in or out, so we can
 	// preserve the C-side default when the user doesn't care.
-	enableSpeculative   *bool
-	enableBenchmark     *bool
-	parallelFileLoading *bool
+	speculativeDecodingEnabled *bool
+	benchmarkEnabled           *bool
+	parallelFileLoading        *bool
 
 	logLevel    int
 	logLevelSet bool
@@ -114,17 +114,20 @@ func WithPrefillChunkSize(n int) Option {
 	return func(c *clientConfig) { c.prefillChunkSize = &n }
 }
 
-// WithEnableSpeculativeDecoding toggles speculative decoding.
-func WithEnableSpeculativeDecoding(on bool) Option {
-	return func(c *clientConfig) { c.enableSpeculative = &on }
+// WithSpeculativeDecodingEnabled toggles speculative (multi-token
+// prediction) decoding. Requires a model that supports it (e.g.
+// Gemma 4).
+func WithSpeculativeDecodingEnabled(on bool) Option {
+	return func(c *clientConfig) { c.speculativeDecodingEnabled = &on }
 }
 
-// WithEnableBenchmark turns on benchmark collection. Pair with
-// Engine().Session().BenchmarkInfo() / similar low-level access to
-// retrieve metrics.
-func WithEnableBenchmark() Option {
+// WithBenchmarkEnabled turns on benchmark collection. Read the
+// captured metrics from a generation result via Response.Benchmark()
+// (high-level) or Session.BenchmarkInfo / Conversation.BenchmarkInfo
+// (low-level).
+func WithBenchmarkEnabled() Option {
 	on := true
-	return func(c *clientConfig) { c.enableBenchmark = &on }
+	return func(c *clientConfig) { c.benchmarkEnabled = &on }
 }
 
 // WithParallelFileLoading toggles parallel loading of .litertlm file

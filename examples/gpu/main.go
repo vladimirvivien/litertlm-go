@@ -1,9 +1,9 @@
-// gpu demonstrates GPU-accelerated local inference plus BenchmarkInfo
-// readout (init time, time-to-first-token, prefill/decode throughput).
+// gpu demonstrates GPU-accelerated local inference: load the
+// GPU-capable LiteRT-LM build, configure an engine for the GPU
+// backend, and stream tokens from a single prompt.
 //
-// See README.md in this directory for the GPU-specific build, the extra
-// runtime libraries that must be staged in LITERTLM_LIB, and instructions
-// for getting the wrapper to load the GPU-capable build by name.
+// See README.md in this directory for the GPU-specific build and the
+// extra runtime libraries that must be staged in LITERTLM_LIB.
 package main
 
 import (
@@ -42,7 +42,6 @@ func main() {
 	}
 	defer settings.Delete()
 	settings.SetMaxNumTokens(*maxTokens)
-	settings.EnableBenchmark()
 
 	engine, err := litertlm.NewEngine(settings)
 	if err != nil {
@@ -68,24 +67,5 @@ func main() {
 		if chunk.Final {
 			fmt.Println()
 		}
-	}
-
-	b, err := session.BenchmarkInfo()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "benchmark: %v\n", err)
-		return
-	}
-	defer b.Delete()
-
-	fmt.Println("--- GPU benchmark ---")
-	fmt.Printf("Total init time:       %.3f s\n", b.TotalInitTime())
-	fmt.Printf("Time to first token:   %.3f s\n", b.TimeToFirstToken())
-	for i := 0; i < b.NumPrefillTurns(); i++ {
-		fmt.Printf("Prefill turn %d:        %.1f tokens/sec (%d tokens)\n",
-			i, b.PrefillTokensPerSec(i), b.PrefillTokenCount(i))
-	}
-	for i := 0; i < b.NumDecodeTurns(); i++ {
-		fmt.Printf("Decode  turn %d:        %.1f tokens/sec (%d tokens)\n",
-			i, b.DecodeTokensPerSec(i), b.DecodeTokenCount(i))
 	}
 }

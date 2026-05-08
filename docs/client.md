@@ -42,8 +42,8 @@ Use functional options to specify environment and inference engine settings.
 | `WithCacheDir(dir)`                       | Engine artefact cache.                                                    |
 | `WithActivationDataType(t)`               | 0=F32, 1=F16, 2=I16, 3=I8.                                                |
 | `WithPrefillChunkSize(n)`                 | CPU-backend prefill chunk size for dynamic models.                        |
-| `WithEnableSpeculativeDecoding(on)`       | Toggle speculative decoding.                                              |
-| `WithEnableBenchmark()`                   | Turn on benchmark collection (read via the low-level `BenchmarkInfo`).    |
+| `WithSpeculativeDecodingEnabled(on)`      | Toggle multi-token-prediction speculative decoding (Gemma 4 supported).   |
+| `WithBenchmarkEnabled()`                  | Turn on benchmark collection. Read per-call metrics via `Response.Benchmark()`. |
 | `WithParallelFileLoading(on)`             | Override the C-side default (true).                                       |
 
 ### Logging
