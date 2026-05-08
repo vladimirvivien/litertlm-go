@@ -42,7 +42,7 @@ Use functional options to specify environment and inference engine settings.
 | `WithCacheDir(dir)`                       | Engine artefact cache.                                                    |
 | `WithActivationDataType(t)`               | 0=F32, 1=F16, 2=I16, 3=I8.                                                |
 | `WithPrefillChunkSize(n)`                 | CPU-backend prefill chunk size for dynamic models.                        |
-| `WithSpeculativeDecodingEnabled(on)`      | Toggle multi-token-prediction speculative decoding (Gemma 4 supported).   |
+| `WithSpeculativeDecodingEnabled(on)`      | Toggle multi-token-prediction speculative decoding (Gemma 4 supported). See [`examples/speculative/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/speculative) for a side-by-side throughput comparison. |
 | `WithBenchmarkEnabled()`                  | Turn on benchmark collection. Read per-call metrics via `Response.Benchmark()`. |
 | `WithParallelFileLoading(on)`             | Override the C-side default (true).                                       |
 

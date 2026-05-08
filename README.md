@@ -102,6 +102,7 @@ The followings walk you through how to build them:
 | `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level)   |
 | `examples/gpu/`               | GPU-backed generation                                              |
 | `examples/benchmarks/`        | Per-generation benchmark capture via `WithBenchmarkEnabled` + `Response.Benchmark()` |
+| `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
 
 ## Documentation
 
