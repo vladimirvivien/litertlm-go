@@ -62,140 +62,34 @@ for chunk, err := range chat.SendStream(ctx, message) {
 
 ## Tool calling
 
-Two flavors of tool can be attached to a Chat. Both implement
-`ToolDefinition` and may be mixed in the same `WithTool` call:
+Two flavors of tool attach to a `Chat` via `WithTool`:
 
-| Flavor       | Constructor      | Dispatch                                             |
-|--------------|------------------|------------------------------------------------------|
-| `RawTool`    | `NewRawTool`     | Manual — `Reply.ToolCalls()` + `Chat.SendToolResult` |
-| `ManagedTool`| `RegisterTool`   | Framework dispatches the typed handler               |
+| Flavor        | Constructor    | Dispatch                                             |
+|---------------|----------------|------------------------------------------------------|
+| `RawTool`     | `NewRawTool`   | Manual — `Reply.ToolCalls()` + `Chat.SendToolResult` |
+| `ManagedTool` | `RegisterTool` | Framework dispatches the typed handler               |
 
-### `RawTool` — hand-built declaration
-
-Pass a hand-rolled JSON-Schema `parameters` map:
+Both satisfy `ToolDefinition` and may be mixed in the same call:
 
 ```go
-calcAdd := litertlm.NewRawTool(
-    "calc_add",
-    "Add two integers and return their sum.",
-    map[string]any{
-        "type": "object",
-        "properties": map[string]any{
-            "a": map[string]any{"type": "integer"},
-            "b": map[string]any{"type": "integer"},
-        },
-        "required": []string{"a", "b"},
-    },
-)
-
 chat, _ := client.NewChat(ctx,
     litertlm.WithSystemPrompt("You are a calculator. Always call the tool."),
     litertlm.WithTool(calcAdd),
 )
-defer chat.Close()
-
-reply, _ := chat.Send(ctx, "What is 17 plus 25?")
-if reply.HasToolCalls() {
-    call := reply.ToolCalls()[0]
-    // call.Function.Name        == "calc_add"
-    // call.Function.Arguments   == map[string]any{"a": 17.0, "b": 25.0}
-
-    a := call.Function.Arguments["a"].(float64)
-    b := call.Function.Arguments["b"].(float64)
-    result := map[string]int{"result": int(a + b)}
-
-    final, _ := chat.SendToolResult(ctx, call.Function.Name, result)
-    fmt.Println(final.Text())  // "The sum of 17 and 25 is 42."
-}
 ```
-
-### `ManagedTool` — typed handler
-
-`RegisterTool` reflects over the input struct to build the
-`parameters` schema, registers the tool on the Client, and returns a
-`*ManagedTool[I, O]` that the framework dispatches automatically.
-
-```go
-type WeatherInput struct {
-    Location string `description:"city and state, e.g. 'Boston, MA'"`
-}
-type WeatherOutput struct {
-    Forecast string `json:"forecast"`
-}
-
-weather, _ := litertlm.RegisterTool(client, "get_weather",
-    "Fetch a weather forecast",
-    func(ctx context.Context, in WeatherInput) (WeatherOutput, error) {
-        return WeatherOutput{Forecast: forecastFor(in.Location)}, nil
-    })
-
-chat, _ := client.NewChat(ctx, litertlm.WithTool(weather, calcAdd))
-```
-
-Field rules for the input struct:
-
-- Exported fields only.
-- Field name from `json:"name"` tag, else lowercased Go name. `json:"-"` excludes.
-- Description from `description:"..."` tag, optional.
-- Pointer fields are optional; non-pointer fields are required.
-- Supported kinds: string, bool, all int/uint/float widths, slice/array, nested struct, pointer (unwrapped). Nesting capped at depth 32.
-
-### Auto-dispatch loop
 
 When the chat has at least one `ManagedTool` registered, `Chat.Send`
-runs the tool-call → invoke → tool-result → next-turn loop until the
-model produces a text-only reply, then returns that reply. Single
-call from the user, single reply with the post-tool-call answer.
+runs the dispatch loop and returns the post-tool natural-language
+reply directly. Replies whose tool calls aren't all dispatchable
+(unknown name or `RawTool`) come back for manual handling.
 
-Behavior in mixed registrations:
+Cap the loop with `WithMaxToolHops(n)` (default 5). Override the
+per-tool error-propagation policy with `WithToolPolicy(p)` at
+`RegisterTool` time.
 
-- If every tool call in a model reply is `ManagedTool` → dispatch all
-  sequentially; bundle results into a single tool-role message; loop.
-- If any call is unknown or maps to a `RawTool` → return the reply
-  for manual handling. The whole turn is yours.
-
-Cap the loop with `WithMaxToolHops(n)` (default 5). Exceeding the cap
-returns an error matching `errors.Is(err, ErrToolHopsExceeded)`. Use
-`errors.As` to a `*ToolHopsError` for the partial last reply.
-
-```go
-chat, _ := client.NewChat(ctx,
-    litertlm.WithTool(weather),
-    litertlm.WithMaxToolHops(3),
-)
-
-reply, err := chat.Send(ctx, "what's the weather in Boston?")
-if errors.Is(err, litertlm.ErrToolHopsExceeded) {
-    var hops *litertlm.ToolHopsError
-    errors.As(err, &hops)
-    log.Printf("model still calling tools after %d hops; partial reply: %v",
-        hops.Hops, hops.LastReply.Raw())
-}
-```
-
-`SendStream` keeps the raw streaming behavior — it does not wrap the
-dispatch loop. For typed-tool flows that need streaming, use `Send`
-and stream the post-dispatch reply yourself.
-
-### `ToolPolicy` — error handling per tool
-
-Each `ManagedTool` carries a `ToolPolicy` set with `WithToolPolicy`
-at registration time. The policy controls what happens when the
-handler returns an error during dispatch:
-
-| Policy                       | Behavior                                                                    |
-|------------------------------|-----------------------------------------------------------------------------|
-| `ToolPolicyReturnOnError` (default) | Propagate the error from `Chat.Send`; loop ends. Model is not informed. |
-| `ToolPolicyInformOnError`    | Marshal `{"error": "<err.Error()>"}` as the tool's response and continue. The model can retry, apologize, or pick a different tool. |
-
-```go
-// Default: a validation error stops the loop and surfaces to the caller.
-validate, _ := litertlm.RegisterTool(client, "validate", "...", validateHandler)
-
-// Inform-on-error: transient failures the model can react to.
-weather, _ := litertlm.RegisterTool(client, "get_weather", "...", weatherHandler,
-    litertlm.WithToolPolicy(litertlm.ToolPolicyInformOnError))
-```
+See the [Tools guide](tools.md) for the full reference: schema
+reflection rules, dispatch semantics, mixed-registration behavior,
+`ErrToolHopsExceeded` / `ToolHopsError`, and `ToolPolicy` modes.
 
 ### `ToolDefinition` and `ToolCall` types
 
@@ -232,10 +126,15 @@ When you need a fresh context, open a new `Chat`.
 
 ## See also
 
+- [Tools guide](tools.md) — full reference for `RawTool`,
+  `ManagedTool`, `RegisterTool`, schema reflection, the dispatch
+  loop, `WithMaxToolHops`, and `ToolPolicy`.
 - [`examples/chat/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/chat)
   — minimal multi-turn demo.
+- [`examples/autotool/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/autotool)
+  — typed tool registration with auto-dispatch.
 - [`examples/conversation/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/conversation)
-  — full tool-calling walkthrough.
+  — manual dispatch with `NewRawTool` + `SendToolResult`.
 - [Structured output](structured-output.md) — when you want
   type-safe JSON instead of free-form text.
 - [Low-level API](low-level.md) — `Conversation`, `ConversationConfig`.

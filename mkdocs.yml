@@ -60,6 +60,7 @@ nav:
   - High-level API:
       - Client: client.md
       - Chat: chat.md
+      - Tools: tools.md
       - Structured output: structured-output.md
   - Low-level API: low-level.md
   - Troubleshooting: troubleshooting.md

@@ -1,53 +1,64 @@
-# Example: Chat with Tools Calls
+# Example: Manual Tool Dispatch
 
-This examples shows the use of the **Chat API** with tool calls.
+Demonstrates the lower-level tool-calling path: declare a tool with
+`NewRawTool`, observe the model's tool call via `Reply.ToolCalls()`,
+execute it in Go, and post the result back with
+`Chat.SendToolResult`.
 
-> See the basic [**Chat**](../chat/) example/
+For typed handlers and framework-managed dispatch — a single
+`Chat.Send` call with no `SendToolResult` step — see
+[`examples/autotool/`](../autotool).
 
 ## What this example shows
 
-- **Tool declaration** — `litertlm.NewRawTool` builds an OpenAI/Anthropic-style
-  tool schema. The chat template renders it into the model's native
-  tool-call markers.
+- **Hand-built tool declaration** with `litertlm.NewRawTool` — name,
+  description, and an OpenAI/Anthropic-style JSON-Schema
+  `parameters` map.
 - **Manual dispatch** — `Reply.ToolCalls()` surfaces the model's
-  function-invocation request; the example dispatches it in Go.
-- **Tool response message** — after running the function locally,
-  `Chat.SendToolResult` posts the result back to the model so it
-  can continue the turn.
+  function-invocation request; the example's `executeToolCall`
+  function runs it.
+- **Result handoff** — `Chat.SendToolResult` posts the result back to
+  the model so it can produce the final natural-language answer.
 
-For typed handlers and framework-managed dispatch (no manual
-`SendToolResult` step), see `litertlm.RegisterTool`.
+This pattern is the right fit when:
+
+- The schema is generated dynamically (not derivable from a Go struct).
+- The handler lives outside the chat lifetime (a long-running
+  service, a remote endpoint).
+- You want to inspect or transform the call before dispatching it.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
-
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` chat-tuned model (e.g. Gemma 4).
 
 ## Run
 
 ```bash
 LITERTLM_LIB=/abs/path/to/dist/lib \
     go run ./examples/conversation \
-    -model /abs/path/to/gemma-4-E4B-it.litertlm
+    -model /abs/path/to/gemma-4-E4B-it.litertlm \
     -prompt "What is 17 plus 25?"
 ```
 
-| Flag       | Default                       | Notes                                                      |
-| ---------- | ----------------------------- | ---------------------------------------------------------- |
-| `-model`   | (required)                    | Path to a `.litertlm` chat-tuned model.                    |
-| `-prompt`  | `"What is 17 plus 25?"`       | The user question. Should be one the model can solve via `calc_add`. |
-| `-backend` | `"cpu"`                       | Set to `"gpu"` if you staged the GPU-capable build.        |
-| `-lib`     | `$LITERTLM_LIB`               |                                                            |
+| Flag       | Default                  | Notes                                                              |
+| ---------- | ------------------------ | ------------------------------------------------------------------ |
+| `-model`   | (required)               | Path to a `.litertlm` chat-tuned model.                            |
+| `-prompt`  | `"What is 17 plus 25?"`  | The user question. Should be one the model can solve via `calc_add`. |
+| `-backend` | `"cpu"`                  | Set to `"gpu"` if you staged the GPU-capable build.                |
+| `-lib`     | `$LITERTLM_LIB`          |                                                                    |
 
-### Expected output
+## Expected output
 
 ```
 user>     What is 17 plus 25?
-(raw)     {"role":"assistant","tool_calls":[{"type":"function","function":{"name":"calc_add","arguments":{"a":17.0,"b":25.0}}}]}
 (call)    calc_add(map[a:17 b:25])
 (result)  map[result:42]
-(raw)     {"role":"assistant","content":[{"type":"text","text":"The sum of 17 and 25 is 42."}]}
 bot>      The sum of 17 and 25 is 42.
 ```
+
+## See also
+
+- [Tools guide](../../docs/tools.md) — full reference for both tool
+  flavors.
+- [`examples/autotool/`](../autotool) — typed handler + auto-dispatch.

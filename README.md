@@ -91,7 +91,8 @@ The followings walk you through how to build them:
 | `examples/hello/`             | Minimal `Generate`                                                 |
 | `examples/stream/`            | `GenerateStream` with range-over-func                              |
 | `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
-| `examples/conversation/`      | `Chat` + tools + structured tool_calls                             |
+| `examples/conversation/`      | `Chat` + `NewRawTool` + manual dispatch via `Reply.ToolCalls`      |
+| `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
 | `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection)               |
 | `examples/vision/`            | `GenerateMulti` (image + text) with self-comparison against a sidecar |
 | `examples/extract/`           | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison  |
