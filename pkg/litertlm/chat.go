@@ -3,6 +3,7 @@ package litertlm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"sync"
@@ -44,6 +45,7 @@ type chatConfig struct {
 	tools               []ToolDefinition
 	initialMessages     []Message
 	constrainedDecoding bool
+	maxToolHops         int
 }
 
 // WithSystemPrompt sets the system message for the conversation. Pass
@@ -85,7 +87,57 @@ func WithConstrainedDecoding(on bool) ChatOption {
 	return func(c *chatConfig) { c.constrainedDecoding = on }
 }
 
+// WithMaxToolHops caps the number of dispatch iterations Chat.Send
+// runs when ManagedTools are registered. Each iteration is one
+// model→tool→model round-trip. Exceeding the cap returns an error
+// matching ErrToolHopsExceeded; use errors.As(err, &*ToolHopsError)
+// to inspect the partial last reply. n <= 0 keeps the default of
+// defaultMaxToolHops.
+func WithMaxToolHops(n int) ChatOption {
+	return func(c *chatConfig) {
+		if n > 0 {
+			c.maxToolHops = n
+		}
+	}
+}
+
 // ---- Chat -----------------------------------------------------------------
+
+// defaultMaxToolHops is the dispatch-loop iteration cap when
+// WithMaxToolHops isn't supplied.
+const defaultMaxToolHops = 5
+
+// chatTransport is the conversation-side seam used by Chat.send and
+// the auto-dispatch loop. The real Conversation handle satisfies it;
+// tests inject a stub.
+type chatTransport interface {
+	SendMessage(messageJSON, extraContext string) (string, error)
+	SendMessageStreamCh(messageJSON, extraContext string) <-chan StreamChunk
+	Cancel()
+}
+
+// Compile-time check: the real Conversation handle satisfies the
+// transport interface.
+var _ chatTransport = Conversation(0)
+
+// ErrToolHopsExceeded matches errors returned when Chat.Send exceeds
+// the dispatch hop cap. Use errors.As to a *ToolHopsError to inspect
+// the partial last reply.
+var ErrToolHopsExceeded = errors.New("litertlm: tool hops exceeded")
+
+// ToolHopsError carries the last assistant reply and the cap that
+// was reached. Returned wrapped in errors.Is(err, ErrToolHopsExceeded)
+// matches.
+type ToolHopsError struct {
+	LastReply *Reply
+	Hops      int
+}
+
+func (e *ToolHopsError) Error() string {
+	return fmt.Sprintf("litertlm: tool hops exceeded (cap %d)", e.Hops)
+}
+
+func (e *ToolHopsError) Unwrap() error { return ErrToolHopsExceeded }
 
 // Chat is a multi-turn conversation handle. It wraps a Conversation
 // plus its ConversationConfig and surfaces high-level Send /
@@ -95,9 +147,10 @@ type Chat struct {
 	cfg  ConversationConfig
 	conv Conversation
 
-	mu     sync.Mutex
-	closed bool
-	tools  map[string]ToolDefinition // populated from WithTool defs
+	mu          sync.Mutex
+	closed      bool
+	tools       map[string]ToolDefinition // populated from WithTool defs
+	maxToolHops int                       // 0 → defaultMaxToolHops
 }
 
 // NewChat creates a Chat rooted in the Client's engine. Caller must
@@ -141,7 +194,8 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 
 	return runCancellable(ctx,
 		func() (*Chat, error) {
-			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON, cfg.constrainedDecoding, registry)
+			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON,
+				cfg.constrainedDecoding, registry, cfg.maxToolHops)
 		},
 		func(ch *Chat) { _ = ch.Close() },
 	)
@@ -149,7 +203,9 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 
 // buildChat performs the synchronous C-side work of constructing a
 // Chat. Split out so NewChat can run it under runCancellable.
-func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, constrainedDecoding bool, registry map[string]ToolDefinition) (*Chat, error) {
+func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string,
+	constrainedDecoding bool, registry map[string]ToolDefinition, maxToolHops int,
+) (*Chat, error) {
 	convCfg, err := NewConversationConfig(c.engine, 0,
 		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
 	if err != nil {
@@ -162,7 +218,7 @@ func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string, co
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
 
-	return &Chat{cfg: convCfg, conv: conv, tools: registry}, nil
+	return &Chat{cfg: convCfg, conv: conv, tools: registry, maxToolHops: maxToolHops}, nil
 }
 
 // buildToolRegistry walks defs and returns a name → def map for chat
@@ -199,6 +255,14 @@ func (ch *Chat) Close() error {
 }
 
 // Send issues a user-role message and returns the assistant's Reply.
+// When the chat has at least one ManagedTool registered and the
+// reply contains tool calls that all map to dispatchable entries,
+// Send runs the tool-call → invoke → tool-result → next-turn loop
+// until the model produces a text-only reply (or the dispatch cap is
+// reached). Replies containing any non-dispatchable tool call (a
+// RawTool or an unknown name) are returned as-is for manual handling
+// with Reply.ToolCalls() + Chat.SendToolResult.
+//
 // Cancelling ctx aborts the in-flight call via Conversation.Cancel.
 func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
@@ -208,7 +272,7 @@ func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: marshal: %w", err)
 	}
-	return ch.send(ctx, string(msgJSON))
+	return ch.send(ctx, ch.conv, string(msgJSON))
 }
 
 // SendStream issues a user-role message and returns an iterator over
@@ -245,27 +309,80 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 // result of executing the tool named `name`. result is JSON-marshaled
 // directly — pass a struct or map so the C-side template can render
 // the response object faithfully.
+//
+// Like Send, SendToolResult enters the auto-dispatch loop when the
+// model's reply contains tool calls all mapping to ManagedTools.
 func (ch *Chat) SendToolResult(ctx context.Context, name string, result any) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
 		return nil, err
 	}
-	msgJSON, err := json.Marshal(map[string]any{
-		"role": "tool",
-		"content": []map[string]any{
-			{"name": name, "response": result},
-		},
-	})
+	msgJSON, err := encodeToolResults([]toolResult{{name: name, response: result}})
 	if err != nil {
-		return nil, fmt.Errorf("litertlm: SendToolResult: marshal: %w", err)
+		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
-	return ch.send(ctx, string(msgJSON))
+	return ch.send(ctx, ch.conv, msgJSON)
 }
 
-func (ch *Chat) send(ctx context.Context, msgJSON string) (*Reply, error) {
-	stop := wireCancel(ctx, ch.conv.Cancel)
+// toolResult holds one tool's response within a tool-role message.
+type toolResult struct {
+	name     string
+	response any
+}
+
+// encodeToolResults marshals one or more tool results into a single
+// tool-role message JSON envelope.
+func encodeToolResults(results []toolResult) (string, error) {
+	content := make([]map[string]any, len(results))
+	for i, r := range results {
+		content[i] = map[string]any{"name": r.name, "response": r.response}
+	}
+	b, err := json.Marshal(map[string]any{
+		"role":    "tool",
+		"content": content,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal tool results: %w", err)
+	}
+	return string(b), nil
+}
+
+// send drives the dispatch loop. transport is parameterized so tests
+// can inject a stub satisfying chatTransport.
+func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string) (*Reply, error) {
+	cap := ch.maxToolHops
+	if cap <= 0 {
+		cap = defaultMaxToolHops
+	}
+
+	for hop := 0; ; hop++ {
+		reply, err := sendOne(ctx, transport, msgJSON)
+		if err != nil {
+			return nil, err
+		}
+		if !reply.HasToolCalls() || !ch.allCallsDispatchable(reply) {
+			return reply, nil
+		}
+		if hop >= cap {
+			return nil, &ToolHopsError{LastReply: reply, Hops: cap}
+		}
+		results, err := ch.invokeAll(ctx, reply.ToolCalls())
+		if err != nil {
+			return nil, err
+		}
+		msgJSON, err = encodeToolResults(results)
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+// sendOne posts one message through the transport and parses the
+// reply envelope.
+func sendOne(ctx context.Context, transport chatTransport, msgJSON string) (*Reply, error) {
+	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
-	raw, err := ch.conv.SendMessage(msgJSON, "")
+	raw, err := transport.SendMessage(msgJSON, "")
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
@@ -273,6 +390,59 @@ func (ch *Chat) send(ctx context.Context, msgJSON string) (*Reply, error) {
 		return nil, fmt.Errorf("litertlm: send: %w", err)
 	}
 	return parseReply(raw)
+}
+
+// allCallsDispatchable reports whether every tool call in reply maps
+// to a ManagedTool in the chat's registry. Returns false (so the
+// dispatcher bails to manual mode) when any call is unknown or maps
+// to a RawTool.
+func (ch *Chat) allCallsDispatchable(reply *Reply) bool {
+	if len(ch.tools) == 0 {
+		return false
+	}
+	for _, call := range reply.ToolCalls() {
+		def, ok := ch.tools[call.Function.Name]
+		if !ok {
+			return false
+		}
+		if _, ok := def.(dispatchable); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// invokeAll dispatches every call sequentially and returns the
+// results bundled for one tool-role message. A handler error obeys
+// the tool's ToolPolicy: ToolPolicyReturnOnError propagates as a Go
+// error and stops the loop; ToolPolicyInformOnError marshals the
+// error message as the tool's response so the model can react.
+func (ch *Chat) invokeAll(ctx context.Context, calls []ToolCall) ([]toolResult, error) {
+	results := make([]toolResult, 0, len(calls))
+	for _, call := range calls {
+		def := ch.tools[call.Function.Name]
+		d := def.(dispatchable)
+
+		argsJSON, err := json.Marshal(call.Function.Arguments)
+		if err != nil {
+			return nil, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
+		}
+		out, err := d.invoke(ctx, argsJSON)
+		if err != nil {
+			switch d.policy() {
+			case ToolPolicyInformOnError:
+				results = append(results, toolResult{
+					name:     call.Function.Name,
+					response: map[string]any{"error": err.Error()},
+				})
+				continue
+			default: // ToolPolicyReturnOnError
+				return nil, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
+			}
+		}
+		results = append(results, toolResult{name: call.Function.Name, response: out})
+	}
+	return results, nil
 }
 
 func (ch *Chat) checkOpen() error {

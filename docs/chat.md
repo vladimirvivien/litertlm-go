@@ -140,6 +140,63 @@ Field rules for the input struct:
 - Pointer fields are optional; non-pointer fields are required.
 - Supported kinds: string, bool, all int/uint/float widths, slice/array, nested struct, pointer (unwrapped). Nesting capped at depth 32.
 
+### Auto-dispatch loop
+
+When the chat has at least one `ManagedTool` registered, `Chat.Send`
+runs the tool-call → invoke → tool-result → next-turn loop until the
+model produces a text-only reply, then returns that reply. Single
+call from the user, single reply with the post-tool-call answer.
+
+Behavior in mixed registrations:
+
+- If every tool call in a model reply is `ManagedTool` → dispatch all
+  sequentially; bundle results into a single tool-role message; loop.
+- If any call is unknown or maps to a `RawTool` → return the reply
+  for manual handling. The whole turn is yours.
+
+Cap the loop with `WithMaxToolHops(n)` (default 5). Exceeding the cap
+returns an error matching `errors.Is(err, ErrToolHopsExceeded)`. Use
+`errors.As` to a `*ToolHopsError` for the partial last reply.
+
+```go
+chat, _ := client.NewChat(ctx,
+    litertlm.WithTool(weather),
+    litertlm.WithMaxToolHops(3),
+)
+
+reply, err := chat.Send(ctx, "what's the weather in Boston?")
+if errors.Is(err, litertlm.ErrToolHopsExceeded) {
+    var hops *litertlm.ToolHopsError
+    errors.As(err, &hops)
+    log.Printf("model still calling tools after %d hops; partial reply: %v",
+        hops.Hops, hops.LastReply.Raw())
+}
+```
+
+`SendStream` keeps the raw streaming behavior — it does not wrap the
+dispatch loop. For typed-tool flows that need streaming, use `Send`
+and stream the post-dispatch reply yourself.
+
+### `ToolPolicy` — error handling per tool
+
+Each `ManagedTool` carries a `ToolPolicy` set with `WithToolPolicy`
+at registration time. The policy controls what happens when the
+handler returns an error during dispatch:
+
+| Policy                       | Behavior                                                                    |
+|------------------------------|-----------------------------------------------------------------------------|
+| `ToolPolicyReturnOnError` (default) | Propagate the error from `Chat.Send`; loop ends. Model is not informed. |
+| `ToolPolicyInformOnError`    | Marshal `{"error": "<err.Error()>"}` as the tool's response and continue. The model can retry, apologize, or pick a different tool. |
+
+```go
+// Default: a validation error stops the loop and surfaces to the caller.
+validate, _ := litertlm.RegisterTool(client, "validate", "...", validateHandler)
+
+// Inform-on-error: transient failures the model can react to.
+weather, _ := litertlm.RegisterTool(client, "get_weather", "...", weatherHandler,
+    litertlm.WithToolPolicy(litertlm.ToolPolicyInformOnError))
+```
+
 ### `ToolDefinition` and `ToolCall` types
 
 ```go

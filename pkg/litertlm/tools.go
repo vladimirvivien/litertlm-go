@@ -17,10 +17,43 @@ type ToolDefinition interface {
 }
 
 // dispatchable is implemented by *ManagedTool[I, O] regardless of its
-// type parameters. Chat stores only dispatchable entries in its
-// registry; the auto-dispatch loop calls invoke through this interface.
+// type parameters. Chat stores dispatchable entries in its registry;
+// the auto-dispatch loop calls invoke through this interface and
+// consults policy when invoke returns an error.
 type dispatchable interface {
 	invoke(ctx context.Context, argsJSON []byte) (any, error)
+	policy() ToolPolicy
+}
+
+// ToolPolicy configures behaviors that apply to a single tool. Today
+// it covers error handling; the type is named broadly so additional
+// per-tool knobs can be added under the same option family.
+type ToolPolicy int
+
+const (
+	// ToolPolicyReturnOnError (default) propagates a handler error
+	// up as a Go error from Chat.Send; the dispatch loop ends and
+	// the model is not informed.
+	ToolPolicyReturnOnError ToolPolicy = iota
+
+	// ToolPolicyInformOnError marshals the handler error's message
+	// as the tool's result and continues the dispatch loop. The
+	// model can apologize, retry with different arguments, or pick
+	// a different tool.
+	ToolPolicyInformOnError
+)
+
+// ToolOption configures a tool at RegisterTool time.
+type ToolOption func(*toolConfig)
+
+type toolConfig struct {
+	policy ToolPolicy
+}
+
+// WithToolPolicy sets the tool's policy. See ToolPolicy for the
+// available values.
+func WithToolPolicy(p ToolPolicy) ToolOption {
+	return func(c *toolConfig) { c.policy = p }
 }
 
 // RawTool is a hand-built tool declaration: a name, description, and
@@ -66,6 +99,7 @@ type ManagedTool[I, O any] struct {
 	description string
 	handler     func(context.Context, I) (O, error)
 	parameters  map[string]any
+	errPolicy   ToolPolicy
 }
 
 // Name returns the tool's name.
@@ -76,6 +110,10 @@ func (t *ManagedTool[I, O]) Description() string { return t.description }
 
 // Parameters returns the JSON-Schema parameters object derived from I.
 func (t *ManagedTool[I, O]) Parameters() map[string]any { return t.parameters }
+
+// policy returns the configured ToolPolicy. Used by the dispatch
+// loop to decide what to do with a handler error.
+func (t *ManagedTool[I, O]) policy() ToolPolicy { return t.errPolicy }
 
 // invoke unmarshals argsJSON into a fresh I, runs the handler, and
 // returns the typed O. The dispatcher marshals the result back to
@@ -109,11 +147,13 @@ func (t *ManagedTool[I, O]) invoke(ctx context.Context, argsJSON []byte) (any, e
 //     slice/array, nested struct, pointer (unwrapped).
 //   - Nesting capped at depth 32.
 //
-// Attach the returned tool to a Chat with WithTool(t).
+// Attach the returned tool to a Chat with WithTool(t). Pass
+// WithToolPolicy to override the default error-handling policy.
 func RegisterTool[I, O any](
 	c *Client,
 	name, description string,
 	handler func(context.Context, I) (O, error),
+	opts ...ToolOption,
 ) (*ManagedTool[I, O], error) {
 	if c == nil {
 		return nil, fmt.Errorf("litertlm: RegisterTool: nil client")
@@ -130,11 +170,17 @@ func RegisterTool[I, O any](
 		return nil, fmt.Errorf("litertlm: RegisterTool %q: %w", name, err)
 	}
 
+	cfg := toolConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	tool := &ManagedTool[I, O]{
 		name:        name,
 		description: description,
 		handler:     handler,
 		parameters:  params,
+		errPolicy:   cfg.policy,
 	}
 
 	c.mu.Lock()
