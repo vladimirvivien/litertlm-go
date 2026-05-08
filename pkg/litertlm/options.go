@@ -28,6 +28,9 @@ type clientConfig struct {
 	benchmarkEnabled           *bool
 	parallelFileLoading        *bool
 
+	maxNumImages   *int
+	dispatchLibDir string
+
 	logLevel    int
 	logLevelSet bool
 
@@ -134,6 +137,19 @@ func WithBenchmarkEnabled() Option {
 // sections. The C side defaults to true; only call this to override.
 func WithParallelFileLoading(on bool) Option {
 	return func(c *clientConfig) { c.parallelFileLoading = &on }
+}
+
+// WithMaxNumImages caps the maximum number of image inputs the engine
+// reserves capacity for. Honored only by the legacy engine
+// implementation per the upstream C header.
+func WithMaxNumImages(n int) Option {
+	return func(c *clientConfig) { c.maxNumImages = &n }
+}
+
+// WithDispatchLibDir sets the LiteRT dispatch library directory used
+// by the NPU backend. Ignored by CPU / GPU backends.
+func WithDispatchLibDir(dir string) Option {
+	return func(c *clientConfig) { c.dispatchLibDir = dir }
 }
 
 // WithLogLevel sets the LiteRT-LM log severity floor. Default is

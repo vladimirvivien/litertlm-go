@@ -39,6 +39,30 @@ func TestOption_LibAndModel(t *testing.T) {
 	}
 }
 
+// TestOption_MaxNumImages threads WithMaxNumImages through.
+func TestOption_MaxNumImages(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.maxNumImages != nil {
+		t.Fatalf("maxNumImages should default to nil")
+	}
+	WithMaxNumImages(4)(&cfg)
+	if cfg.maxNumImages == nil || *cfg.maxNumImages != 4 {
+		t.Errorf("maxNumImages = %v, want 4", cfg.maxNumImages)
+	}
+}
+
+// TestOption_DispatchLibDir threads WithDispatchLibDir through.
+func TestOption_DispatchLibDir(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.dispatchLibDir != "" {
+		t.Fatalf("dispatchLibDir should default to empty")
+	}
+	WithDispatchLibDir("/opt/litert-dispatch")(&cfg)
+	if cfg.dispatchLibDir != "/opt/litert-dispatch" {
+		t.Errorf("dispatchLibDir = %q", cfg.dispatchLibDir)
+	}
+}
+
 // TestOption_LibName verifies WithLibName threads through to the
 // resolved config and respects last-write-wins.
 func TestOption_LibName(t *testing.T) {

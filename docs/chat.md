@@ -34,6 +34,8 @@ Chat configuration:
 | `WithTool(defs ...)`            | One or more `ToolDefinition`s the model may call. Mix `RawTool` (hand-built) and `ManagedTool` (typed handler) freely. |
 | `WithInitialMessages(msgs)`     | Seed history with prior turns.                                                                  |
 | `WithConstrainedDecoding(on)`   | Toggle the engine's constrained-decoding mode (boolean only — schema delivery is upstream-pending). |
+| `WithExtraContext(json)`        | JSON string used as the conversation preface's extra context.                                   |
+| `WithFilterChannelContentFromKVCache(on)` | Exclude the model's reasoning-channel tokens from the KV cache (won't persist across turns). |
 
 ## `Send(ctx, message)` and `Reply`
 

@@ -93,6 +93,38 @@ func NewConversationConfig(
 	return c, nil
 }
 
+// SetExtraContext attaches an extra-context JSON string used in the
+// conversation preface. Empty string is a no-op. C-side copies the
+// bytes; the Go buffer need not outlive the call.
+func (c ConversationConfig) SetExtraContext(extraContextJSON string) error {
+	if c == 0 || extraContextJSON == "" {
+		return nil
+	}
+	ctxPtr, err := utils.BytePtrFromString(extraContextJSON)
+	if err != nil {
+		return err
+	}
+	conversationConfigSetExtraContextFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(&ctxPtr))
+	return nil
+}
+
+// SetFilterChannelContentFromKVCache toggles whether reasoning-channel
+// content is excluded from the conversation's KV cache. When on, the
+// model's internal-reasoning tokens (between <|channel> ... <channel|>
+// markers) are not persisted across turns.
+func (c ConversationConfig) SetFilterChannelContentFromKVCache(on bool) {
+	if c == 0 {
+		return
+	}
+	var v uint8
+	if on {
+		v = 1
+	}
+	conversationConfigSetFilterChannelContentFromKVCacheFunc.Call(
+		nil, unsafe.Pointer(&c), unsafe.Pointer(&v),
+	)
+}
+
 // Delete releases a ConversationConfig handle.
 func (c ConversationConfig) Delete() {
 	if c == 0 {
@@ -135,6 +167,31 @@ func (c Conversation) SendMessage(messageJSON, extraContext string) (string, err
 	}
 	defer handle.Delete()
 	return handle.String(), nil
+}
+
+// RenderMessage runs messageJSON through the chat template and
+// returns the rendered string. Useful for debugging template output
+// or for inspecting how a turn will appear to the model. The C side
+// owns the returned buffer; this method copies into Go memory before
+// returning so the result remains valid for the caller's lifetime.
+func (c Conversation) RenderMessage(messageJSON string) (string, error) {
+	if c == 0 {
+		return "", fmt.Errorf("litertlm: render_message: invalid conversation")
+	}
+	msgPtr, err := utils.BytePtrFromString(messageJSON)
+	if err != nil {
+		return "", err
+	}
+	var rawPtr *byte
+	conversationRenderMessageToStringFunc.Call(
+		unsafe.Pointer(&rawPtr),
+		unsafe.Pointer(&c),
+		unsafe.Pointer(&msgPtr),
+	)
+	if rawPtr == nil {
+		return "", fmt.Errorf("litertlm: render_message: C side returned NULL")
+	}
+	return utils.BytePtrToString(rawPtr), nil
 }
 
 // Cancel requests cancellation of an in-flight streaming send.

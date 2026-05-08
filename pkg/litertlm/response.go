@@ -116,3 +116,12 @@ func (r *Response) Benchmark() *Benchmark {
 	}
 	return r.bench
 }
+
+// TokenScores returns the per-token scores for candidate i. ok is
+// false when the producing source did not attach per-token scores.
+func (r *Response) TokenScores(i int) ([]float32, bool) {
+	if r == nil || r.handle == 0 {
+		return nil, false
+	}
+	return r.handle.TokenScores(i)
+}

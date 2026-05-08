@@ -66,6 +66,18 @@ var (
 		&ffi.TypePointer, // config
 		&ffi.TypeUint8,   // enable_constrained_decoding (bool)
 	)
+	conversationConfigSetExtraContextFunc = newLazyFun(
+		"litert_lm_conversation_config_set_extra_context",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // extra_context_json (const char*)
+	)
+	conversationConfigSetFilterChannelContentFromKVCacheFunc = newLazyFun(
+		"litert_lm_conversation_config_set_filter_channel_content_from_kv_cache",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypeUint8,   // filter_channel_content_from_kv_cache (bool)
+	)
 	conversationConfigDeleteFunc = newLazyFun(
 		"litert_lm_conversation_config_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
@@ -114,6 +126,12 @@ var (
 	engineSettingsSetEnableSpeculativeDecodingFunc = newLazyFun(
 		"litert_lm_engine_settings_set_enable_speculative_decoding",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetMaxNumImagesFunc = newLazyFun(
+		"litert_lm_engine_settings_set_max_num_images",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetLitertDispatchLibDirFunc = newLazyFun(
+		"litert_lm_engine_settings_set_litert_dispatch_lib_dir",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Engine ----
 	engineCreateFunc = newLazyFun(
@@ -190,6 +208,15 @@ var (
 	responsesHasTokenLengthAtFunc = newLazyFun(
 		"litert_lm_responses_has_token_length_at",
 		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32)
+	responsesHasTokenScoresAtFunc = newLazyFun(
+		"litert_lm_responses_has_token_scores_at",
+		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32)
+	responsesGetNumTokenScoresAtFunc = newLazyFun(
+		"litert_lm_responses_get_num_token_scores_at",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	responsesGetTokenScoresAtFunc = newLazyFun(
+		"litert_lm_responses_get_token_scores_at",
+		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypeSint32)
 	responsesGetTokenLengthAtFunc = newLazyFun(
 		"litert_lm_responses_get_token_length_at",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
@@ -249,6 +276,12 @@ var (
 	conversationCancelProcessFunc = newLazyFun(
 		"litert_lm_conversation_cancel_process",
 		&ffi.TypeVoid, &ffi.TypePointer)
+	conversationRenderMessageToStringFunc = newLazyFun(
+		"litert_lm_conversation_render_message_to_string",
+		&ffi.TypePointer, // returned const char*
+		&ffi.TypePointer, // conversation
+		&ffi.TypePointer, // message_json
+	)
 	conversationGetBenchmarkInfoFunc = newLazyFun(
 		"litert_lm_conversation_get_benchmark_info",
 		&ffi.TypePointer, &ffi.TypePointer)

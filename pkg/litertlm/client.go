@@ -135,6 +135,12 @@ func applySettings(s EngineSettings, cfg *clientConfig) {
 	if cfg.parallelFileLoading != nil {
 		s.SetParallelFileSectionLoading(*cfg.parallelFileLoading)
 	}
+	if cfg.maxNumImages != nil {
+		s.SetMaxNumImages(*cfg.maxNumImages)
+	}
+	if cfg.dispatchLibDir != "" {
+		s.SetLitertDispatchLibDir(cfg.dispatchLibDir)
+	}
 }
 
 // Close releases the engine and engine-settings handles. Safe to call

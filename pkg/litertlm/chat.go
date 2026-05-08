@@ -40,12 +40,14 @@ type Message struct {
 type ChatOption func(*chatConfig)
 
 type chatConfig struct {
-	systemPrompt        string
-	systemPromptSet     bool
-	tools               []ToolDefinition
-	initialMessages     []Message
-	constrainedDecoding bool
-	maxToolHops         int
+	systemPrompt                    string
+	systemPromptSet                 bool
+	tools                           []ToolDefinition
+	initialMessages                 []Message
+	constrainedDecoding             bool
+	maxToolHops                     int
+	extraContextJSON                string
+	filterChannelContentFromKVCache *bool
 }
 
 // WithSystemPrompt sets the system message for the conversation. Pass
@@ -85,6 +87,20 @@ func WithInitialMessages(msgs []Message) ChatOption {
 // delivery is upstream-pending.
 func WithConstrainedDecoding(on bool) ChatOption {
 	return func(c *chatConfig) { c.constrainedDecoding = on }
+}
+
+// WithExtraContext attaches an extra-context JSON string used in the
+// conversation preface. Empty string is a no-op.
+func WithExtraContext(extraContextJSON string) ChatOption {
+	return func(c *chatConfig) { c.extraContextJSON = extraContextJSON }
+}
+
+// WithFilterChannelContentFromKVCache toggles whether the model's
+// reasoning-channel tokens (those framed by <|channel> ... <channel|>)
+// are excluded from the conversation's KV cache. When on, the
+// reasoning content does not persist across turns.
+func WithFilterChannelContentFromKVCache(on bool) ChatOption {
+	return func(c *chatConfig) { c.filterChannelContentFromKVCache = &on }
 }
 
 // WithMaxToolHops caps the number of dispatch iterations Chat.Send
@@ -195,7 +211,8 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 	return runCancellable(ctx,
 		func() (*Chat, error) {
 			return c.buildChat(systemMessageJSON, toolsJSON, messagesJSON,
-				cfg.constrainedDecoding, registry, cfg.maxToolHops)
+				cfg.constrainedDecoding, registry, cfg.maxToolHops,
+				cfg.extraContextJSON, cfg.filterChannelContentFromKVCache)
 		},
 		func(ch *Chat) { _ = ch.Close() },
 	)
@@ -205,11 +222,20 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 // Chat. Split out so NewChat can run it under runCancellable.
 func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string,
 	constrainedDecoding bool, registry map[string]ToolDefinition, maxToolHops int,
+	extraContextJSON string, filterChannelContentFromKVCache *bool,
 ) (*Chat, error) {
 	convCfg, err := NewConversationConfig(c.engine, 0,
 		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+	}
+
+	if err := convCfg.SetExtraContext(extraContextJSON); err != nil {
+		convCfg.Delete()
+		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+	}
+	if filterChannelContentFromKVCache != nil {
+		convCfg.SetFilterChannelContentFromKVCache(*filterChannelContentFromKVCache)
 	}
 
 	conv, err := c.engine.NewConversation(convCfg)

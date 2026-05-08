@@ -138,6 +138,29 @@ func (s EngineSettings) SetEnableSpeculativeDecoding(on bool) {
 	engineSettingsSetEnableSpeculativeDecodingFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&v))
 }
 
+// SetMaxNumImages caps the maximum number of image inputs the engine
+// reserves capacity for. Honored only by the legacy engine
+// implementation per the upstream C header.
+func (s EngineSettings) SetMaxNumImages(n int) {
+	if s == 0 {
+		return
+	}
+	engineSettingsSetMaxNumImagesFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(new(int32(n))))
+}
+
+// SetLitertDispatchLibDir sets the LiteRT dispatch library directory
+// used by the NPU backend. Ignored by CPU / GPU backends.
+func (s EngineSettings) SetLitertDispatchLibDir(dir string) {
+	if s == 0 {
+		return
+	}
+	dirPtr, err := utils.BytePtrFromString(dir)
+	if err != nil {
+		return
+	}
+	engineSettingsSetLitertDispatchLibDirFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&dirPtr))
+}
+
 // NewEngine loads the model described by settings. The caller still owns
 // the settings handle and may Delete() it once the engine is created.
 func NewEngine(settings EngineSettings) (Engine, error) {

@@ -37,6 +37,32 @@ func TestChatOption_SystemPrompt(t *testing.T) {
 	}
 }
 
+func TestChatOption_WithExtraContext(t *testing.T) {
+	cfg := chatConfig{}
+	if cfg.extraContextJSON != "" {
+		t.Fatalf("extraContextJSON should default empty")
+	}
+	WithExtraContext(`{"weather":"sunny"}`)(&cfg)
+	if cfg.extraContextJSON != `{"weather":"sunny"}` {
+		t.Errorf("extraContextJSON = %q", cfg.extraContextJSON)
+	}
+}
+
+func TestChatOption_WithFilterChannelContentFromKVCache(t *testing.T) {
+	cfg := chatConfig{}
+	if cfg.filterChannelContentFromKVCache != nil {
+		t.Fatalf("filterChannelContentFromKVCache should default nil")
+	}
+	WithFilterChannelContentFromKVCache(true)(&cfg)
+	if cfg.filterChannelContentFromKVCache == nil || !*cfg.filterChannelContentFromKVCache {
+		t.Errorf("filterChannelContentFromKVCache = %v", cfg.filterChannelContentFromKVCache)
+	}
+	WithFilterChannelContentFromKVCache(false)(&cfg)
+	if cfg.filterChannelContentFromKVCache == nil || *cfg.filterChannelContentFromKVCache {
+		t.Errorf("toggle to false failed: %v", cfg.filterChannelContentFromKVCache)
+	}
+}
+
 func TestChatOption_WithToolAccumulates(t *testing.T) {
 	a := NewRawTool("a", "", nil)
 	b := NewRawTool("b", "", nil)

@@ -95,3 +95,44 @@ func (r Responses) TokenLength(i int) (int, bool) {
 	)
 	return int(v), true
 }
+
+// TokenScores returns the per-token scores for candidate i, or
+// (nil, false) when no per-token scores are present at that index.
+// The returned slice is copied into Go memory and is safe to retain
+// after the underlying Responses handle is deleted.
+func (r Responses) TokenScores(i int) ([]float32, bool) {
+	if r == 0 {
+		return nil, false
+	}
+	var has uint8
+	responsesHasTokenScoresAtFunc.Call(
+		unsafe.Pointer(&has),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	if has == 0 {
+		return nil, false
+	}
+	var n int32
+	responsesGetNumTokenScoresAtFunc.Call(
+		unsafe.Pointer(&n),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	if n <= 0 {
+		return []float32{}, true
+	}
+	var ptr *float32
+	responsesGetTokenScoresAtFunc.Call(
+		unsafe.Pointer(&ptr),
+		unsafe.Pointer(&r),
+		unsafe.Pointer(new(int32(i))),
+	)
+	if ptr == nil {
+		return nil, false
+	}
+	out := make([]float32, n)
+	src := unsafe.Slice(ptr, n)
+	copy(out, src)
+	return out, true
+}
