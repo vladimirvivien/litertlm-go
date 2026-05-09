@@ -230,7 +230,7 @@ func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string,
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
 
-	if err := convCfg.SetExtraContext(extraContextJSON); err != nil {
+	if err = convCfg.SetExtraContext(extraContextJSON); err != nil {
 		convCfg.Delete()
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
