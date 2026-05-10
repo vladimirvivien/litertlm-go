@@ -32,23 +32,63 @@ The default library short-name is selected by backend
 
 ---
 
-## Empty completion from a chat-tuned model
+## Garbage or repetitive output from `Generate` / `GenerateStream`
 
-**Symptom.** `Generate` returns `""`. `NumCandidates() == 1` but
-`resp.Text(0)` is empty.
+**Symptom.** `Generate` (or `GenerateStream`, or `GenerateMulti`)
+returns one of:
 
-**Cause.** Chat-tuned models (Gemma instruct, Llama-Instruct, …) end
-their reply with an end-of-sequence token immediately when given a
-bare instruction prompt that hasn't been wrapped in the model's chat
-template.
+- An empty string, or `resp.Text(0) == ""`.
+- A single token repeated until `-max` is hit
+  (`0000000000…`, `\n\n\n…`, `<bos><bos>…`).
+- A short hallucinated phrase repeated
+  (`**{sea}** **{sea}** **{sea}**`).
+- A coherent first sentence that then loops
+  (`Marco who set out one morning to catch fish. Marco who set out
+  one morning to catch fish. …`).
 
-**Fix.** Either:
+**Cause.** Chat-tuned models (Gemma instruct, Llama-Instruct, …) were
+fine-tuned with the model's chat template wrapping every conversation
+(e.g. Gemma 4:
+`<bos><start_of_turn>user\n…<end_of_turn>\n<start_of_turn>model\n`).
+The raw `Generate` / `GenerateStream` / `GenerateMulti` paths send
+your prompt to the model **as-is** — the chat template is *not*
+applied. Without the framing tokens the model has no idea it's
+supposed to answer a user, and degenerates: empty, a stuck token, or a
+repetition trap. Larger chat-tuned models (Gemma 4 E4B) tend to fall
+into loops; smaller ones (Gemma 4 E2B) sometimes manage to extend
+completion-style prompts but still fail on bare instructions.
 
-- Use a *completion-style* prompt the model can extend. The default
-  `"The capital of France is"` works on Gemma 4 and many others.
-- Use the high-level [`Chat`](chat.md) API or the low-level
-  `Conversation` API — both apply the model's chat template
-  automatically.
+**Fix.** Use the high-level [`Chat`](chat.md) API. Both
+`Chat.Send` and `Chat.SendStream` apply the model's chat template
+before each turn:
+
+```go
+chat, _ := client.NewChat(ctx, litertlm.WithSystemPrompt("You are a friendly assistant."))
+defer chat.Close()
+
+reply, _ := chat.Send(ctx, "Explain why the sky is blue.")
+fmt.Println(reply.Text())
+
+// streaming form:
+for chunk, err := range chat.SendStream(ctx, "Explain why the sky is blue.") {
+    if err != nil { /* … */ }
+    fmt.Print(chunk.Text)
+}
+```
+
+The `Conversation` low-level API also applies the chat template.
+
+If you genuinely need the raw `Generate` path (e.g. base model, or
+pure text completion), pick a *completion-style* prompt the model can
+extend rather than an instruction:
+
+- `"The capital of France is"`
+- `"Once upon a time in a small village by the sea, "`
+- `"To install Go on Linux: 1)"`
+
+Even then, expect chat-tuned E4B-class models to drift into loops on
+long generations — the chat-templated path is the supported one for
+chat-tuned models.
 
 ---
 

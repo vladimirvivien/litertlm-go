@@ -170,6 +170,23 @@ func (c *Client) Engine() Engine { return c.engine }
 // caveat as Engine — do not call Delete.
 func (c *Client) Settings() EngineSettings { return c.settings }
 
+// Tokenize returns the token IDs the model's tokenizer produces for
+// the given text. Useful for budgeting prompts against the engine's
+// max-token limit.
+func (c *Client) Tokenize(text string) ([]int32, error) {
+	return c.engine.Tokenize(text)
+}
+
+// TokenLength is a convenience over Tokenize that returns just the
+// token count.
+func (c *Client) TokenLength(text string) (int, error) {
+	tokens, err := c.engine.Tokenize(text)
+	if err != nil {
+		return 0, err
+	}
+	return len(tokens), nil
+}
+
 // resolveGenConfig applies opts to a fresh genConfig, returning the
 // result. Public entry points apply opts here once and pass the
 // resolved cfg into the internal helpers — that lets GenerateData

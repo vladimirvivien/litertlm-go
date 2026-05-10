@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"strings"
 	"sync"
 )
 
@@ -302,8 +303,11 @@ func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 }
 
 // SendStream issues a user-role message and returns an iterator over
-// the streamed text chunks. Tool-using replies are surfaced as raw
-// chunks in the stream — for structured tool_calls, prefer Send.
+// the streamed text chunks. Each chunk's Text is the assistant's text
+// for that step — the per-chunk JSON envelope the C side surfaces is
+// parsed and only the inner content is yielded. Tool-using replies are
+// surfaced as raw chunks in the stream — for structured tool_calls,
+// prefer Send.
 func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		if err := ch.checkOpen(); err != nil {
@@ -320,8 +324,8 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 		defer stop()
 
 		for sc := range ch.conv.SendMessageStreamCh(string(msgJSON), "") {
-			ch := Chunk{Text: sc.Text, Final: sc.Final}
-			if !yield(ch, sc.Err) {
+			text := extractStreamChunkText(sc.Text)
+			if !yield(Chunk{Text: text, Final: sc.Final}, sc.Err) {
 				return
 			}
 			if sc.Err != nil {
@@ -329,6 +333,34 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 			}
 		}
 	}
+}
+
+// extractStreamChunkText pulls the assistant text out of a single
+// streaming chunk's JSON envelope. The C side emits chunks shaped like
+// `{"role":"assistant","content":[{"type":"text","text":"..."}]}` per
+// token. Returns the raw chunk unchanged if it isn't valid JSON in
+// that shape — preserves anything the C side might surface that we
+// don't yet model.
+func extractStreamChunkText(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	var msg struct {
+		Content []replyContentPart `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		return raw
+	}
+	if len(msg.Content) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, p := range msg.Content {
+		if p.Type == "text" {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String()
 }
 
 // SendToolResult sends a tool-role message back to the model with the
