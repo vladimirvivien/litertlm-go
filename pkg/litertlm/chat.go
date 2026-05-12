@@ -357,8 +357,8 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 // streaming chunk's JSON envelope. The C side emits chunks shaped like
 // `{"role":"assistant","content":[{"type":"text","text":"..."}]}` per
 // token. Returns the raw chunk unchanged if it isn't valid JSON in
-// that shape — preserves anything the C side might surface that we
-// don't yet model.
+// that shape — preserves anything the C side might surface that the
+// wrapper does not yet model.
 func extractStreamChunkText(raw string) string {
 	if raw == "" {
 		return ""

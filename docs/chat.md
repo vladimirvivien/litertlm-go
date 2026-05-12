@@ -24,7 +24,8 @@ have access to prior turns.
 
 ## Creating `NewChat(ctx, opts...)`
 
-You start your chat sessions from a `Client` instance. Once you have a chat instance, always remember to `Close()` it when done.
+Open a `Chat` from a `Client` with `Client.NewChat(ctx, opts...)`.
+Call `Close()` on the returned `*Chat` when done.
 
 Chat configuration:
 

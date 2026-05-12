@@ -50,8 +50,9 @@ user>     What is 17 plus 25?
 bot>      The sum of 17 and 25 is 42.
 ```
 
-The `(invoke)` line shows the handler firing during the dispatch
-loop; the user only ever sees one `Send` call and one `Text()` reply.
+The `(invoke)` line shows the handler firing inside the dispatch
+loop; the caller issues one `Send` and reads one `Text()` for the
+final natural-language reply.
 
 ## See also
 

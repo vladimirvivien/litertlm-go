@@ -1,25 +1,22 @@
 # Example: Candidate-Completion Scoring
 
-This example uses the low-level `litertlm-go` API to demonstrate the fine-grained
-controls that are exposed from the C-API. It prefills a prompt, then scores a candidate 
-completion against it and reads the resulting log-probability + tokenized length out of the
-returned `Responses`.
+Prefills a prompt, scores a candidate completion against it, and
+reads the log-probability and tokenized length from the returned
+`Responses` handle.
 
 ## What this example shows
 
 - `Session.RunPrefill(inputs)` — establish the prompt context.
 - `Session.ScoreTexts(targets, storeTokenLengths)` — score one or more
-  candidates against the prefilled context. 
-- `Responses.Score(i)` — extract the log-probability score for
-  candidate `i`. 
-- `Responses.TokenLength(i)` — extract the tokenized length when
+  candidates against the prefilled context.
+- `Responses.Score(i)` — log-probability score for candidate `i`.
+- `Responses.TokenLength(i)` — tokenized length when
   `storeTokenLengths=true` was passed; otherwise `(0, false)`.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 ## Run
 
@@ -54,8 +51,6 @@ candidate: " Paris."
 [0] text=" Paris." score=-6.558003 (ok=true) tokenLen=2 (ok=true)
 ```
 
-The score is a log-probability (more negative = less likely). Compare
-across candidates by re-running with different `-target` values; lower
-absolute magnitude means the model assigns higher probability to that
-completion given the prompt.
-
+The score is a log-probability: lower absolute magnitude indicates
+higher model probability for that completion. Re-run with different
+`-target` values to compare candidates.

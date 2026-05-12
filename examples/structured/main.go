@@ -21,9 +21,9 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-// Recipe is the shape we want the model to return. JSON tags drive
-// the field names in the generated shape hint and in the unmarshal
-// step; default lowercased Go names work too.
+// Recipe is the target type for GenerateData[T]. JSON tags drive
+// both the injected shape hint and the unmarshal step; default
+// lowercased Go names work too.
 type Recipe struct {
 	Title       string   `json:"title"`
 	Ingredients []string `json:"ingredients"`

@@ -59,16 +59,16 @@ func main() {
 }
 ```
 
-`litertlm.New` aggregates several low-level steps:
+`litertlm.New`:
 
 1. Loads the shared library set (calls `Load` internally).
 2. Builds an `EngineSettings` with the supplied options.
 3. Constructs a LiteRT-LM `Engine` from those settings.
 4. Returns a `*Client` with access to the engine.
 
-Calling `client.Close()` releases internal resources and deletes the engine instance.
+`client.Close()` releases internal resources and deletes the engine.
 
-### Runing the program
+### Running the program
 When executing the program, specify the location of the 
 share libraries and a model file:
 

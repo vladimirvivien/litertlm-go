@@ -194,9 +194,9 @@ func (e Engine) tokenUnionToIDs(tu tokenUnion) ([]int32, error) {
 	case tokenUnionTypeIDs:
 		// out_tokens (const int**) and out_num_tokens (size_t*) are
 		// pointer-to-where-C-should-write. The purego FFI layer reads
-		// one level of indirection from the Go-side address, so we
-		// need a `**int32` / `*uint64` storage and pass the *address*
-		// of those — that's what makes C see `&ptr` rather than the
+		// one level of indirection from the Go-side address, so this
+		// uses `**int32` / `*uint64` storage and passes the *address*
+		// of those — that is what makes C see `&ptr` rather than the
 		// (initially-nil) value of ptr itself.
 		var ptr *int32
 		var n uint64

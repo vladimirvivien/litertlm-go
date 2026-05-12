@@ -38,7 +38,7 @@ LITERTLM_LIB=/abs/path/to/dist/lib \
 | `-backend`     | `"cpu"`                                   |
 | `-max`         | `1024`                                    |
 | `-lib`         | `$LITERTLM_LIB`                           |
-| `-speculative` | `false` — enable multi-token-prediction (MTP) speculative decoding. Requires a model with an MTP draft head bundled (e.g. `litert-community/gemma-4-E4B-it-litert-lm`). On CPU, expect a meaningful speedup only on E4B-class models; smaller models can regress. See [`examples/speculative`](../speculative) for a side-by-side benchmark. |
+| `-speculative` | `false` — enable multi-token-prediction speculative decoding. Requires a model with an MTP draft head (e.g. `litert-community/gemma-4-E4B-it-litert-lm`). See [`examples/speculative`](../speculative) for a side-by-side benchmark. |
 
 ## Expected output
 

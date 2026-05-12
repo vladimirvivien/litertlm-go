@@ -1,20 +1,19 @@
 # Example: Cancel/Interrupt Streaming Generation
 
-This examples shows how to use the `litertlm-go` API to cancel  a 
-long-running response generation.
+Cancels a streaming generation mid-flight by cancelling the
+`context.Context` passed to `Client.GenerateStream`.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 ## What this example shows
 
-- Create a new litertlm-go `Client`
-- Create a cancellable `context.Context`
-- Use the context to initiate a stream geneartion via `Client.GenerateStream`.
-- Call `Context.CancelFn()` after receiving `n` count of message `litertlm.Chunk`
+- `Client.GenerateStream(ctx, prompt)` returning an
+  `iter.Seq2[Chunk, error]`.
+- Cancelling the context after N received chunks; the iterator
+  observes the cancellation and terminates.
 
 ## Run
 
@@ -27,7 +26,7 @@ LITERTLM_LIB=/abs/path/to/dist/lib \
 | Flag             | Default                                                    | Notes                                  |
 | ---------------- | ---------------------------------------------------------- | -------------------------------------- |
 | `-model`         | (required)                                                 | Path to a `.litertlm` model.           |
-| `-prompt`        | `"Tell me a long story about a dragon and a wizard."`      | Something the model wants to keep going. |
+| `-prompt`        | `"Tell me a long story about a dragon and a wizard."`      | A long-form prompt so cancellation lands mid-decode. |
 | `-cancel-after`  | `8`                                                        | Number of stream chunks to read before cancelling. |
 | `-max`           | `4096`                                                     |                                        |
 | `-backend`       | `"cpu"`                                                    |                                        |

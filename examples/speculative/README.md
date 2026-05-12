@@ -76,15 +76,12 @@ prompt length, and the model's draft-token acceptance rate.
 
 ## Notes
 
-- **Two engine loads.** Because speculative decoding is engine-scoped,
-  the example builds two Clients in sequence. Total wall time
-  roughly doubles compared to a single inference run. For a faster
-  smoke test, use the smaller E2B model.
-- **Speedup is workload-dependent.** Short replies (a few tokens)
-  may show no measurable speedup or even a small regression because
-  the speculative-decoding overhead isn't amortised. The benefit
-  scales with decode length.
-- **Library compatibility.** If your LiteRT-LM build doesn't support
-  multi-token prediction, the speculative `New(...)` call returns a
-  clear engine-construction error. The first (baseline) Client
-  loads independently and still works.
+- **Two engine loads.** Speculative decoding is engine-scoped, so the
+  example constructs two Clients in sequence. Total wall time roughly
+  doubles compared to a single inference run.
+- **Speedup scales with decode length.** Short replies may show no
+  measurable speedup or a small regression — the speculative overhead
+  is paid once but pays off across many decoded tokens.
+- **Library compatibility.** If the LiteRT-LM build does not support
+  multi-token prediction, the speculative `New(...)` call returns an
+  engine-construction error. The baseline Client loads independently.

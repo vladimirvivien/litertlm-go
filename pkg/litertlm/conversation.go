@@ -13,10 +13,10 @@ import (
 // systemMessageJSON should be the content (a JSON string or content
 // array), not a `{role,content}` envelope — the C side wraps it itself
 // (see c/engine.cc litert_lm_conversation_create). The C config
-// constructor ignores its `engine` argument; we still require it as a
-// non-zero handle for callsite symmetry with NewConversation. Setters
-// copy strings into std::string fields, so the Go bytes need not
-// outlive the call.
+// constructor ignores its `engine` argument; the wrapper still
+// requires it as a non-zero handle for callsite symmetry with
+// NewConversation. Setters copy strings into std::string fields, so
+// the Go bytes need not outlive the call.
 func NewConversationConfig(
 	engine Engine,
 	sessionConfig SessionConfig,

@@ -77,8 +77,8 @@ Per-call options:
 text, err := client.Generate(ctx, "The capital of France is")
 ```
 
-`ctx` cancellation is wired through to `Session.Cancel` internally,
-so `context.WithTimeout` and `context.WithCancel` Just Work:
+`ctx` cancellation is propagated to `Session.Cancel` internally, so
+`context.WithTimeout` and `context.WithCancel` apply:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

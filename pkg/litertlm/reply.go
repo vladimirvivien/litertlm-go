@@ -69,8 +69,8 @@ func (r *Reply) Raw() string {
 // parseReply unmarshals the C-side JSON envelope into a *Reply and
 // strips Gemma 4 quote markers (`<|"|>`) from any string-typed tool
 // arguments. The marker leakage is a known C-side passthrough quirk
-// for string-typed function args; we normalise once here so callers
-// always see clean values.
+// for string-typed function args; this normalisation runs once here
+// so callers always see clean values.
 func parseReply(raw string) (*Reply, error) {
 	var msg struct {
 		Role      string             `json:"role"`

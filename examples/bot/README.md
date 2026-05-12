@@ -75,35 +75,27 @@ loaded gemma-4-E2B-it.litertlm  (memory: MEM.log, 2 turns, 159 system tokens, bu
 🤖 Tide Runner.
 ```
 
-Note that warmup time grows with persisted memory size — the handshake
-prefills the system prompt + memory at startup, so you pay the
-prefill cost once instead of on every first reply. See **Sizing
-`-max`** below for guidance on long-session configurations.
+Warmup time grows with persisted memory size: the startup handshake
+prefills the system prompt and memory once so the first user reply
+runs at steady-state speed. See **Sizing `-max`** below for
+long-session configurations.
 
 ## Startup sequence
 
-`litertlm.New` loads the model weights, but the engine defers some
-fixed setup cost (TFLite executor lazy init, allocator preallocation,
-model-file mmap page-in) until the first inference. Without
-intervention, the user pays this on their first prompt — they type,
-hit enter, and wait noticeably longer than for subsequent replies.
-
-The bot frontloads this with a one-shot warmup inference against a
-throwaway temp `Chat`:
+`litertlm.New` loads the model weights but defers fixed setup
+(TFLite executor lazy init, allocator preallocation, model-file
+mmap page-in) until the first inference. A one-shot warmup
+inference against a throwaway temp `Chat` frontloads it:
 
 ```
 Waking up ⏱️... done in 982ms
 ```
 
-Then the prompt appears and the first real reply runs at steady-state
-speed. With ephemeral memory (the default) the system prompt is small,
-so warmup is sub-second and the first user turn pays only its own
-prefill + decode.
-
-If you enable persistence with `-mem MEM.log` and your transcript
-grows to thousands of tokens, the first user turn after startup pays
-the full system + memory prefill cost (because warmup uses a temp
-Chat, not the main one). Compaction keeps that cost bounded.
+With ephemeral memory (default), the system prompt is small and
+warmup is sub-second. With `-mem MEM.log` and a multi-thousand-token
+transcript, the first user turn after startup still pays the full
+system + memory prefill cost — warmup runs on a temp Chat, not the
+main one. Compaction keeps that cost bounded.
 
 ## Files
 
@@ -212,23 +204,19 @@ between compactions; lower when memory is tight.
 
 ## Limitations
 
-- **`-max` must be generous enough for the compaction step.** The
-  compaction call sends the full transcript through a fresh chat with
-  its own system prompt; if `transcript + compactionSystemPrompt +
-  replyReserve` exceeds `-max`, compaction will fail with a
-  `DYNAMIC_UPDATE_SLICE` tensor error from the prefill. Default
-  `-max 4096` handles ~3000-token transcripts comfortably; lower it
-  only when you've measured.
-- **Memory is single-tenant.** `MEM.log` lives in the cwd; running two
-  bots in the same directory will interleave their writes. Use `-mem`
-  to point each instance at its own file.
-- **No memory rotation.** Compaction overwrites `MEM.log` in place. If
-  the summary loses something important, hand-edit before the next
-  run.
-- **Body terminator caveat.** A model-emitted line of four-or-more
-  backticks alone would terminate the stored body early. In practice,
-  models emit three-backtick fences for code blocks, so this is rare —
-  but worth knowing if you ever see truncated reloads.
+- **`-max` must accommodate the compaction step.** Compaction sends
+  the full transcript through a fresh chat with its own system
+  prompt; if `transcript + compactionSystemPrompt + replyReserve`
+  exceeds `-max`, prefill fails with a `DYNAMIC_UPDATE_SLICE` tensor
+  error. `-max 4096` fits ~3000-token transcripts.
+- **Memory is single-tenant.** `MEM.log` lives in the cwd; two bots
+  in the same directory interleave writes. Use `-mem` to point each
+  instance at its own file.
+- **No memory rotation.** Compaction overwrites `MEM.log` in place.
+  Hand-edit before the next run if the summary loses something.
+- **Body terminator.** A model-emitted line of four-or-more backticks
+  alone terminates the stored body early. Models normally emit
+  three-backtick fences for code blocks, so this is rare.
 
 ## Custom system prompt
 

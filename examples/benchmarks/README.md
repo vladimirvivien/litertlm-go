@@ -53,21 +53,21 @@ LITERTLM_LIB=/abs/path/to/lib \
   …
 ```
 
-`Total init time` is constant across turns (one-time engine
-initialisation); `Time to first token` typically drops on subsequent
-turns because the model is already warm.
+`Total init time` is the one-time engine initialisation cost and is
+constant across turns. `Time to first token` typically decreases on
+subsequent turns once the engine is warm.
 
-The default prompt uses a completion-style phrasing because chat-tuned
-models on the raw `Generate` path can produce empty or repetitive
-output for bare instructions. For chat-tuned flows that need full
-sentences, use the [`Chat`](../chat) API or [`autotool`](../autotool)
-example.
+The default prompt is completion-style: `Generate` does not apply
+the chat template, so chat-tuned models can emit empty or repetitive
+output for bare instructions. For chat-tuned flows that need
+instructional prompts, use the [`Chat`](../chat) or
+[`autotool`](../autotool) example.
 
 ## Notes
 
-- **Skip `WithBenchmarkEnabled()` and `Response.Benchmark()` returns nil.**
-  The accessor is safe to call even without the option set; the
-  example errors out clearly to surface the misconfiguration.
+- **Without `WithBenchmarkEnabled()`, `Response.Benchmark()` returns nil.**
+  Calling the accessor is safe in that state; check for a nil
+  `*Benchmark` before dereferencing.
 - **For low-level access**, `Session.BenchmarkInfo()` and
   `Conversation.BenchmarkInfo()` return the underlying C handle. The
   high-level `Response.Benchmark()` snapshots into Go memory and

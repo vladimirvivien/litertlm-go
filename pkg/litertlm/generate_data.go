@@ -7,25 +7,16 @@ import (
 	"reflect"
 )
 
-// Constrained-decoding integration is upstream-pending. As of
-// LiteRT-LM commit 758faf2d (2026-05-08), the C API exposes
-// litert_lm_conversation_config_set_enable_constrained_decoding to
-// turn the feature on, but no companion symbol to deliver the JSON
-// schema the runtime should constrain to. Until that lands,
-// GenerateData[T] / GenerateDataMulti[T] rely on prompt augmentation
-// + extractJSON tolerance.
-//
-// When the schema-delivery symbol appears upstream:
-//   1. Bind it in pkg/litertlm/bindings.go.
-//   2. Add a WithSchema(jsonSchema) GenOption.
-//   3. Apply it before generateMulti when set; the runtime guarantees
-//      valid JSON output.
-//   4. Skip the extractJSON path on success.
+// The C API exposes only the boolean toggle for constrained
+// decoding (`litert_lm_conversation_config_set_enable_constrained_decoding`)
+// and not a JSON schema delivery symbol. GenerateData[T] /
+// GenerateDataMulti[T] therefore rely on prompt augmentation and
+// extractJSON tolerance rather than runtime schema enforcement.
 
 // defaultSchemaInstruction is a Printf format string with one %s
-// placeholder for the shape hint. Tuned for instruction-following
-// local LLMs — short, imperative, calls out the no-fences rule
-// because models love to wrap output in ```json ... ```.
+// placeholder for the shape hint. Imperative and short; explicitly
+// forbids markdown fences, which instruction-following local LLMs
+// otherwise tend to wrap JSON output in.
 const defaultSchemaInstruction = "Respond with valid JSON only — no commentary, no markdown fences.\n" +
 	"The output must match this shape:\n%s"
 

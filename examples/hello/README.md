@@ -1,20 +1,17 @@
-# Example: Introduction to the litertlm-go
+# Example: Hello World
 
-This is a simple "hello world" introduction to  `litertlm-go`.
+Minimal one-shot generation against a `.litertlm` model.
 
 ## What this example shows
 
-- Creates a new instance of `litertlmgo.Client`
-- Use `Client.Generate` to do a one-shot text generate from the LLM.
-- Prints the textual reply 
-
-
+- `litertlm.New(ctx, ...)` to construct a `Client`.
+- `Client.Generate(ctx, prompt)` for a one-shot text completion.
+- Printing the returned string.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 ## Run
 
@@ -29,7 +26,7 @@ Optional flags:
 | Flag        | Default                              | Notes                                                          |
 | ----------- | ------------------------------------ | -------------------------------------------------------------- |
 | `-model`    | (required)                           | Path to the `.litertlm` file.                                  |
-| `-prompt`   | `"The capital of France is"`         | The text fed to the model. Pick a *completion-style* prompt.   |
+| `-prompt`   | `"The capital of France is"`         | Completion-style prompt; `Generate` does not apply the chat template. |
 | `-backend`  | `"cpu"`                              | Set to `"gpu"` if you staged the GPU-capable build (see `gpu` example). |
 | `-max`      | `1024`                               | Total token budget. Must be ≥ the model's smallest prefill signature (typically 128). |
 | `-lib`      | `$LITERTLM_LIB`                      | Override the lib directory without touching the env var.       |

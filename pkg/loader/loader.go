@@ -66,7 +66,7 @@ func GetLibraryFilename(path, lib string) string {
 // This matches the convention of the prebuilt accelerator/plugin libraries
 // shipped under prebuilt/<platform>/ in the LiteRT-LM repository — including
 // Windows, where the prebuilt plugins retain the "lib" prefix even though
-// our own Bazel cc_binary build artifacts omit it.
+// the project's Bazel cc_binary build artifacts omit it.
 //
 //   - Linux/FreeBSD: lib<name>.so
 //   - Windows:       lib<name>.dll

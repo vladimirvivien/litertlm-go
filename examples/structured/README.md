@@ -1,25 +1,24 @@
 # Example: Typed Structured Output
 
-This example shows `litertlm-go` can generate type-safe structured output from 
-the model output. In the example, the code promps the model for `Recipe` 
-(title + ingredients + steps), and it automatically parses
-the response into a typed Go struct.
+Generates a typed Go value (`Recipe { title, ingredients, steps }`)
+directly from a model prompt via `GenerateData[T]`, which appends a
+JSON-shape instruction and unmarshals the response into the target
+type.
 
 ## What this example shows
-- Create and configure a new instance of `litertlm.Client`.
-- Uses `litertlm.GenerateData[T]` to generate a one-shot response that
-  automatically populate a value of type `*T` from the model's JSON output.
-- `litertlm.WithRetries(n)` — can retry if there are parse failures, in cases
-  where the model emits improperly formatted JSON.
-- `*GenerateDataError` — distinguishes parse failures (model returned
-  text that couldn't unmarshal) from generate failures (FFI / ctx
+
+- `litertlm.GenerateData[T](ctx, client, prompt)` returning a `*T`
+  populated from the model's JSON output.
+- `litertlm.WithRetries(n)` to retry on parse failure when the model
+  emits malformed JSON.
+- `*GenerateDataError` distinguishing parse failures (model returned
+  text that did not unmarshal) from generate failures (FFI / ctx
   cancellation).
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 ## Run
 
@@ -67,9 +66,9 @@ A JSON-pretty-printed Recipe struct, e.g.:
 
 ## Notes
 
-- **Model reliability** E4B (4B parameters) follows the
-  "JSON" instructions in most cases. The E2B Gemma model (the smallest model) 
-  can be less consistent and may require retries.
+- **Model reliability.** Gemma 4 E4B (4B parameters) follows the
+  injected JSON instruction reliably; the smaller E2B variant is
+  less consistent and benefits from `WithRetries`.
 - **Customising the instruction** - use `WithSchemaInstruction(s)` to
   override the default preamble.
 

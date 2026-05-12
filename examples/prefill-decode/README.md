@@ -1,26 +1,26 @@
 # Example: Prefill-Decode
 
-This example uses the lower-level `litertlm-go` API sequence of `RunPrefill` → `RunDecode`
-flow instead of the all-in-one `Session.GenerateContent`. The exposes how
-the model actually executes: 
-- *Prefill* tokenises and processes the prompt
-- *Decode* generates the response token-by-token
+Runs the two-phase generation flow (`RunPrefill` → `RunDecode`)
+explicitly instead of the all-in-one `Session.GenerateContent`.
 
-The `litertlm-go` low-level API mirrors the C API and allows you to measure 
-the different inference phases independently (token introspection, scoring, etc.).
+- *Prefill* tokenises and processes the prompt.
+- *Decode* generates the response token-by-token.
+
+The low-level API mirrors the C API and exposes each phase for
+independent timing or interleaving with other engine calls.
 
 ## What this example shows
 
-- `Session.RunPrefill(inputs)` — feeds the prompt context into the
-  session, blocks and returns when prefill is done.
-- `Session.RunDecode()` — synchronously generates the response from the prefilled context
-  and returns a `Responses` handle (which the caller must `Delete()`).
+- `Session.RunPrefill(inputs)` — feeds prompt context into the
+  session and blocks until prefill completes.
+- `Session.RunDecode()` — synchronously generates the response from
+  the prefilled context and returns a `Responses` handle (caller
+  must `Delete()`).
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 ## Run
 
@@ -48,6 +48,5 @@ response:  the capital of France is the capital of France.
 **The capital of France is Paris.**
 ```
 
-Times vary with hardware; prefill is roughly linear in prompt length
-and decode is roughly linear in output length.
-
+Prefill duration scales with prompt length; decode duration scales
+with output length.

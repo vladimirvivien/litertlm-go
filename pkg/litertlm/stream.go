@@ -13,10 +13,11 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
 )
 
-// streamWatchdog bounds how long we'll wait for the C engine's Final
-// chunk. Its real job is to keep a runnable timer on the scheduler so
-// the Go runtime doesn't fire an "all goroutines asleep" deadlock while
-// we're parked on <-done waiting for a foreign-thread callback.
+// streamWatchdog bounds the wait for the C engine's Final chunk.
+// Its real job is to keep a runnable timer on the scheduler so the
+// Go runtime does not fire an "all goroutines asleep" deadlock
+// while the consumer is parked on <-done waiting for a foreign-thread
+// callback.
 const streamWatchdog = 24 * time.Hour
 
 // StreamChunk is one piece of a streaming generation result. Callbacks
@@ -29,8 +30,9 @@ type StreamChunk struct {
 }
 
 // One process-wide trampoline shared by all streams. purego.NewCallback
-// allocates a permanent C function pointer, so we register a single
-// trampoline and dispatch by a cookie passed through `callback_data`.
+// allocates a permanent C function pointer, so a single trampoline is
+// registered and streams dispatch by a cookie passed through
+// `callback_data`.
 var (
 	streamOnce      sync.Once
 	streamTrampAddr uintptr

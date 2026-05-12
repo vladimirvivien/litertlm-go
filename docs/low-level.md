@@ -5,20 +5,21 @@ fine-grained low-level control of the runtime engine.
 
 Common reasons to drop down:
 
-- **Manual prefill / decode.** - Take control of manual prefil when necessary.
-- **Text scoring.** `Session.ScoreTexts` returns log-probabilities for
-  candidate completions.
-- **Token introspection.**  - With `Engine.Tokenize` / `Engine.Detokenize`,
+- **Manual prefill / decode.** Explicit `RunPrefill` / `RunDecode`
+  sequencing in place of `Session.GenerateContent`.
+- **Text scoring.** `Session.ScoreTexts` returns log-probabilities
+  for candidate completions.
+- **Token introspection.** `Engine.Tokenize` / `Engine.Detokenize`,
   `Engine.StartTokenIDs` / `StopTokenIDs`.
-- **Deterministic resource lifetimes.** - Use low-level controls for resource
-creation and releases.
-- **Multimodal inputs.** Fine control over multi-modal input data with 
-`[]InputData` with `NewBinaryInput(InputImage, …)`. For ergonomic
-high-level multimodal calls, prefer `Client.GenerateMulti` /
-`GenerateDataMulti[T]` with `Part` constructors — see
-[Client → Multimodal inputs](client.md#multimodal-inputs).
-- **Custom Conversation flows.** - Sequencing tool-call and tool-response
-  messages directly with prefilled message histories, etc.
+- **Deterministic resource lifetimes.** Explicit `Delete()` on each
+  C-backed handle.
+- **Multimodal inputs.** `[]InputData` with
+  `NewBinaryInput(InputImage, …)`. For ergonomic high-level
+  multimodal calls, use `Client.GenerateMulti` /
+  `GenerateDataMulti[T]` with `Part` constructors — see
+  [Client → Multimodal inputs](client.md#multimodal-inputs).
+- **Custom Conversation flows.** Sequencing tool-call and
+  tool-response messages directly, prefilled message histories, etc.
 
 ## Method map
 

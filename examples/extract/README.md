@@ -75,10 +75,10 @@ LITERTLM_LIB=/abs/path/to/dist/lib \
   Define your own `T` to extract any shape — e.g.,
   `Recipe { Title, Ingredients, Steps }` for a recipe-card photo,
   `BusinessCard { Name, Phone, Email, Company }` for a contact image.
-- **Parse failures.** If the model wraps its JSON in `` ```json ... ``` ``
-  fences or appends prose, the tolerant extractor strips them. If it
-  invents fields outside the schema, `*GenerateDataError` with
-  `Phase == "parse"` carries the raw output for inspection.
+- **Parse failures.** The tolerant extractor strips markdown-fenced
+  JSON (`` ```json ... ``` ``) and trailing prose. Fields outside the
+  schema surface as `*GenerateDataError` with `Phase == "parse"`; the
+  raw output is on the error for inspection.
 - **Alignment is a qualitative signal.** The assessment step is a
   normal text generation; treat it as a sanity check, not an
   evaluation harness.

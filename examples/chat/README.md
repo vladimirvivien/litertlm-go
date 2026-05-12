@@ -1,21 +1,20 @@
 # Example: Multi-Turn Conversation with the Chat API
 
-This examples demonstrate the  **Chat API** `Send` and `Reply`
-multi-turn conversation.
+Runs a multi-turn conversation against the `Chat` API.
 
 ## What this example shows
 
-- Use a new of `litertlmgo.Client` to create new `Chat`
-- Use `Client.Send` to send message to LLM engine.
-- Use the `Reply` to inspect message response.
-- The API automatically keeps prior turns in context.
-
+- `Client.NewChat(ctx, WithSystemPrompt(...))` to open a chat with a
+  system message.
+- `Chat.Send(ctx, message)` returning a `*Reply` whose `Text()` gives
+  the assistant's response.
+- Successive `Send` calls automatically carry prior turns in the
+  conversation's KV cache.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` chat-tuned model (e.g. Gemma 4).
 
 ## Run
 

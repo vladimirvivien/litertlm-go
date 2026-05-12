@@ -22,8 +22,8 @@ type clientConfig struct {
 	activationDataType *int
 	prefillChunkSize   *int
 
-	// *bool fields stay nil until the user opts in or out, so we can
-	// preserve the C-side default when the user doesn't care.
+	// *bool fields stay nil until the user opts in or out, preserving
+	// the C-side default when no Option sets them.
 	speculativeDecodingEnabled *bool
 	benchmarkEnabled           *bool
 	parallelFileLoading        *bool

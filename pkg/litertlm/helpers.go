@@ -23,8 +23,8 @@ func bytePtrOrNil(s string) (*byte, error) {
 // repeat. sym is the bare C symbol name; the formatted error reads
 // `litertlm: <sym> failed`.
 //
-// lazyFun.Call's signature is `(ret any, args ...any)` so we widen the
-// typed unsafe.Pointer args here rather than at every callsite.
+// lazyFun.Call's signature is `(ret any, args ...any)`; the typed
+// unsafe.Pointer args are widened here rather than at every callsite.
 func callForHandle[H ~uintptr](f *lazyFun, sym string, args ...unsafe.Pointer) (H, error) {
 	var h H
 	anyArgs := make([]any, len(args))

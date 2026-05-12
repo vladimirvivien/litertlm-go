@@ -1,20 +1,19 @@
 # Example: Text Tokenization
 
-This example uses the lower-level of `litertlm-go` API to demostrate 
-access to the engines non-generation features. It implements a demo of 
-the engine's tokenizer.
+Tokenizes a string with `Engine.Tokenize` and detokenizes the result
+back to bytes — the low-level path for non-generation engine features.
 
 ## What this example shows
-- Use `litertlm.Load` to load the runtime library files for the specified backend.
-- Configure `Engine` using `EngineSettings`
-- Then use `Engine.Tokenize` to generate token IDs.
-- Use `Engine.Detokenize` to reverse the process and produce equivalent bytes.
+
+- `litertlm.Load` to load the runtime library for a chosen backend.
+- `Engine` construction via `EngineSettings`.
+- `Engine.Tokenize(text)` returning the token-ID slice.
+- `Engine.Detokenize(ids)` round-tripping back to bytes.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in`LITERTLM_LIB`.
-2. A `.litertlm` model (i.e. Gemma 4). 
-3. `litertlm-go`
+1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
+2. A `.litertlm` model (e.g. Gemma 4).
 
 
 ## Run
@@ -44,5 +43,5 @@ round-trip:  "Hello,▁world.▁How▁are▁you▁today?"
 Token ids are model-specific — different `.litertlm` files produce
 different splits.
 
-The `▁` character (U+2581 LOWER ONE EIGHTH BLOCK) in the detokenized
-output is **expected** — it's SentencePiece's internal space marker.
+The `▁` character (U+2581) in the detokenized output is
+SentencePiece's internal space marker.
