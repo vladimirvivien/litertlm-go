@@ -48,6 +48,10 @@ func main() {
 	compactNow := flag.Bool("compact-now", false, "force a compaction at startup (requires -mem)")
 	compactAt := flag.Float64("compact-at", 0.80, "compact when projected tokens exceed this fraction of -max")
 	replyReserve := flag.Int("reply-reserve", 1024, "tokens reserved for the model's reply when budgeting")
+	temperature := flag.Float64("temperature", 0.7, "sampling temperature; 0 = greedy (prone to repetition loops on small models)")
+	topP := flag.Float64("top-p", 0.95, "nucleus sampling cutoff (used when temperature > 0)")
+	topK := flag.Int("top-k", 40, "top-k sampling cutoff (used when temperature > 0)")
+	seed := flag.Int("seed", 0, "sampler RNG seed (0 = nondeterministic)")
 	flag.Parse()
 
 	if *model == "" {
@@ -80,6 +84,15 @@ func main() {
 	if *speculative {
 		opts = append(opts, litertlm.WithSpeculativeDecodingEnabled(true))
 	}
+	sampler := litertlm.DefaultSamplerParams()
+	if *temperature > 0 {
+		sampler.Type = litertlm.SamplerTopP
+		sampler.Temperature = float32(*temperature)
+		sampler.TopP = float32(*topP)
+		sampler.TopK = int32(*topK)
+		sampler.Seed = int32(*seed)
+	}
+	opts = append(opts, litertlm.WithDefaultSampler(sampler))
 
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {

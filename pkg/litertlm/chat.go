@@ -225,7 +225,25 @@ func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string,
 	constrainedDecoding bool, registry map[string]ToolDefinition, maxToolHops int,
 	extraContextJSON string, filterChannelContentFromKVCache *bool,
 ) (*Chat, error) {
-	convCfg, err := NewConversationConfig(c.engine, 0,
+	// If the client has a defaultSampler, materialize a SessionConfig
+	// carrying it so the Conversation uses the same sampler the Generate
+	// path does. Without this, the Conversation falls back to the C
+	// engine's built-in greedy default, which on small models traps the
+	// decoder in self-reinforcing token loops. The C set_session_config
+	// copies the underlying struct (c/engine.cc:276), so the local handle
+	// is safe to release immediately after NewConversationConfig returns.
+	var sessionConfig SessionConfig
+	if c.cfg.defaultSampler != nil {
+		sc, err := NewSessionConfig()
+		if err != nil {
+			return nil, fmt.Errorf("litertlm: NewChat: session config: %w", err)
+		}
+		defer sc.Delete()
+		sc.SetSamplerParams(*c.cfg.defaultSampler)
+		sessionConfig = sc
+	}
+
+	convCfg, err := NewConversationConfig(c.engine, sessionConfig,
 		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
