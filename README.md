@@ -99,6 +99,7 @@ The followings walk you through how to build them:
 | `examples/extract/`           | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison  |
 | `examples/cancel/`            | Cancelling a streaming generation via `context.WithCancel`         |
 | `examples/prefill-decode/`    | Explicit two-phase generation (low-level)                          |
+| `examples/conversation-lowlevel/` | Low-level twin of Chat: hand-built `SessionConfig` + `ConversationConfig` + `SendMessage` + `RenderMessage` + `BenchmarkInfo` |
 | `examples/score/`             | `ScoreTexts` + `Score` / `TokenLength` (low-level)                 |
 | `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level)   |
 | `examples/gpu/`               | GPU-backed generation                                              |
