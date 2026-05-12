@@ -95,6 +95,7 @@ The followings walk you through how to build them:
 | `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
 | `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection)               |
 | `examples/vision/`            | `GenerateMulti` (image + text) with self-comparison against a sidecar |
+| `examples/audio/`             | `GenerateMulti` (audio + text) — transcription with optional alignment vs a reference |
 | `examples/extract/`           | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison  |
 | `examples/cancel/`            | Cancelling a streaming generation via `context.WithCancel`         |
 | `examples/prefill-decode/`    | Explicit two-phase generation (low-level)                          |
