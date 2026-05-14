@@ -94,6 +94,7 @@ The followings walk you through how to build them:
 | `examples/chat-history/`      | Seed `Chat` with a prior transcript via `WithInitialMessages` + `WithExtraContext` / `WithFilterChannelContentFromKVCache` / `WithMaxToolHops` |
 | `examples/conversation/`      | `Chat` + `NewRawTool` + manual dispatch via `Reply.ToolCalls`      |
 | `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
+| `examples/tool-policy/`       | `WithToolPolicy(ToolPolicyReturnOnError vs ToolPolicyInformOnError)` — handler-error behavior under auto-dispatch |
 | `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection)               |
 | `examples/vision/`            | `GenerateMulti` (image + text) with self-comparison against a sidecar |
 | `examples/audio/`             | `GenerateMulti` (audio + text) — transcription with optional alignment vs a reference |
