@@ -91,6 +91,7 @@ The followings walk you through how to build them:
 | `examples/hello/`             | Minimal `Generate`                                                 |
 | `examples/stream/`            | `GenerateStream` with range-over-func                              |
 | `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
+| `examples/chat-history/`      | Seed `Chat` with a prior transcript via `WithInitialMessages` + `WithExtraContext` / `WithFilterChannelContentFromKVCache` / `WithMaxToolHops` |
 | `examples/conversation/`      | `Chat` + `NewRawTool` + manual dispatch via `Reply.ToolCalls`      |
 | `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
 | `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection)               |
