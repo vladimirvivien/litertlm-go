@@ -107,6 +107,7 @@ The followings walk you through how to build them:
 | `examples/gpu/`               | GPU-backed generation                                              |
 | `examples/benchmarks/`        | Per-generation benchmark capture via `WithBenchmarkEnabled` + `Response.Benchmark()` |
 | `examples/cache-warmup/`      | Cold-vs-warm `WithCacheDir` load — XNNPACK / mldrift artefact reuse        |
+| `examples/activation-dtype/`  | Default-vs-selected `WithActivationDataType` (F32 / F16 / I16 / I8) — empirical per-backend deltas |
 | `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
 
 ## Documentation
