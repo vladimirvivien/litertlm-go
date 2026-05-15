@@ -38,11 +38,16 @@ func main() {
 	model := flag.String("model", "", "path to .litertlm chat-tuned model file")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
+	visionBackend := flag.String("vision-backend", "cpu", "vision encoder backend used when an image is attached")
+	audioBackend := flag.String("audio-backend", "cpu", "audio encoder backend used when an audio file is attached")
+	cacheDir := flag.String("cache-dir", "", "directory passed to WithCacheDir; empty leaves the engine default (alongside the model file)")
 	systemFlag := flag.String("system", "", "inline system prompt (overrides -system-file and SYSTEM.md)")
 	systemFile := flag.String("system-file", "", "path to system prompt file (overrides SYSTEM.md)")
 	memPath := flag.String("mem", "", "path to a memory file to persist conversation across runs (e.g. MEM.log). Empty = ephemeral chat (default)")
 	maxTokens := flag.Int("max", 4096, "engine max tokens (prompt + output); raise toward the model's context ceiling (32K for Gemma 4) for longer chats — KV cache grows linearly")
 	prompt := flag.String("prompt", "", "if set, send this single message and exit (one-shot mode)")
+	var attachPaths multiStringFlag
+	flag.Var(&attachPaths, "attach", "attach a media file (image or audio); may be repeated. Image: .png/.jpg/.jpeg/.webp. Audio: .wav/.mp3/.flac/.ogg/.opus/.m4a/.aac")
 	speculative := flag.Bool("speculative", false, "enable multi-token-prediction speculative decoding")
 	reset := flag.Bool("reset", false, "truncate the memory file before starting (requires -mem)")
 	compactNow := flag.Bool("compact-now", false, "force a compaction at startup (requires -mem)")
@@ -79,7 +84,12 @@ func main() {
 		litertlm.WithLib(*libPath),
 		litertlm.WithModel(*model),
 		litertlm.WithBackend(*backend),
+		litertlm.WithVisionBackend(*visionBackend),
+		litertlm.WithAudioBackend(*audioBackend),
 		litertlm.WithMaxTokens(*maxTokens),
+	}
+	if *cacheDir != "" {
+		opts = append(opts, litertlm.WithCacheDir(*cacheDir))
 	}
 	if *speculative {
 		opts = append(opts, litertlm.WithSpeculativeDecodingEnabled(true))
@@ -111,6 +121,15 @@ func main() {
 		compactAt:     *compactAt,
 		replyReserve:  *replyReserve,
 		compactPrompt: compactSystemPrompt,
+	}
+
+	for _, p := range attachPaths {
+		att, err := attachmentFromPath(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "attach %s: %v\n", p, err)
+			os.Exit(1)
+		}
+		bot.pendingAttachments = append(bot.pendingAttachments, att)
 	}
 
 	if err := bot.loadMemory(); err != nil {
@@ -196,10 +215,23 @@ type bot struct {
 	compactAt     float64
 	replyReserve  int
 	compactPrompt string
+
+	// pendingAttachments accumulates attachments queued for the next
+	// send. Cleared after each multimodal send.
+	pendingAttachments []attachment
+}
+
+// attachment pairs a wrapper Part with the path it was loaded from
+// and the high-level kind ("image" or "audio") used for banner and
+// memory annotation.
+type attachment struct {
+	part litertlm.Part
+	path string
+	kind string
 }
 
 func (b *bot) printBanner() {
-	tokens, err := b.client.TokenLength(b.effectiveSystemPrompt())
+	tokens, err := b.client.TokenLength(b.systemPromptWithSummary())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warn: token count: %v\n", err)
 	}
@@ -210,6 +242,10 @@ func (b *bot) printBanner() {
 	fmt.Fprintf(os.Stderr, "🤖 %s\n", b.modelName)
 	fmt.Fprintf(os.Stderr, "💾 %s · 📝 %d system tokens\n", memDesc, tokens)
 	fmt.Fprintf(os.Stderr, "📐 %d max · %d reply reserve\n", b.maxTokens, b.replyReserve)
+	if len(b.pendingAttachments) > 0 {
+		fmt.Fprintf(os.Stderr, "📎 %d attachments: %s\n",
+			len(b.pendingAttachments), renderAttachmentSummary(b.pendingAttachments))
+	}
 }
 
 func (b *bot) repl(ctx context.Context) error {
@@ -257,6 +293,12 @@ func (b *bot) repl(ctx context.Context) error {
 			if isExitCommand(line) {
 				return nil
 			}
+			if strings.HasPrefix(line, "/") {
+				if err := b.handleSlash(line); err != nil {
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+				}
+				continue
+			}
 			if err := b.handle(ctx, line); err != nil {
 				if errors.Is(err, context.Canceled) {
 					fmt.Println()
@@ -269,6 +311,13 @@ func (b *bot) repl(ctx context.Context) error {
 }
 
 func (b *bot) handle(ctx context.Context, msg string) error {
+	if len(b.pendingAttachments) > 0 {
+		return b.sendMultimodal(ctx, msg)
+	}
+	return b.sendText(ctx, msg)
+}
+
+func (b *bot) sendText(ctx context.Context, msg string) error {
 	if err := b.maybeCompact(ctx, msg); err != nil {
 		return err
 	}
@@ -304,24 +353,162 @@ func (b *bot) handle(ctx context.Context, msg string) error {
 	return nil
 }
 
+// sendMultimodal runs one multimodal turn through
+// Client.GenerateMultiStream. The Chat handle is closed before the
+// call (the C engine permits one active session at a time) and
+// reopened afterwards so the next text turn sees the new memory
+// entry via WithInitialMessages.
+func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
+	userBody := annotateUserMessage(b.pendingAttachments, msg)
+	if err := b.maybeCompact(ctx, userBody); err != nil {
+		return err
+	}
+	b.closeChat()
+
+	parts := make([]litertlm.Part, 0, len(b.pendingAttachments)+1)
+	for _, a := range b.pendingAttachments {
+		parts = append(parts, a.part)
+	}
+	parts = append(parts, litertlm.Text(msg))
+
+	fmt.Println()
+	fmt.Print("🤖 ")
+	var reply strings.Builder
+	for chunk, err := range b.client.GenerateMultiStream(ctx, parts) {
+		if err != nil {
+			fmt.Println()
+			return fmt.Errorf("stream: %w", err)
+		}
+		fmt.Print(chunk.Text)
+		reply.WriteString(chunk.Text)
+		if chunk.Final {
+			fmt.Println()
+		}
+	}
+
+	if b.memPath != "" {
+		now := time.Now().UTC()
+		b.turns = append(b.turns,
+			turn{role: "user", ts: now, body: userBody},
+			turn{role: "bot", ts: now, body: reply.String()},
+		)
+		if err := b.appendTurnsToFile(b.turns[len(b.turns)-2:]); err != nil {
+			return fmt.Errorf("append memory: %w", err)
+		}
+	}
+
+	b.pendingAttachments = nil
+	b.closeChat()
+	return b.openChat(ctx)
+}
+
+// handleSlash interprets a REPL line that begins with "/".
+func (b *bot) handleSlash(line string) error {
+	fields := strings.Fields(line)
+	cmd := fields[0]
+	args := fields[1:]
+	switch cmd {
+	case "/help":
+		fmt.Println()
+		fmt.Println("  /attach <path>   queue a media file (image or audio) for the next message")
+		fmt.Println("  /attachments     list queued attachments")
+		fmt.Println("  /clear           drop queued attachments")
+		fmt.Println("  /help            this message")
+		fmt.Println("  exit | /exit     quit")
+		return nil
+	case "/attach":
+		if len(args) != 1 {
+			return fmt.Errorf("usage: /attach <path>")
+		}
+		att, err := attachmentFromPath(args[0])
+		if err != nil {
+			return err
+		}
+		b.pendingAttachments = append(b.pendingAttachments, att)
+		fmt.Printf("attached: %s (%s)\n", att.path, att.kind)
+		return nil
+	case "/attachments":
+		if len(b.pendingAttachments) == 0 {
+			fmt.Println("(no attachments)")
+			return nil
+		}
+		for _, a := range b.pendingAttachments {
+			fmt.Printf("[%s] %s\n", a.kind, a.path)
+		}
+		return nil
+	case "/clear":
+		if len(b.pendingAttachments) == 0 {
+			return nil
+		}
+		fmt.Printf("dropped %d attachment(s)\n", len(b.pendingAttachments))
+		b.pendingAttachments = nil
+		return nil
+	default:
+		return fmt.Errorf("unknown command %q; try /help", cmd)
+	}
+}
+
+// annotateUserMessage prefixes msg with one `[kind: path]` line per
+// attachment so the persisted transcript records what was sent.
+func annotateUserMessage(atts []attachment, msg string) string {
+	if len(atts) == 0 {
+		return msg
+	}
+	var b strings.Builder
+	for _, a := range atts {
+		fmt.Fprintf(&b, "[%s: %s]\n", a.kind, a.path)
+	}
+	b.WriteString(msg)
+	return b.String()
+}
+
+func renderAttachmentSummary(atts []attachment) string {
+	parts := make([]string, len(atts))
+	for i, a := range atts {
+		parts[i] = fmt.Sprintf("%s (%s)", filepath.Base(a.path), a.kind)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (b *bot) maybeCompact(ctx context.Context, nextUserMsg string) error {
 	if b.memPath == "" || len(b.turns) == 0 {
 		return nil
 	}
-	sysTokens, err := b.client.TokenLength(b.effectiveSystemPrompt())
+	sysTokens, err := b.client.TokenLength(b.systemPromptWithSummary())
 	if err != nil {
 		return fmt.Errorf("token-count system: %w", err)
+	}
+	historyTokens, err := b.client.TokenLength(historyTextForProjection(b.turns))
+	if err != nil {
+		return fmt.Errorf("token-count history: %w", err)
 	}
 	userTokens, err := b.client.TokenLength(nextUserMsg)
 	if err != nil {
 		return fmt.Errorf("token-count user: %w", err)
 	}
-	projected := sysTokens + userTokens + b.replyReserve
+	projected := sysTokens + historyTokens + userTokens + b.replyReserve
 	threshold := int(float64(b.maxTokens) * b.compactAt)
 	if projected <= threshold {
 		return nil
 	}
 	return b.compact(ctx)
+}
+
+// historyTextForProjection returns a plain-text rendering of the
+// non-summary turns. Used only to project token count for the budget
+// check; the chat template's per-turn wrapping adds a few tokens per
+// turn beyond this estimate.
+func historyTextForProjection(turns []turn) string {
+	msgs, _ := bridgeMemory(turns)
+	if len(msgs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, m := range msgs {
+		b.WriteString(m.Content)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func (b *bot) compact(ctx context.Context) error {
@@ -395,7 +582,16 @@ func (b *bot) ensureChat(ctx context.Context) error {
 }
 
 func (b *bot) openChat(ctx context.Context) error {
-	chat, err := b.client.NewChat(ctx, litertlm.WithSystemPrompt(b.effectiveSystemPrompt()))
+	msgs, summary := bridgeMemory(b.turns)
+	sysPrompt := b.systemPrompt
+	if summary != "" {
+		sysPrompt = sysPrompt + "\n\n--- Prior conversation summary ---\n" + summary + "\n--- End summary ---\n"
+	}
+	opts := []litertlm.ChatOption{litertlm.WithSystemPrompt(sysPrompt)}
+	if len(msgs) > 0 {
+		opts = append(opts, litertlm.WithInitialMessages(msgs))
+	}
+	chat, err := b.client.NewChat(ctx, opts...)
 	if err != nil {
 		return err
 	}
@@ -410,16 +606,44 @@ func (b *bot) closeChat() {
 	}
 }
 
-func (b *bot) effectiveSystemPrompt() string {
-	if len(b.turns) == 0 {
+// systemPromptWithSummary returns the base system prompt plus any
+// compaction summary that bridgeMemory would inject. Used by the
+// banner and by maybeCompact for token-budget projection.
+func (b *bot) systemPromptWithSummary() string {
+	_, summary := bridgeMemory(b.turns)
+	if summary == "" {
 		return b.systemPrompt
 	}
-	var sb strings.Builder
-	sb.WriteString(b.systemPrompt)
-	sb.WriteString("\n\n--- Prior conversation memory ---\n")
-	sb.WriteString(renderTurns(b.turns))
-	sb.WriteString("--- End memory ---\n")
-	return sb.String()
+	return b.systemPrompt + "\n\n--- Prior conversation summary ---\n" + summary + "\n--- End summary ---\n"
+}
+
+// bridgeMemory converts the on-disk transcript into the input shape
+// the Chat constructor wants: WithSystemPrompt(base + summary) +
+// WithInitialMessages(turns).
+//
+// A lone leading "bot" turn (the compaction writer's output: a
+// summary with no preceding user turn) is extracted as the summary
+// string so the remaining message stream is a clean user/assistant
+// alternation. The role map is "bot" → "assistant"; everything else
+// passes through.
+func bridgeMemory(turns []turn) ([]litertlm.Message, string) {
+	var summary string
+	if len(turns) > 0 && turns[0].role == "bot" && (len(turns) == 1 || turns[1].role == "user") {
+		summary = turns[0].body
+		turns = turns[1:]
+	}
+	if len(turns) == 0 {
+		return nil, summary
+	}
+	msgs := make([]litertlm.Message, 0, len(turns))
+	for _, t := range turns {
+		role := t.role
+		if role == "bot" {
+			role = "assistant"
+		}
+		msgs = append(msgs, litertlm.Message{Role: role, Content: t.body})
+	}
+	return msgs, summary
 }
 
 // ---- MEM.log I/O -----------------------------------------------------------
@@ -529,4 +753,67 @@ func renderTurns(turns []turn) string {
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+// ---- attachments -----------------------------------------------------------
+
+var (
+	imageExts = map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".webp": true,
+	}
+	audioExts = map[string]bool{
+		".wav":  true,
+		".mp3":  true,
+		".flac": true,
+		".ogg":  true,
+		".opus": true,
+		".m4a":  true,
+		".aac":  true,
+	}
+	videoExts = map[string]bool{
+		".mp4":  true,
+		".mov":  true,
+		".webm": true,
+		".avi":  true,
+		".mkv":  true,
+	}
+)
+
+func attachmentFromPath(path string) (attachment, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch {
+	case imageExts[ext]:
+		part, err := litertlm.ImageFromFile(path)
+		if err != nil {
+			return attachment{}, err
+		}
+		return attachment{part: part, path: path, kind: "image"}, nil
+	case audioExts[ext]:
+		part, err := litertlm.AudioFromFile(path)
+		if err != nil {
+			return attachment{}, err
+		}
+		return attachment{part: part, path: path, kind: "audio"}, nil
+	case videoExts[ext]:
+		return attachment{}, fmt.Errorf("video not supported by LiteRT-LM; extract a frame (e.g. `ffmpeg -i %s -ss 5 frame.png`) or the audio track (`ffmpeg -i %s audio.wav`) and /attach that", path, path)
+	default:
+		return attachment{}, fmt.Errorf("unsupported extension %q; image (.png/.jpg/.jpeg/.webp) and audio (.wav/.mp3/.flac/.ogg/.opus/.m4a/.aac) only", ext)
+	}
+}
+
+// ---- flags -----------------------------------------------------------------
+
+// multiStringFlag collects repeated `-attach <path>` flag values.
+type multiStringFlag []string
+
+func (m *multiStringFlag) String() string {
+	return strings.Join(*m, ",")
+}
+
+func (m *multiStringFlag) Set(v string) error {
+	*m = append(*m, v)
+	return nil
 }
