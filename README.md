@@ -111,6 +111,7 @@ The followings walk you through how to build them:
 | `examples/prefill-chunk/`     | Default-vs-selected `WithPrefillChunkSize` (CPU-only) — chunked vs unchunked prefill timings |
 | `examples/parallel-load/`     | Parallel vs serial `WithParallelSectionLoading` — `litertlm.New` wall-clock delta |
 | `examples/logging/`           | `SetMinLogLevel` — set the LiteRT-LM log severity floor at startup and toggle mid-program |
+| `examples/per-call-sampler/`  | `WithSampler` per-call override — three sampler shapes (Deterministic / Balanced / Creative) on the same Client |
 | `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
 
 ## Documentation
