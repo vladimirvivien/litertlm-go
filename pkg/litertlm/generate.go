@@ -38,7 +38,8 @@ func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...GenOpt
 // pipeline preprocesses the bytes before invoking the session.
 func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
 	if partsHasBinary(parts) {
-		return c.runMultimodalConversation(ctx, parts, cfg)
+		text, _, err := c.runMultimodalConversation(ctx, parts, cfg)
+		return text, err
 	}
 
 	sess, err := c.openSession(cfg)
@@ -67,11 +68,13 @@ func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig)
 
 // runMultimodalConversation builds a Conversation, sends the
 // content-array message produced from parts, and returns the
-// assistant's text. Used when parts contains image or audio Parts.
-func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
+// assistant's text plus a benchmark snapshot when the Client was
+// constructed with WithBenchmarkEnabled. Used when parts contains
+// image or audio Parts.
+func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) (string, *Benchmark, error) {
 	conv, convCfg, err := c.openMultimodalConversation(cfg)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer conv.Delete()
 	defer convCfg.Delete()
@@ -81,17 +84,21 @@ func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cf
 
 	msgJSON, err := partsToConversationMessage(parts)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	raw, err := conv.SendMessage(msgJSON, "")
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
-			return "", cerr
+			return "", nil, cerr
 		}
-		return "", fmt.Errorf("litertlm: GenerateMulti: %w", err)
+		return "", nil, fmt.Errorf("litertlm: GenerateMulti: %w", err)
 	}
-	return assistantText(raw)
+	text, err := assistantText(raw)
+	if err != nil {
+		return "", nil, err
+	}
+	return text, captureConversationBenchmark(c, conv), nil
 }
 
 // openMultimodalConversation creates a fresh ConversationConfig +
@@ -207,7 +214,7 @@ func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part,
 		}
 
 		for sc := range conv.SendMessageStreamCh(msgJSON, "") {
-			ch := Chunk{Text: sc.Text, Final: sc.Final}
+			ch := Chunk{Text: extractStreamChunkText(sc.Text), Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return
 			}
@@ -234,11 +241,13 @@ func (c *Client) GenerateMultiResponse(ctx context.Context, parts []Part, opts .
 
 func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg genConfig) (*Response, error) {
 	if partsHasBinary(parts) {
-		text, err := c.runMultimodalConversation(ctx, parts, cfg)
+		text, bench, err := c.runMultimodalConversation(ctx, parts, cfg)
 		if err != nil {
 			return nil, err
 		}
-		return newTextResponse(text), nil
+		resp := newTextResponse(text)
+		resp.bench = bench
+		return resp, nil
 	}
 
 	sess, err := c.openSession(cfg)
@@ -273,6 +282,21 @@ func captureSessionBenchmark(c *Client, sess Session) *Benchmark {
 		return nil
 	}
 	bi, err := sess.BenchmarkInfo()
+	if err != nil {
+		return nil
+	}
+	defer bi.Delete()
+	return snapshotBenchmark(bi)
+}
+
+// captureConversationBenchmark is the Conversation analogue of
+// captureSessionBenchmark, used by the multimodal Generate*
+// path which goes through a Conversation instead of a Session.
+func captureConversationBenchmark(c *Client, conv Conversation) *Benchmark {
+	if c.cfg.benchmarkEnabled == nil || !*c.cfg.benchmarkEnabled {
+		return nil
+	}
+	bi, err := conv.BenchmarkInfo()
 	if err != nil {
 		return nil
 	}

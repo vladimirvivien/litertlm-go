@@ -104,6 +104,7 @@ The followings walk you through how to build them:
 | `examples/conversation-lowlevel/` | Low-level twin of Chat: hand-built `SessionConfig` + `ConversationConfig` + `SendMessage` + `RenderMessage` + `BenchmarkInfo` |
 | `examples/score/`             | `ScoreTexts` + `Score` / `TokenLength` (low-level)                 |
 | `examples/token-scores/`      | `ScoreTexts` + `TokenScores` per-token log-probs paired with `Engine.Tokenize` |
+| `examples/raw-multi/`         | `GenerateMulti` / `GenerateMultiStream` / `GenerateMultiResponse` — three call shapes for the same image + text input |
 | `examples/tokenize/`          | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level)   |
 | `examples/gpu/`               | GPU-backed generation                                              |
 | `examples/benchmarks/`        | Per-generation benchmark capture via `WithBenchmarkEnabled` + `Response.Benchmark()` |
