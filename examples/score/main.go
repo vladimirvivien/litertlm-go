@@ -32,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer litertlm.Close()
-	litertlm.SetMinLogLevel(litertlm.LogError)
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
 	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
 	if err != nil {

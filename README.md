@@ -110,6 +110,7 @@ The followings walk you through how to build them:
 | `examples/activation-dtype/`  | Default-vs-selected `WithActivationDataType` (F32 / F16 / I16 / I8) — empirical per-backend deltas |
 | `examples/prefill-chunk/`     | Default-vs-selected `WithPrefillChunkSize` (CPU-only) — chunked vs unchunked prefill timings |
 | `examples/parallel-load/`     | Parallel vs serial `WithParallelSectionLoading` — `litertlm.New` wall-clock delta |
+| `examples/logging/`           | `SetMinLogLevel` — set the LiteRT-LM log severity floor at startup and toggle mid-program |
 | `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
 
 ## Documentation

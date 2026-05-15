@@ -50,8 +50,8 @@ func TestSamplerTypeValues(t *testing.T) {
 func TestLogLevels(t *testing.T) {
 	tests := []struct {
 		name string
-		got  int
-		want int
+		got  LogLevel
+		want int32
 	}{
 		{"LogVerbose", LogVerbose, 0},
 		{"LogDebug", LogDebug, 1},
@@ -59,13 +59,34 @@ func TestLogLevels(t *testing.T) {
 		{"LogWarning", LogWarning, 3},
 		{"LogError", LogError, 4},
 		{"LogFatal", LogFatal, 5},
-		{"LogSilent", LogSilent, 1000},
+		{"LogQuiet", LogQuiet, 1000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.want {
+			if int32(tt.got) != tt.want {
 				t.Errorf("%s = %d, want %d", tt.name, tt.got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLogLevel_String(t *testing.T) {
+	cases := []struct {
+		got  LogLevel
+		want string
+	}{
+		{LogVerbose, "Verbose"},
+		{LogDebug, "Debug"},
+		{LogInfo, "Info"},
+		{LogWarning, "Warning"},
+		{LogError, "Error"},
+		{LogFatal, "Fatal"},
+		{LogQuiet, "Quiet"},
+		{LogLevel(42), "LogLevel(42)"},
+	}
+	for _, c := range cases {
+		if got := c.got.String(); got != c.want {
+			t.Errorf("LogLevel(%d).String() = %q, want %q", c.got, got, c.want)
+		}
 	}
 }

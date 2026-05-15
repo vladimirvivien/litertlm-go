@@ -46,9 +46,12 @@ type Client struct {
 // New uses these defaults:
 //   - backend: "cpu"
 //   - max tokens: 4096
-//   - log level: LogError
 //   - lib path: WithLib value, else $LITERTLM_LIB
 //   - model path: WithModel value, else $LITERTLM_MODEL
+//
+// New does not touch the LiteRT-LM log severity floor. The C side
+// defaults to LogInfo (verbose). Call SetMinLogLevel(LogQuiet)
+// before New to silence the loader and executor init chatter.
 //
 // For finer-grained control, the low-level constructors (Load,
 // NewEngineSettings, NewEngine, Engine.NewSession) remain available
@@ -57,7 +60,6 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 	cfg := clientConfig{
 		backend:   defaultBackend,
 		maxTokens: defaultMaxTokens,
-		logLevel:  LogError,
 	}
 
 	// Env-var fallbacks first, user options override.
@@ -87,8 +89,6 @@ func buildClient(cfg clientConfig) (*Client, error) {
 	if err := Load(cfg.libPath, cfg.backend, cfg.libName); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
-
-	SetMinLogLevel(cfg.logLevel)
 
 	settings, err := NewEngineSettings(cfg.modelPath, cfg.backend, cfg.visionBackend, cfg.audioBackend)
 	if err != nil {

@@ -30,4 +30,5 @@ Optional flags:
 | `-backend`  | `"cpu"`                              | Set to `"gpu"` if you staged the GPU-capable build (see `gpu` example). |
 | `-max`      | `1024`                               | Total token budget. Must be ≥ the model's smallest prefill signature (typically 128). |
 | `-lib`      | `$LITERTLM_LIB`                      | Override the lib directory without touching the env var.       |
+| `-loglevel` | `quiet`                              | LiteRT-LM log severity floor. Accepts `verbose` / `debug` / `info` / `warning` / `error` / `fatal` / `quiet` (also numeric). Pass `info` to see the C-side loader chatter. |
 

@@ -63,9 +63,10 @@ var optionalLibs = []string{
 }
 
 var (
-	loadMu     sync.Mutex
-	loadedOnce bool
-	libPath    string
+	loadMu          sync.Mutex
+	loadedOnce      bool
+	libPath         string
+	pendingLogLevel *LogLevel
 )
 
 // LibPath returns the directory from which Load opened the shared
@@ -132,6 +133,7 @@ func Load(path, backend, libName string) error {
 
 	libPath = path
 	loadedOnce = true
+	applyPendingLogLevel()
 	return nil
 }
 

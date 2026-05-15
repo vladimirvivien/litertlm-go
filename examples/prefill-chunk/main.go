@@ -116,6 +116,7 @@ func runOnce(ctx context.Context, libPath, modelPath, backend, cacheDir string, 
 	}
 
 	t0 := time.Now()
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {
 		return nil, err

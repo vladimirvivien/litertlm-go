@@ -31,9 +31,6 @@ type clientConfig struct {
 	maxNumImages   *int
 	dispatchLibDir string
 
-	logLevel    int
-	logLevelSet bool
-
 	defaultSampler *SamplerParams
 }
 
@@ -152,15 +149,6 @@ func WithMaxNumImages(n int) Option {
 // by the NPU backend. Ignored by CPU / GPU backends.
 func WithDispatchLibDir(dir string) Option {
 	return func(c *clientConfig) { c.dispatchLibDir = dir }
-}
-
-// WithLogLevel sets the LiteRT-LM log severity floor. Default is
-// LogError when unset (silences INFO/WARN chatter).
-func WithLogLevel(level int) Option {
-	return func(c *clientConfig) {
-		c.logLevel = level
-		c.logLevelSet = true
-	}
 }
 
 // WithDefaultSampler sets the sampler parameters used for every

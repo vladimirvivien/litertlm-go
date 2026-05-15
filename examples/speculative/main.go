@@ -72,6 +72,7 @@ func runOnce(ctx context.Context, libPath, model, backend, prompt string, maxOut
 		opts = append(opts, litertlm.WithSpeculativeDecodingEnabled(true))
 	}
 
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {
 		return runResult{}, fmt.Errorf("new client: %w", err)

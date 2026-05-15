@@ -134,18 +134,6 @@ func TestOption_Toggles(t *testing.T) {
 	}
 }
 
-// TestOption_LogLevel covers the explicit logLevelSet flag.
-func TestOption_LogLevel(t *testing.T) {
-	cfg := clientConfig{}
-	if cfg.logLevelSet {
-		t.Fatal("logLevelSet should default false")
-	}
-	WithLogLevel(LogVerbose)(&cfg)
-	if !cfg.logLevelSet || cfg.logLevel != LogVerbose {
-		t.Errorf("logLevel=%d set=%v", cfg.logLevel, cfg.logLevelSet)
-	}
-}
-
 // TestOption_DefaultSampler captures by value, so later mutations to
 // the caller's struct don't bleed into the Client.
 func TestOption_DefaultSampler(t *testing.T) {

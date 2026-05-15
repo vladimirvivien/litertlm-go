@@ -66,6 +66,7 @@ func main() {
 	}
 
 	ctx := context.Background()
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx,
 		litertlm.WithLib(*libPath),
 		litertlm.WithModel(*model),

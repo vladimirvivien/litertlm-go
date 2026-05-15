@@ -58,6 +58,7 @@ func main() {
 	ctx := context.Background()
 
 	t0 := time.Now()
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "new client: %v\n", err)

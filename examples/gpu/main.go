@@ -32,8 +32,7 @@ func main() {
 	}
 	defer litertlm.Close()
 
-	// Silence LiteRT-LM's INFO/WARN chatter. Drop to LogInfo to see it.
-	litertlm.SetMinLogLevel(litertlm.LogError)
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
 	settings, err := litertlm.NewEngineSettings(*model, "gpu", nil, nil)
 	if err != nil {

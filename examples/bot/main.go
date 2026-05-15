@@ -94,6 +94,7 @@ func main() {
 	}
 	opts = append(opts, litertlm.WithDefaultSampler(sampler))
 
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "new client: %v\n", err)

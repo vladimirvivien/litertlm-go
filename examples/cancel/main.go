@@ -32,6 +32,7 @@ func main() {
 	}
 
 	rootCtx := context.Background()
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(rootCtx,
 		litertlm.WithLib(*libPath),
 		litertlm.WithModel(*model),

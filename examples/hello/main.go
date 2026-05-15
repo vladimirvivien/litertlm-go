@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
@@ -20,12 +21,19 @@ func main() {
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
 	maxTokens := flag.Int("max", 1024, "max total tokens (prompt + output); must be >= the model's smallest prefill signature, typically 128")
+	logLevel := flag.String("loglevel", "quiet", "LiteRT-LM log severity floor: verbose | debug | info | warning | error | fatal | quiet (also accepts the numeric form)")
 	flag.Parse()
 
 	if *model == "" {
 		fmt.Fprintln(os.Stderr, "--model is required")
 		os.Exit(2)
 	}
+	level, err := parseLogLevel(*logLevel)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	litertlm.SetMinLogLevel(level)
 
 	ctx := context.Background()
 	client, err := litertlm.New(ctx,
@@ -46,5 +54,24 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(text)
+}
 
+func parseLogLevel(s string) (litertlm.LogLevel, error) {
+	switch strings.ToLower(s) {
+	case "verbose", "0":
+		return litertlm.LogVerbose, nil
+	case "debug", "1":
+		return litertlm.LogDebug, nil
+	case "info", "2":
+		return litertlm.LogInfo, nil
+	case "warning", "warn", "3":
+		return litertlm.LogWarning, nil
+	case "error", "4":
+		return litertlm.LogError, nil
+	case "fatal", "5":
+		return litertlm.LogFatal, nil
+	case "quiet", "1000":
+		return litertlm.LogQuiet, nil
+	}
+	return 0, fmt.Errorf("unknown log level %q (use verbose | debug | info | warning | error | fatal | quiet)", s)
 }

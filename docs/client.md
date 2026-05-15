@@ -52,7 +52,7 @@ Use functional options to specify environment and inference engine settings.
 
 | Option                          | Effect                                                |
 |---------------------------------|-------------------------------------------------------|
-| `WithLogLevel(lvl)`             | `LogVerbose` / `LogDebug` / `LogInfo` / `LogWarning` / `LogError` (default) / `LogFatal` / `LogSilent`. |
+| `SetMinLogLevel(lvl)`           | Package-level function (not a Client option). `LogVerbose` / `LogDebug` / `LogInfo` / `LogWarning` / `LogError` / `LogFatal` / `LogQuiet`. Call before `New` to override the C-side default of `LogInfo`. |
 
 ### Sampler defaults
 

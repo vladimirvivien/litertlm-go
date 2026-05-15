@@ -70,6 +70,7 @@ type timings struct {
 
 func runOnce(ctx context.Context, libPath, modelPath, backend, cacheDir, prompt string) (*timings, error) {
 	t0 := time.Now()
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx,
 		litertlm.WithLib(libPath),
 		litertlm.WithModel(modelPath),

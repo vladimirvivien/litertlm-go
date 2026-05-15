@@ -53,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer litertlm.Close()
-	litertlm.SetMinLogLevel(litertlm.LogError)
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
 	// ---- Engine ---------------------------------------------------------
 	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
