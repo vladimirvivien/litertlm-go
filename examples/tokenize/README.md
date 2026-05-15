@@ -1,47 +1,54 @@
-# Example: Text Tokenization
+# tokenize
 
-Tokenizes a string with `Engine.Tokenize` and detokenizes the result
-back to bytes — the low-level path for non-generation engine features.
+Tokenize a string and inspect the model's start / stop token
+metadata. No inference is run.
 
-## What this example shows
+## What this exercises
 
-- `litertlm.Load` to load the runtime library for a chosen backend.
-- `Engine` construction via `EngineSettings`.
-- `Engine.Tokenize(text)` returning the token-ID slice.
-- `Engine.Detokenize(ids)` round-tripping back to bytes.
+| Surface | Use |
+|---|---|
+| `Client.Tokenize(text)` | High-level shortcut returning `[]int32`. Same result as `Client.Engine().Tokenize(text)`. |
+| `Client.TokenLength(text)` | Token count only — useful for budget bookkeeping without allocating the id slice. |
+| `Client.Engine().Detokenize(ids)` | Reverse direction, ids back to text. |
+| `Client.Engine().StartTokenIDs()` | Model's configured BOS token, when present. |
+| `Client.Engine().StopTokenIDs()` | Model's configured EOS token sequences. |
+
+`Client.Engine()` returns the underlying `Engine` handle. Lifetime
+is the Client's; do not call `Engine.Delete()` on it.
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in `LITERTLM_LIB`.
-2. A `.litertlm` model (e.g. Gemma 4).
+- `.litertlm` model file.
+- LiteRT-LM shared libraries on disk. Pass `-lib <dir>` or set
+  `LITERTLM_LIB=<dir>`.
 
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `-model` | (required) | Path to `.litertlm` model file. |
+| `-lib` | `$LITERTLM_LIB` | Directory holding the shared libraries. |
+| `-backend` | `cpu` | `cpu` or `gpu`. |
+| `-text` | `"Hello, world. How are you today?"` | Text to tokenize. |
 
 ## Run
 
-```bash
-LITERTLM_LIB=/abs/path/to/dist/lib \
-    go run ./examples/tokenize \
-    -model /abs/path/to/gemma-4-E4B-it.litertlm
-    -model "Hello, world. How are you today?"
+```sh
+go run ./examples/tokenize -model "$MODEL"
 ```
 
-| Flag       | Default                                     | Notes                                          |
-| ---------- | ------------------------------------------- | ---------------------------------------------- |
-| `-model`   | (required)                                  | Path to a `.litertlm` model.                   |
-| `-text`    | `"Hello, world. How are you today?"`        | The string to tokenize.                        |
-| `-backend` | `"cpu"`                                     |                                                |
-| `-lib`     | `$LITERTLM_LIB`                             |                                                |
+## Observed output
 
-## Expected output
+Gemma 4 E2B:
 
 ```
-text:        "Hello, world. How are you today?"
-tokens (9):  [9259 236764 1902 236761 2088 659 611 3124 236881]
-round-trip:  "Hello,▁world.▁How▁are▁you▁today?"
+text:         "Hello, world. How are you today?"
+Client.Tokenize    (9): [9259 236764 1902 236761 2088 659 611 3124 236881]
+Client.TokenLength (9)
+Engine.Detokenize:    "Hello,▁world.▁How▁are▁you▁today?"
+Engine.StartTokenIDs: [2]
+Engine.StopTokenIDs:  [[1] [50] [106]]
 ```
 
-Token ids are model-specific — different `.litertlm` files produce
-different splits.
-
-The `▁` character (U+2581) in the detokenized output is
+Token ids are model-specific. The `▁` character (U+2581) is
 SentencePiece's internal space marker.

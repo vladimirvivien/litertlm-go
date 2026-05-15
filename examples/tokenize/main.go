@@ -1,11 +1,13 @@
-// tokenize demonstrates the engine's tokenizer round-trip:
-// text → []int32 token ids → text. No inference is run, so it's a
-// quick way to inspect how a chat-tuned model splits a prompt.
+// tokenize shows the high-level Client.Tokenize / Client.TokenLength
+// helpers paired with the underlying Engine accessors (Detokenize,
+// StartTokenIDs, StopTokenIDs) reached via Client.Engine(). No
+// inference is run.
 //
 // See README.md in this directory for prerequisites and usage.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -14,9 +16,9 @@ import (
 )
 
 func main() {
-	model := flag.String("model", "", "path to .litertlm model file")
+	model := flag.String("model", "", "path to .litertlm model file (required)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
-	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
+	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	text := flag.String("text", "Hello, world. How are you today?", "text to tokenize")
 	flag.Parse()
 
@@ -25,54 +27,55 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := litertlm.Load(*libPath, *backend, ""); err != nil {
-		fmt.Fprintf(os.Stderr, "load: %v\n", err)
-		os.Exit(1)
-	}
-	defer litertlm.Close()
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
-	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
+	ctx := context.Background()
+	client, err := litertlm.New(ctx,
+		litertlm.WithLib(*libPath),
+		litertlm.WithModel(*model),
+		litertlm.WithBackend(*backend),
+	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
+		fmt.Fprintf(os.Stderr, "new client: %v\n", err)
 		os.Exit(1)
 	}
-	defer settings.Delete()
+	defer client.Close()
 
-	engine, err := litertlm.NewEngine(settings)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "engine: %v\n", err)
-		os.Exit(1)
-	}
-	defer engine.Delete()
-
-	tokens, err := engine.Tokenize(*text)
+	tokens, err := client.Tokenize(*text)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tokenize: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("text:        %q\n", *text)
-	fmt.Printf("tokens (%d):  %v\n", len(tokens), tokens)
+	length, err := client.TokenLength(*text)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "token length: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("text:         %q\n", *text)
+	fmt.Printf("Client.Tokenize    (%d): %v\n", len(tokens), tokens)
+	fmt.Printf("Client.TokenLength (%d)\n", length)
+
+	engine := client.Engine()
 
 	roundTrip, err := engine.Detokenize(tokens)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "detokenize: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("round-trip:  %q\n", roundTrip)
+	fmt.Printf("Engine.Detokenize:    %q\n", roundTrip)
 
-	// Model-metadata token sequences.
 	start, err := engine.StartTokenIDs()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start tokens: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("start token: %v\n", start)
+	fmt.Printf("Engine.StartTokenIDs: %v\n", start)
 
 	stops, err := engine.StopTokenIDs()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stop tokens: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("stop tokens: %v\n", stops)
+	fmt.Printf("Engine.StopTokenIDs:  %v\n", stops)
 }
