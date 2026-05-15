@@ -114,7 +114,7 @@ func TestOption_OptionalBackends(t *testing.T) {
 func TestOption_Toggles(t *testing.T) {
 	cfg := clientConfig{}
 
-	if cfg.speculativeDecodingEnabled != nil || cfg.parallelFileLoading != nil || cfg.benchmarkEnabled != nil {
+	if cfg.speculativeDecodingEnabled != nil || cfg.parallelSectionLoading != nil || cfg.benchmarkEnabled != nil {
 		t.Fatal("toggles should default to nil")
 	}
 
@@ -123,9 +123,9 @@ func TestOption_Toggles(t *testing.T) {
 		t.Errorf("speculativeDecodingEnabled = %v", cfg.speculativeDecodingEnabled)
 	}
 
-	WithParallelFileLoading(false)(&cfg)
-	if cfg.parallelFileLoading == nil || *cfg.parallelFileLoading {
-		t.Errorf("parallelFileLoading = %v", cfg.parallelFileLoading)
+	WithParallelSectionLoading(false)(&cfg)
+	if cfg.parallelSectionLoading == nil || *cfg.parallelSectionLoading {
+		t.Errorf("parallelSectionLoading = %v", cfg.parallelSectionLoading)
 	}
 
 	WithBenchmarkEnabled()(&cfg)

@@ -132,8 +132,8 @@ func applySettings(s EngineSettings, cfg *clientConfig) {
 	if cfg.benchmarkEnabled != nil && *cfg.benchmarkEnabled {
 		s.EnableBenchmark()
 	}
-	if cfg.parallelFileLoading != nil {
-		s.SetParallelFileSectionLoading(*cfg.parallelFileLoading)
+	if cfg.parallelSectionLoading != nil {
+		s.SetParallelFileSectionLoading(*cfg.parallelSectionLoading)
 	}
 	if cfg.maxNumImages != nil {
 		s.SetMaxNumImages(*cfg.maxNumImages)

@@ -119,7 +119,7 @@ func main() {
 	defer convCfg.Delete()
 
 	if *extraContext != "" {
-		if err := convCfg.SetExtraContext(*extraContext); err != nil {
+		if err = convCfg.SetExtraContext(*extraContext); err != nil {
 			fmt.Fprintf(os.Stderr, "extra context: %v\n", err)
 			os.Exit(1)
 		}

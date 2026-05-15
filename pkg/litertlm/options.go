@@ -26,7 +26,7 @@ type clientConfig struct {
 	// the C-side default when no Option sets them.
 	speculativeDecodingEnabled *bool
 	benchmarkEnabled           *bool
-	parallelFileLoading        *bool
+	parallelSectionLoading     *bool
 
 	maxNumImages   *int
 	dispatchLibDir string
@@ -133,10 +133,12 @@ func WithBenchmarkEnabled() Option {
 	return func(c *clientConfig) { c.benchmarkEnabled = &on }
 }
 
-// WithParallelFileLoading toggles parallel loading of .litertlm file
-// sections. The C side defaults to true; only call this to override.
-func WithParallelFileLoading(on bool) Option {
-	return func(c *clientConfig) { c.parallelFileLoading = &on }
+// WithParallelSectionLoading toggles parallel deserialization of
+// sections within the .litertlm container (weights, tokenizer,
+// decode and prefill graphs, multimodal adapters). The C side
+// defaults to true; only call this to override.
+func WithParallelSectionLoading(on bool) Option {
+	return func(c *clientConfig) { c.parallelSectionLoading = &on }
 }
 
 // WithMaxNumImages caps the maximum number of image inputs the engine
