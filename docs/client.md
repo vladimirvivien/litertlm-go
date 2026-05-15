@@ -45,7 +45,6 @@ Use functional options to specify environment and inference engine settings.
 | `WithSpeculativeDecodingEnabled(on)`      | Toggle multi-token-prediction speculative decoding (Gemma 4 supported). See [`examples/speculative/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/speculative) for a side-by-side throughput comparison. |
 | `WithBenchmarkEnabled()`                  | Turn on benchmark collection. Read per-call metrics via `Response.Benchmark()`. |
 | `WithParallelSectionLoading(on)`          | Parallel deserialization of `.litertlm` container sections. Defaults to true. |
-| `WithMaxNumImages(n)`                     | Cap on image inputs (legacy engine implementation only).                  |
 | `WithDispatchLibDir(dir)`                 | LiteRT dispatch library directory for the NPU backend.                    |
 
 ### Logging

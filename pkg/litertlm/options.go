@@ -28,7 +28,6 @@ type clientConfig struct {
 	benchmarkEnabled           *bool
 	parallelSectionLoading     *bool
 
-	maxNumImages   *int
 	dispatchLibDir string
 
 	defaultSampler *SamplerParams
@@ -136,13 +135,6 @@ func WithBenchmarkEnabled() Option {
 // defaults to true; only call this to override.
 func WithParallelSectionLoading(on bool) Option {
 	return func(c *clientConfig) { c.parallelSectionLoading = &on }
-}
-
-// WithMaxNumImages caps the maximum number of image inputs the engine
-// reserves capacity for. Honored only by the legacy engine
-// implementation per the upstream C header.
-func WithMaxNumImages(n int) Option {
-	return func(c *clientConfig) { c.maxNumImages = &n }
 }
 
 // WithDispatchLibDir sets the LiteRT dispatch library directory used
