@@ -33,6 +33,19 @@ const (
 		`stated preferences, decisions made, and the current topic. Drop pleasantries, repeated ` +
 		`information, and one-off questions whose answers no longer matter. Output only the ` +
 		`summary text — no preamble, no commentary.`
+
+	// attachmentGuidance is appended to the system prompt when
+	// attach_media is registered. Without it, small multimodal models
+	// trained for chat treat audio in their input as conversational
+	// (they respond as if speaking with whoever is in the recording)
+	// and ask the user to call attach_media even when content is
+	// already in the prefill.
+	attachmentGuidance = `When the user provides an image or audio file in their message — ` +
+		`either inline by path or marked with "[attached image]" / "[attached audio file]" — ` +
+		`the file's content is already present in your input. Describe or transcribe it ` +
+		`directly. Treat audio as data to analyze, not as conversational speech to reply to. ` +
+		`Use the attach_media tool only when the user names a file you cannot already see in ` +
+		`your input.`
 )
 
 func main() {
@@ -321,7 +334,17 @@ func (b *bot) repl(ctx context.Context) error {
 					fmt.Println()
 					return nil
 				}
-				return err
+				// Tool errors and mid-stream failures are
+				// recoverable: print to stderr and continue.
+				// The Conversation may be mid-call (user
+				// prefilled, model emitted tool_call, no
+				// tool_result), so drop the chat handle.
+				// ensureChat reopens it from b.turns on the
+				// next message; failed turns were never
+				// appended so the rebuilt history is clean.
+				fmt.Fprintf(os.Stderr, "⚠️  %v\n", err)
+				b.closeChat()
+				b.pendingAttachments = nil
 			}
 		}
 	}
@@ -335,7 +358,8 @@ func (b *bot) handle(ctx context.Context, msg string) error {
 	// queued, but the model has no embeddings to describe yet — so it
 	// asks the user to re-prompt. Pre-attaching lets the directive
 	// land alongside the embeddings.
-	for _, p := range extractMediaPaths(msg) {
+	inlinePaths := extractMediaPaths(msg)
+	for _, p := range inlinePaths {
 		att, err := attachmentFromPath(p)
 		if err != nil {
 			continue
@@ -344,7 +368,7 @@ func (b *bot) handle(ctx context.Context, msg string) error {
 	}
 
 	if len(b.pendingAttachments) > 0 {
-		return b.sendMultimodal(ctx, msg)
+		return b.sendMultimodal(ctx, msg, inlinePaths)
 	}
 	return b.sendText(ctx, msg)
 }
@@ -373,6 +397,32 @@ func extractMediaPaths(msg string) []string {
 		paths = append(paths, token)
 	}
 	return paths
+}
+
+// stripInlinePaths replaces each occurrence of an auto-attached path
+// token in msg with a kind-aware marker (`[attached audio file]` /
+// `[attached image]`) so the model connects the user's directive to
+// the multimodal blob already present in its prefill. Called only on
+// the model-facing text path; the persisted memory turn keeps the
+// original msg. Falls back to a generic marker when no attachment
+// matches a path.
+func stripInlinePaths(msg string, paths []string, atts []attachment) string {
+	kindOf := map[string]string{}
+	for _, a := range atts {
+		kindOf[a.path] = a.kind
+	}
+	out := msg
+	for _, p := range paths {
+		marker := "[attached file]"
+		switch kindOf[p] {
+		case "audio":
+			marker = "[attached audio file]"
+		case "image":
+			marker = "[attached image]"
+		}
+		out = strings.ReplaceAll(out, p, marker)
+	}
+	return out
 }
 
 func (b *bot) sendText(ctx context.Context, msg string) error {
@@ -406,7 +456,13 @@ func (b *bot) sendText(ctx context.Context, msg string) error {
 // embeddings accumulate in the underlying Conversation's KV cache so
 // follow-up text turns can reference them. Tool calls emitted during
 // the stream are auto-dispatched the same way sendText handles them.
-func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
+//
+// inlinePaths lists path tokens that were auto-attached from msg via
+// extractMediaPaths. They are stripped from the model-facing text so
+// the model does not re-invoke attach_media (or imitate its "queued
+// for next message" reply) on a file already present in the prefill.
+// The persisted memory turn retains the original msg.
+func (b *bot) sendMultimodal(ctx context.Context, msg string, inlinePaths []string) error {
 	userBody := annotateUserMessage(b.pendingAttachments, msg)
 	if err := b.maybeCompact(ctx, userBody); err != nil {
 		return err
@@ -415,11 +471,13 @@ func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
 		return fmt.Errorf("open chat: %w", err)
 	}
 
+	modelText := stripInlinePaths(msg, inlinePaths, b.pendingAttachments)
+
 	parts := make([]litertlm.Part, 0, len(b.pendingAttachments)+1)
 	for _, a := range b.pendingAttachments {
 		parts = append(parts, a.part)
 	}
-	parts = append(parts, litertlm.Text(msg))
+	parts = append(parts, litertlm.Text(modelText))
 
 	reply, err := streamReply(b.chat.SendMultiStream(ctx, parts))
 	if err != nil {
@@ -720,6 +778,9 @@ func (b *bot) ensureChat(ctx context.Context) error {
 func (b *bot) openChat(ctx context.Context) error {
 	msgs, summary := bridgeMemory(b.turns)
 	sysPrompt := b.systemPrompt
+	if b.hasAttachMediaTool() {
+		sysPrompt = sysPrompt + "\n\n" + attachmentGuidance
+	}
 	if summary != "" {
 		sysPrompt = sysPrompt + "\n\n--- Prior conversation summary ---\n" + summary + "\n--- End summary ---\n"
 	}
@@ -746,14 +807,29 @@ func (b *bot) closeChat() {
 }
 
 // systemPromptWithSummary returns the base system prompt plus any
-// compaction summary that bridgeMemory would inject. Used by the
-// banner and by maybeCompact for token-budget projection.
+// attachment-handling guidance and any compaction summary that
+// bridgeMemory would inject. Used by the banner and by maybeCompact
+// for token-budget projection. Mirrors the assembly in openChat so
+// the budget projection matches what is actually sent.
 func (b *bot) systemPromptWithSummary() string {
-	_, summary := bridgeMemory(b.turns)
-	if summary == "" {
-		return b.systemPrompt
+	out := b.systemPrompt
+	if b.hasAttachMediaTool() {
+		out = out + "\n\n" + attachmentGuidance
 	}
-	return b.systemPrompt + "\n\n--- Prior conversation summary ---\n" + summary + "\n--- End summary ---\n"
+	_, summary := bridgeMemory(b.turns)
+	if summary != "" {
+		out = out + "\n\n--- Prior conversation summary ---\n" + summary + "\n--- End summary ---\n"
+	}
+	return out
+}
+
+func (b *bot) hasAttachMediaTool() bool {
+	for _, t := range b.tools {
+		if t.Name() == "attach_media" {
+			return true
+		}
+	}
+	return false
 }
 
 // bridgeMemory converts the on-disk transcript into the input shape
@@ -945,9 +1021,13 @@ func (b *bot) registerTools() error {
 	if err != nil {
 		return fmt.Errorf("register get_time: %w", err)
 	}
+	// attach_media uses InformOnError so a file-not-found (or any other
+	// loader error) becomes a tool result the model sees and can relay
+	// to the user in normal prose, instead of halting the chat turn.
 	att, err := litertlm.RegisterTool(b.client, "attach_media",
 		"Queue a media file (image or audio) from disk to be sent with the user's NEXT message. Call when the user asks you to look at a specific file by path. The file is queued, not analysed in this turn; the user's next message will include the file. Image extensions: .png/.jpg/.jpeg/.webp. Audio extensions: .wav/.mp3/.flac/.ogg/.opus/.m4a/.aac. Video is not supported.",
-		b.attachMediaHandler)
+		b.attachMediaHandler,
+		litertlm.WithToolPolicy(litertlm.ToolPolicyInformOnError))
 	if err != nil {
 		return fmt.Errorf("register attach_media: %w", err)
 	}

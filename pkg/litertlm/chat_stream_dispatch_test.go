@@ -83,29 +83,59 @@ func TestStream_DispatchesManagedTool(t *testing.T) {
 	}
 }
 
-func TestStream_NonDispatchableToolErrors(t *testing.T) {
+func TestStream_NonDispatchableToolInforms(t *testing.T) {
 	c := &Client{}
-	registry, _ := buildToolRegistry([]ToolDefinition{NewRawTool("manual_tool", "desc", nil)})
+	add := newAddTool(t, c)
+	registry, _ := buildToolRegistry([]ToolDefinition{
+		add,
+		NewRawTool("manual_tool", "desc", nil),
+	})
 	ch := &Chat{conv: Conversation(1), tools: registry}
-	_ = c
 
 	transport := &fakeTransport{
-		streamReplies: [][]StreamChunk{{
-			toolCallChunk("manual_tool", map[string]any{}),
-			{Final: true},
-		}},
+		streamReplies: [][]StreamChunk{
+			// Turn 1: model calls a tool with no auto-dispatch
+			// handler (RawTool) and one the registry doesn't know
+			// at all (hallucinated name).
+			{
+				toolCallChunk("manual_tool", map[string]any{}),
+				toolCallChunk("ghost_tool", map[string]any{}),
+				{Final: true},
+			},
+			// Turn 2: model receives the inform-back and replies.
+			{
+				textChunk("Sorry, neither tool is available.", false),
+				{Final: true},
+			},
+		},
 	}
 
-	var gotErr error
+	var got strings.Builder
 	for chunk, err := range streamIter(ch, transport, `{}`) {
 		if err != nil {
-			gotErr = err
-			break
+			t.Fatalf("stream error: %v", err)
 		}
-		_ = chunk
+		got.WriteString(chunk.Text)
 	}
-	if gotErr == nil || !strings.Contains(gotErr.Error(), "non-dispatchable") {
-		t.Errorf("err = %v, want 'non-dispatchable'", gotErr)
+	if !strings.Contains(got.String(), "neither tool is available") {
+		t.Errorf("post-inform text = %q, want model recovery line", got.String())
+	}
+	if len(transport.sentMsgs) != 2 {
+		t.Fatalf("transport saw %d messages, want 2", len(transport.sentMsgs))
+	}
+	informBack := transport.sentMsgs[1]
+	if !strings.Contains(informBack, `"role":"tool"`) {
+		t.Errorf("transport[1] missing tool-role: %s", informBack)
+	}
+	if !strings.Contains(informBack, "not auto-dispatchable") {
+		t.Errorf("transport[1] missing RawTool inform-back: %s", informBack)
+	}
+	if !strings.Contains(informBack, "not registered") {
+		t.Errorf("transport[1] missing unknown-tool inform-back: %s", informBack)
+	}
+	// `add` is dispatchable; expect its name surfaced as an alternative.
+	if !strings.Contains(informBack, `"available_tools":["add"]`) {
+		t.Errorf("transport[1] missing available_tools list: %s", informBack)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -461,15 +462,11 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 		}
 
 		reply := &Reply{toolCalls: calls}
-		if !ch.allCallsDispatchable(reply) {
-			yield(Chunk{}, fmt.Errorf("litertlm: stream: non-dispatchable tool call %q", calls[0].Function.Name))
-			return
-		}
 		if hop >= cap {
 			yield(Chunk{}, &ToolHopsError{LastReply: reply, Hops: cap})
 			return
 		}
-		results, err := ch.invokeAll(ctx, calls)
+		results, err := ch.invokeOrInform(ctx, calls)
 		if err != nil {
 			yield(Chunk{}, err)
 			return
@@ -681,6 +678,74 @@ func (ch *Chat) invokeAll(ctx context.Context, calls []ToolCall) ([]toolResult, 
 		results = append(results, toolResult{name: call.Function.Name, response: out})
 	}
 	return results, nil
+}
+
+// invokeOrInform is the streaming-path dispatcher. Dispatchable calls
+// invoke their handler (with the per-tool ToolPolicy honored); calls
+// that name an unknown tool, or that name a RawTool which has no
+// auto-handler in the streaming context, are answered with a
+// synthesized error tool result. The model receives the inform-back
+// in the next turn and can recover (e.g. by apologizing or by
+// choosing a real tool). The dispatch loop's hop cap still applies,
+// so a model that hallucinates indefinitely is bounded.
+func (ch *Chat) invokeOrInform(ctx context.Context, calls []ToolCall) ([]toolResult, error) {
+	results := make([]toolResult, 0, len(calls))
+	for _, call := range calls {
+		def, ok := ch.tools[call.Function.Name]
+		if !ok {
+			results = append(results, toolResult{
+				name: call.Function.Name,
+				response: map[string]any{
+					"error":           fmt.Sprintf("tool %q is not registered", call.Function.Name),
+					"available_tools": ch.dispatchableToolNames(),
+				},
+			})
+			continue
+		}
+		d, isD := def.(dispatchable)
+		if !isD {
+			results = append(results, toolResult{
+				name: call.Function.Name,
+				response: map[string]any{
+					"error": fmt.Sprintf("tool %q is not auto-dispatchable in a streaming turn", call.Function.Name),
+				},
+			})
+			continue
+		}
+		argsJSON, err := json.Marshal(call.Function.Arguments)
+		if err != nil {
+			return nil, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
+		}
+		out, err := d.invoke(ctx, argsJSON)
+		if err != nil {
+			switch d.policy() {
+			case ToolPolicyInformOnError:
+				results = append(results, toolResult{
+					name:     call.Function.Name,
+					response: map[string]any{"error": err.Error()},
+				})
+				continue
+			default: // ToolPolicyReturnOnError
+				return nil, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
+			}
+		}
+		results = append(results, toolResult{name: call.Function.Name, response: out})
+	}
+	return results, nil
+}
+
+// dispatchableToolNames returns the sorted names of the chat's
+// auto-dispatchable tools. Used by invokeOrInform to surface valid
+// alternatives in an inform-back message.
+func (ch *Chat) dispatchableToolNames() []string {
+	names := make([]string, 0, len(ch.tools))
+	for name, def := range ch.tools {
+		if _, ok := def.(dispatchable); ok {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (ch *Chat) checkOpen() error {
