@@ -142,6 +142,12 @@ streaming, cancellation, response shape) is identical.
 | `GenerateMultiStream`        | `iter.Seq2[Chunk, error]`     |
 | `GenerateMultiResponse`      | `(*Response, error)`          |
 
+These are **one-shot**: each call opens a fresh `Conversation`,
+runs one inference, and discards it. KV state does not persist
+between calls. For successive multimodal turns that share
+conversation state, use `Chat.SendMulti` / `Chat.SendMultiStream`
+(see [Chat](chat.md)).
+
 ### Building Parts
 
 | Constructor                          | Purpose                                                 |

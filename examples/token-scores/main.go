@@ -75,7 +75,7 @@ func scoreOne(engine litertlm.Engine, prompt, candidate string) error {
 	}
 	defer session.Delete()
 
-	if err := session.RunPrefill([]litertlm.InputData{
+	if err = session.RunPrefill([]litertlm.InputData{
 		litertlm.NewTextInputString(prompt),
 	}); err != nil {
 		return fmt.Errorf("prefill: %w", err)

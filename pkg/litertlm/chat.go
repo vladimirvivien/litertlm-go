@@ -124,9 +124,9 @@ func WithMaxToolHops(n int) ChatOption {
 // WithMaxToolHops isn't supplied.
 const defaultMaxToolHops = 5
 
-// chatTransport is the conversation-side seam used by Chat.send and
-// the auto-dispatch loop. The real Conversation handle satisfies it;
-// tests inject a stub.
+// chatTransport is the conversation-side seam used by Chat.send,
+// Chat.streamWithDispatch, and the auto-dispatch loop. The real
+// Conversation handle satisfies it; tests inject a stub.
 type chatTransport interface {
 	SendMessage(messageJSON, extraContext string) (string, error)
 	SendMessageStreamCh(messageJSON, extraContext string) <-chan StreamChunk
@@ -323,9 +323,17 @@ func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 // SendStream issues a user-role message and returns an iterator over
 // the streamed text chunks. Each chunk's Text is the assistant's text
 // for that step — the per-chunk JSON envelope the C side surfaces is
-// parsed and only the inner content is yielded. Tool-using replies are
-// surfaced as raw chunks in the stream — for structured tool_calls,
-// prefer Send.
+// parsed and only the inner content is yielded.
+//
+// When ManagedTools are registered and the model emits dispatchable
+// tool_calls during the stream, SendStream runs the dispatch loop
+// transparently: tool handlers are invoked, results are fed back to
+// the model, and streaming resumes on the post-tool reply. The
+// caller sees one contiguous text stream and one trailing Final
+// chunk, with text from pre-dispatch turns interleaved with text
+// from post-dispatch turns. Replies containing any
+// non-dispatchable tool call (a RawTool or an unknown name) end
+// the stream with an error.
 func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		if err := ch.checkOpen(); err != nil {
@@ -337,19 +345,7 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: marshal: %w", err))
 			return
 		}
-
-		stop := wireCancel(ctx, ch.conv.Cancel)
-		defer stop()
-
-		for sc := range ch.conv.SendMessageStreamCh(string(msgJSON), "") {
-			text := extractStreamChunkText(sc.Text)
-			if !yield(Chunk{Text: text, Final: sc.Final}, sc.Err) {
-				return
-			}
-			if sc.Err != nil {
-				return
-			}
-		}
+		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), yield)
 	}
 }
 
@@ -379,6 +375,172 @@ func extractStreamChunkText(raw string) string {
 		}
 	}
 	return b.String()
+}
+
+// SendMulti issues a multimodal user-role message and returns the
+// assistant's Reply. Tool dispatch behaves identically to Send.
+//
+// Image / audio Parts require the Client's WithVisionBackend /
+// WithAudioBackend at New time. A []Part containing only text Parts
+// is equivalent to Send with the text concatenated.
+//
+// The Chat's underlying Conversation accumulates KV state across
+// turns, including image and audio embeddings — follow-up text
+// turns can reference earlier multimodal content.
+//
+// Cancelling ctx aborts the in-flight call via Conversation.Cancel.
+func (ch *Chat) SendMulti(ctx context.Context, parts []Part) (*Reply, error) {
+	if err := ch.checkOpen(); err != nil {
+		return nil, err
+	}
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("litertlm: SendMulti: empty parts")
+	}
+	msgJSON, err := partsToConversationMessage(parts)
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
+	}
+	return ch.send(ctx, ch.conv, msgJSON)
+}
+
+// SendMultiStream is the streaming sibling of SendMulti. Chunk.Text
+// carries bare text; the multimodal stream's JSON envelope is
+// parsed internally. ManagedTool calls emitted by the model during
+// the stream are auto-dispatched the same way SendStream handles
+// them (see SendStream godoc for the dispatch semantics).
+func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part) iter.Seq2[Chunk, error] {
+	return func(yield func(Chunk, error) bool) {
+		if err := ch.checkOpen(); err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+		if len(parts) == 0 {
+			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: empty parts"))
+			return
+		}
+		msgJSON, err := partsToConversationMessage(parts)
+		if err != nil {
+			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
+			return
+		}
+		ch.streamWithDispatch(ctx, ch.conv, msgJSON, yield)
+	}
+}
+
+// streamWithDispatch drives the streaming auto-dispatch loop. Each
+// chunk from the transport is parsed for content text and tool_calls;
+// text is yielded immediately, tool_calls are accumulated, and on
+// stream completion the dispatcher invokes the handlers and resumes
+// streaming the post-tool turn. Intermediate Final markers from
+// inner turns are suppressed; one synthetic Final yields at the
+// very end after all dispatch is finished.
+//
+// transport is parameterized so tests inject a stub satisfying
+// chatTransport.
+func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, yield func(Chunk, error) bool) {
+	cap := ch.maxToolHops
+	if cap <= 0 {
+		cap = defaultMaxToolHops
+	}
+
+	for hop := 0; ; hop++ {
+		var calls []ToolCall
+		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, &calls, yield)
+		if cancelled || streamErr != nil {
+			if streamErr != nil {
+				yield(Chunk{}, streamErr)
+			}
+			return
+		}
+
+		if len(calls) == 0 {
+			// No tool calls — final turn complete. Yield the
+			// synthetic Final to close the iterator.
+			yield(Chunk{Text: "", Final: true}, nil)
+			return
+		}
+
+		reply := &Reply{toolCalls: calls}
+		if !ch.allCallsDispatchable(reply) {
+			yield(Chunk{}, fmt.Errorf("litertlm: stream: non-dispatchable tool call %q", calls[0].Function.Name))
+			return
+		}
+		if hop >= cap {
+			yield(Chunk{}, &ToolHopsError{LastReply: reply, Hops: cap})
+			return
+		}
+		results, err := ch.invokeAll(ctx, calls)
+		if err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+		msgJSON, err = encodeToolResults(results)
+		if err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+	}
+}
+
+// streamOne consumes one turn from the transport's stream channel.
+// Text chunks are yielded with Final=false (the synthetic Final is
+// emitted by streamWithDispatch at the end of the dispatch loop).
+// Tool calls observed in any chunk are appended to *calls. Returns
+// (cancelled, err): cancelled=true when the caller's yield returned
+// false; err is set on a transport-side error.
+func (ch *Chat) streamOne(ctx context.Context, transport chatTransport, msgJSON string, calls *[]ToolCall, yield func(Chunk, error) bool) (bool, error) {
+	stop := wireCancel(ctx, transport.Cancel)
+	defer stop()
+
+	for sc := range transport.SendMessageStreamCh(msgJSON, "") {
+		if sc.Err != nil {
+			return false, sc.Err
+		}
+		text, chunkCalls := extractStreamEnvelope(sc.Text)
+		if len(chunkCalls) > 0 {
+			*calls = append(*calls, chunkCalls...)
+		}
+		if text == "" {
+			continue
+		}
+		if !yield(Chunk{Text: text, Final: false}, nil) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// extractStreamEnvelope parses one streamed chunk envelope. Returns
+// the concatenated text from content[] (empty when the chunk has no
+// text parts) and any tool_calls present in the chunk. A chunk that
+// is not a parseable JSON envelope returns (raw, nil) so unrecognised
+// surfaces still reach the caller as text.
+func extractStreamEnvelope(raw string) (string, []ToolCall) {
+	if raw == "" {
+		return "", nil
+	}
+	var msg struct {
+		Content   []replyContentPart `json:"content,omitempty"`
+		ToolCalls []ToolCall         `json:"tool_calls,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		return raw, nil
+	}
+	for i := range msg.ToolCalls {
+		args := msg.ToolCalls[i].Function.Arguments
+		for k, v := range args {
+			if s, ok := v.(string); ok {
+				args[k] = strings.ReplaceAll(s, `<|"|>`, "")
+			}
+		}
+	}
+	var text strings.Builder
+	for _, p := range msg.Content {
+		if p.Type == "text" {
+			text.WriteString(p.Text)
+		}
+	}
+	return text.String(), msg.ToolCalls
 }
 
 // SendToolResult sends a tool-role message back to the model with the

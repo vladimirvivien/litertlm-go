@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -132,6 +133,11 @@ func main() {
 		bot.pendingAttachments = append(bot.pendingAttachments, att)
 	}
 
+	if err := bot.registerTools(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	if err := bot.loadMemory(); err != nil {
 		fmt.Fprintf(os.Stderr, "load memory: %v\n", err)
 		os.Exit(1)
@@ -219,6 +225,10 @@ type bot struct {
 	// pendingAttachments accumulates attachments queued for the next
 	// send. Cleared after each multimodal send.
 	pendingAttachments []attachment
+
+	// tools is the registered tool set attached to every Chat the bot
+	// opens. Built once at startup; openChat reuses the slice.
+	tools []litertlm.ToolDefinition
 }
 
 // attachment pairs a wrapper Part with the path it was loaded from
@@ -242,6 +252,13 @@ func (b *bot) printBanner() {
 	fmt.Fprintf(os.Stderr, "🤖 %s\n", b.modelName)
 	fmt.Fprintf(os.Stderr, "💾 %s · 📝 %d system tokens\n", memDesc, tokens)
 	fmt.Fprintf(os.Stderr, "📐 %d max · %d reply reserve\n", b.maxTokens, b.replyReserve)
+	if len(b.tools) > 0 {
+		names := make([]string, len(b.tools))
+		for i, t := range b.tools {
+			names[i] = t.Name()
+		}
+		fmt.Fprintf(os.Stderr, "🛠  %d tools: %s\n", len(b.tools), strings.Join(names, ", "))
+	}
 	if len(b.pendingAttachments) > 0 {
 		fmt.Fprintf(os.Stderr, "📎 %d attachments: %s\n",
 			len(b.pendingAttachments), renderAttachmentSummary(b.pendingAttachments))
@@ -311,10 +328,51 @@ func (b *bot) repl(ctx context.Context) error {
 }
 
 func (b *bot) handle(ctx context.Context, msg string) error {
+	// Pre-detect explicit media paths in the user message so the model
+	// receives the image / audio in the same turn as the directive.
+	// Without this, a prompt like "describe what's in foo.png" routes
+	// to sendText; the model would call attach_media, the file gets
+	// queued, but the model has no embeddings to describe yet — so it
+	// asks the user to re-prompt. Pre-attaching lets the directive
+	// land alongside the embeddings.
+	for _, p := range extractMediaPaths(msg) {
+		att, err := attachmentFromPath(p)
+		if err != nil {
+			continue
+		}
+		b.pendingAttachments = append(b.pendingAttachments, att)
+	}
+
 	if len(b.pendingAttachments) > 0 {
 		return b.sendMultimodal(ctx, msg)
 	}
 	return b.sendText(ctx, msg)
+}
+
+// extractMediaPaths scans msg for whitespace-separated tokens whose
+// extension matches a supported image or audio type AND that resolve
+// to an existing file on disk. Wrapping quotes / backticks are
+// stripped from both ends, and trailing sentence punctuation
+// (,!?;:.) is stripped from the right. Leading "./" or ".\" is
+// preserved — the trim deliberately keeps the leading "." that
+// signals a relative path. Paths with embedded spaces are not
+// detected; whole-message regex parsing is out of scope for an
+// example.
+func extractMediaPaths(msg string) []string {
+	var paths []string
+	for _, raw := range strings.Fields(msg) {
+		token := strings.Trim(raw, "\"'`")
+		token = strings.TrimRight(token, ",!?;:.")
+		ext := strings.ToLower(filepath.Ext(token))
+		if !imageExts[ext] && !audioExts[ext] {
+			continue
+		}
+		if _, err := os.Stat(token); err != nil {
+			continue
+		}
+		paths = append(paths, token)
+	}
+	return paths
 }
 
 func (b *bot) sendText(ctx context.Context, msg string) error {
@@ -325,26 +383,16 @@ func (b *bot) sendText(ctx context.Context, msg string) error {
 		return fmt.Errorf("open chat after compaction: %w", err)
 	}
 
-	fmt.Println()
-	fmt.Print("🤖 ")
-	var reply strings.Builder
-	for chunk, err := range b.chat.SendStream(ctx, msg) {
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("stream: %w", err)
-		}
-		fmt.Print(chunk.Text)
-		reply.WriteString(chunk.Text)
-		if chunk.Final {
-			fmt.Println()
-		}
+	reply, err := streamReply(b.chat.SendStream(ctx, msg))
+	if err != nil {
+		return err
 	}
 
 	if b.memPath != "" {
 		now := time.Now().UTC()
 		b.turns = append(b.turns,
 			turn{role: "user", ts: now, body: msg},
-			turn{role: "bot", ts: now, body: reply.String()},
+			turn{role: "bot", ts: now, body: reply},
 		)
 		if err := b.appendTurnsToFile(b.turns[len(b.turns)-2:]); err != nil {
 			return fmt.Errorf("append memory: %w", err)
@@ -353,17 +401,19 @@ func (b *bot) sendText(ctx context.Context, msg string) error {
 	return nil
 }
 
-// sendMultimodal runs one multimodal turn through
-// Client.GenerateMultiStream. The Chat handle is closed before the
-// call (the C engine permits one active session at a time) and
-// reopened afterwards so the next text turn sees the new memory
-// entry via WithInitialMessages.
+// sendMultimodal runs one multimodal turn through Chat.SendMultiStream.
+// The Chat handle stays open across the turn; image and audio
+// embeddings accumulate in the underlying Conversation's KV cache so
+// follow-up text turns can reference them. Tool calls emitted during
+// the stream are auto-dispatched the same way sendText handles them.
 func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
 	userBody := annotateUserMessage(b.pendingAttachments, msg)
 	if err := b.maybeCompact(ctx, userBody); err != nil {
 		return err
 	}
-	b.closeChat()
+	if err := b.ensureChat(ctx); err != nil {
+		return fmt.Errorf("open chat: %w", err)
+	}
 
 	parts := make([]litertlm.Part, 0, len(b.pendingAttachments)+1)
 	for _, a := range b.pendingAttachments {
@@ -371,26 +421,16 @@ func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
 	}
 	parts = append(parts, litertlm.Text(msg))
 
-	fmt.Println()
-	fmt.Print("🤖 ")
-	var reply strings.Builder
-	for chunk, err := range b.client.GenerateMultiStream(ctx, parts) {
-		if err != nil {
-			fmt.Println()
-			return fmt.Errorf("stream: %w", err)
-		}
-		fmt.Print(chunk.Text)
-		reply.WriteString(chunk.Text)
-		if chunk.Final {
-			fmt.Println()
-		}
+	reply, err := streamReply(b.chat.SendMultiStream(ctx, parts))
+	if err != nil {
+		return err
 	}
 
 	if b.memPath != "" {
 		now := time.Now().UTC()
 		b.turns = append(b.turns,
 			turn{role: "user", ts: now, body: userBody},
-			turn{role: "bot", ts: now, body: reply.String()},
+			turn{role: "bot", ts: now, body: reply},
 		)
 		if err := b.appendTurnsToFile(b.turns[len(b.turns)-2:]); err != nil {
 			return fmt.Errorf("append memory: %w", err)
@@ -398,8 +438,104 @@ func (b *bot) sendMultimodal(ctx context.Context, msg string) error {
 	}
 
 	b.pendingAttachments = nil
-	b.closeChat()
-	return b.openChat(ctx)
+	return nil
+}
+
+// streamReply consumes a Chat.SendStream / Chat.SendMultiStream
+// iterator, drives the typing UX, and returns the assistant's
+// concatenated text. An animated "🤖 Thinking <braille>" spinner
+// shows while prefill / tool dispatch run; it stops and is cleared
+// when the first text chunk arrives.
+//
+// The spinner is cleared with carriage return + spaces rather than
+// ANSI so the behavior is portable across legacy terminals (Git
+// Bash on Windows, cmd.exe without VT mode) in addition to modern
+// shells.
+func streamReply(stream iter.Seq2[litertlm.Chunk, error]) (string, error) {
+	fmt.Println()
+	stop := startSpinner("Thinking")
+	stopped := false
+	halt := func() {
+		if stopped {
+			return
+		}
+		stop()
+		clearSpinnerLine()
+		stopped = true
+	}
+
+	var reply strings.Builder
+	first := true
+	for chunk, err := range stream {
+		if err != nil {
+			halt()
+			fmt.Println()
+			return reply.String(), fmt.Errorf("stream: %w", err)
+		}
+		if first {
+			halt()
+			fmt.Print("🤖 ")
+			first = false
+		}
+		fmt.Print(chunk.Text)
+		reply.WriteString(chunk.Text)
+		if chunk.Final {
+			fmt.Println()
+		}
+	}
+	if first {
+		halt()
+		fmt.Println()
+	}
+	return reply.String(), nil
+}
+
+// spinnerFrames are the ten standard braille-dot frames used by
+// most CLI progress spinners.
+const spinnerFrames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+// spinnerInterval is the per-frame cadence. 80 ms matches the
+// conventional dots spinner speed (12.5 fps) — fast enough to feel
+// alive without being distracting.
+const spinnerInterval = 80 * time.Millisecond
+
+// startSpinner prints "🤖 <label> <braille>" at the current line
+// and cycles the braille glyph every spinnerInterval. Returns a
+// stop function: the caller must invoke stop before writing to
+// stdout again. stop blocks until the animator goroutine has
+// exited so subsequent writes do not interleave.
+func startSpinner(label string) func() {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		frames := []rune(spinnerFrames)
+		i := 0
+		fmt.Printf("\r🤖 %s %s", label, string(frames[i]))
+		ticker := time.NewTicker(spinnerInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				i = (i + 1) % len(frames)
+				fmt.Printf("\r🤖 %s %s", label, string(frames[i]))
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
+}
+
+// clearSpinnerLine overwrites the spinner line with spaces and
+// returns the cursor to column 0. Generous space count to cover
+// the worst-case rendered width (emojis are 1–2 cells depending
+// on terminal).
+func clearSpinnerLine() {
+	fmt.Print("\r" + strings.Repeat(" ", 40) + "\r")
 }
 
 // handleSlash interprets a REPL line that begins with "/".
@@ -591,6 +727,9 @@ func (b *bot) openChat(ctx context.Context) error {
 	if len(msgs) > 0 {
 		opts = append(opts, litertlm.WithInitialMessages(msgs))
 	}
+	if len(b.tools) > 0 {
+		opts = append(opts, litertlm.WithTool(b.tools...))
+	}
 	chat, err := b.client.NewChat(ctx, opts...)
 	if err != nil {
 		return err
@@ -753,6 +892,67 @@ func renderTurns(turns []turn) string {
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+// ---- tools -----------------------------------------------------------------
+
+type getTimeIn struct{}
+
+type getTimeOut struct {
+	Time string `json:"time"`
+	TZ   string `json:"tz"`
+}
+
+func handleGetTime(_ context.Context, _ getTimeIn) (getTimeOut, error) {
+	now := time.Now()
+	return getTimeOut{
+		Time: now.Format(time.RFC3339),
+		TZ:   now.Format("MST"),
+	}, nil
+}
+
+type attachMediaIn struct {
+	Path string `description:"absolute or relative path to an image or audio file on the user's filesystem"`
+}
+
+type attachMediaOut struct {
+	Attached string `json:"attached"`
+	Kind     string `json:"kind"`
+}
+
+// attachMediaHandler is a method-bound handler so the closure can
+// append to bot state. The Chat dispatcher will JSON-marshal the
+// result struct and feed it back to the model; the model then knows
+// the file is queued and the user's next message will arrive with
+// the attachment.
+func (b *bot) attachMediaHandler(_ context.Context, in attachMediaIn) (attachMediaOut, error) {
+	att, err := attachmentFromPath(in.Path)
+	if err != nil {
+		return attachMediaOut{}, err
+	}
+	b.pendingAttachments = append(b.pendingAttachments, att)
+	return attachMediaOut{Attached: in.Path, Kind: att.kind}, nil
+}
+
+// registerTools registers the bot's built-in tools on the Client.
+// Called once after the Client is constructed, before the first
+// openChat. Subsequent openChat calls attach the same tool slice
+// via WithTool.
+func (b *bot) registerTools() error {
+	tm, err := litertlm.RegisterTool(b.client, "get_time",
+		"Return the current local time on the bot's machine in RFC 3339 plus the timezone abbreviation. Call when the user asks what time it is.",
+		handleGetTime)
+	if err != nil {
+		return fmt.Errorf("register get_time: %w", err)
+	}
+	att, err := litertlm.RegisterTool(b.client, "attach_media",
+		"Queue a media file (image or audio) from disk to be sent with the user's NEXT message. Call when the user asks you to look at a specific file by path. The file is queued, not analysed in this turn; the user's next message will include the file. Image extensions: .png/.jpg/.jpeg/.webp. Audio extensions: .wav/.mp3/.flac/.ogg/.opus/.m4a/.aac. Video is not supported.",
+		b.attachMediaHandler)
+	if err != nil {
+		return fmt.Errorf("register attach_media: %w", err)
+	}
+	b.tools = []litertlm.ToolDefinition{tm, att}
+	return nil
 }
 
 // ---- attachments -----------------------------------------------------------

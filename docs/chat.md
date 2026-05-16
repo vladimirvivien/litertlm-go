@@ -63,6 +63,56 @@ for chunk, err := range chat.SendStream(ctx, message) {
 }
 ```
 
+## Multimodal turns: `SendMulti` and `SendMultiStream`
+
+Send image and audio inputs through the same `Chat` handle as text
+turns. `SendMulti` accepts `[]Part` instead of `string`; the
+underlying `Conversation` accumulates KV state across turns
+regardless of modality, so follow-up text turns can reference
+earlier multimodal content.
+
+```go
+img, err := litertlm.ImageFromFile("photo.jpg")
+// ...
+reply, err := chat.SendMulti(ctx, []litertlm.Part{
+    img,
+    litertlm.Text("Describe this image in one sentence."),
+})
+
+// Follow-up text turn — same Chat, image embeddings still in KV cache:
+reply, err = chat.Send(ctx, "What's the dominant color?")
+```
+
+`SendMultiStream` is the streaming sibling:
+
+```go
+for chunk, err := range chat.SendMultiStream(ctx, parts) {
+    if err != nil { break }
+    fmt.Print(chunk.Text)
+}
+```
+
+Requirements:
+
+- Image Parts require `WithVisionBackend` on the Client at `New`
+  time. Audio Parts require `WithAudioBackend`. Calling `SendMulti`
+  with the wrong backend (or no backend) surfaces a C-side
+  `conversation_create` failure.
+- An empty `[]Part` is rejected up front with `litertlm: SendMulti:
+  empty parts`. Pass at least one Part.
+- Tool dispatch behaves identically to `Send` — the model can emit
+  `tool_call` content in response to multimodal input, and
+  `SendMulti` runs the auto-dispatch loop the same way.
+- A `[]Part` containing only text Parts is equivalent to `Send`
+  with the text concatenated; the multimodal path is only needed
+  when at least one image / audio Part is present.
+
+Contrast with `Client.GenerateMulti` / `GenerateMultiStream` /
+`GenerateMultiResponse`: those are one-shot calls that open a
+fresh `Conversation`, run one inference, and discard it. KV state
+does not persist between calls. Use `Chat.SendMulti*` when you
+want successive turns to share the same conversation state.
+
 ## Tool calling
 
 Two flavors of tool attach to a `Chat` via `WithTool`:

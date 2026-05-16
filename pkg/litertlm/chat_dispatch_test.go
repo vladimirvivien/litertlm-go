@@ -11,12 +11,14 @@ import (
 
 // fakeTransport scripts replies for the dispatch loop tests. Each
 // SendMessage call returns the next entry in replies; sent messages
-// are recorded in sentMsgs for assertions.
+// are recorded in sentMsgs for assertions. Streaming tests populate
+// streamReplies — one []StreamChunk per turn — instead of replies.
 type fakeTransport struct {
-	mu          sync.Mutex
-	replies     []string
-	sentMsgs    []string
-	cancelCalls int
+	mu            sync.Mutex
+	replies       []string
+	streamReplies [][]StreamChunk
+	sentMsgs      []string
+	cancelCalls   int
 }
 
 func (f *fakeTransport) SendMessage(messageJSON, _ string) (string, error) {
@@ -31,8 +33,19 @@ func (f *fakeTransport) SendMessage(messageJSON, _ string) (string, error) {
 	return r, nil
 }
 
-func (f *fakeTransport) SendMessageStreamCh(_, _ string) <-chan StreamChunk {
-	out := make(chan StreamChunk)
+func (f *fakeTransport) SendMessageStreamCh(messageJSON, _ string) <-chan StreamChunk {
+	f.mu.Lock()
+	f.sentMsgs = append(f.sentMsgs, messageJSON)
+	var chunks []StreamChunk
+	if len(f.streamReplies) > 0 {
+		chunks = f.streamReplies[0]
+		f.streamReplies = f.streamReplies[1:]
+	}
+	f.mu.Unlock()
+	out := make(chan StreamChunk, len(chunks)+1)
+	for _, c := range chunks {
+		out <- c
+	}
 	close(out)
 	return out
 }

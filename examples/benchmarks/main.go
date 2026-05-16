@@ -49,7 +49,8 @@ func main() {
 
 	for i := 1; i <= *turns; i++ {
 		fmt.Printf("=== High-level turn %d (Response.Benchmark) ===\n", i)
-		resp, err := client.GenerateResponse(ctx, *prompt)
+		var resp *litertlm.Response
+		resp, err = client.GenerateResponse(ctx, *prompt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "generate: %v\n", err)
 			os.Exit(1)

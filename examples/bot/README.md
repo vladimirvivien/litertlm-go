@@ -61,8 +61,10 @@ template with proper `user` / `assistant` role markers.
 | `/help` | List commands. |
 | `exit` / `/exit` | Quit. |
 
-Attachments are consumed after each multimodal send. Re-attach
-before the next multimodal turn.
+Attachments are consumed after each multimodal send. Subsequent
+text turns can still reference the previously-attached media — the
+Chat's underlying KV cache retains image and audio embeddings, so
+follow-up questions about a photo don't need a re-attach.
 
 ```
 〉 /attach photo.jpg
@@ -76,15 +78,39 @@ attached: voice.wav (audio)
 🤖 ...
 ```
 
+## Inline path auto-attach
+
+When a user message contains a whitespace-separated token that ends
+in a supported image or audio extension AND resolves to an existing
+file on disk, the bot pre-attaches it before sending. This lets the
+model receive the file alongside the directive in the same turn:
+
+```
+〉 describe what you see in ./examples/testdata/img1.png
+
+🤖 Here's a breakdown of what I observe: ...
+```
+
+Without inline auto-attach, the model would have to call the
+`attach_media` tool to queue the file — but the tool result only
+carries the path as text, so the model has no embeddings to
+describe yet and would ask the user to re-prompt. The auto-attach
+pre-empts that round-trip.
+
+Limitations: tokens are split on whitespace, so paths with embedded
+spaces are not detected (use `/attach` for those). Wrapping quotes
+and backticks plus trailing sentence punctuation (`,!?;:.`) are
+stripped before the file-existence check; leading `./` and `.\` are
+preserved.
+
 ## Multimodal turn semantics
 
-Turns with queued attachments go through `Client.GenerateMultiStream`
-instead of the persistent `Chat.SendStream` path. The C engine
-permits one active session at a time, so the Chat is closed before
-the multimodal call and reopened afterwards — the next text turn
-then sees the new memory entry via `WithInitialMessages`. The reopen
-re-prefills the system prompt + prior turns once per multimodal
-turn.
+Turns with queued attachments go through `Chat.SendMultiStream`;
+turns without go through `Chat.SendStream`. Both use the same
+persistent Chat handle, so the Conversation's KV cache accumulates
+state across both modalities. After describing an image, a
+text-only follow-up asking about a detail in the image is answered
+from cached embeddings — no re-attach, no re-encode.
 
 ## File-type detection
 
@@ -265,16 +291,35 @@ go run ./examples/bot \
 - **Body terminator.** A model-emitted line of four-or-more
   backticks alone terminates the stored body early. Models normally
   emit three-backtick fences for code blocks, so this is rare.
-- **Multimodal turns re-prefill the chat.** Each multimodal send
-  closes and reopens the Chat session; the system prompt and prior
-  turns are re-prefilled once per multimodal turn. Text-only turns
-  keep the Chat session warm.
 - **Video is not supported.** `/attach` and `-attach` reject video
   extensions with an `ffmpeg` extraction hint.
+- **Tool dispatch is streaming-aware.** Tool calls emitted by the
+  model during a stream are auto-dispatched mid-stream; the bot
+  surfaces the post-tool text continuation in the same stream.
+  The hop cap (`WithMaxToolHops`) applies the same way it does for
+  non-streaming `Chat.Send`.
+
+## Built-in tools
+
+The bot registers two tools on startup:
+
+| Tool | Description |
+|---|---|
+| `get_time` | Returns the current local time (RFC 3339 + timezone abbreviation). |
+| `attach_media` | Loads an image or audio file from a path the model provides; queues it for the user's next message. |
+
+`attach_media` is the model-facing counterpart of `/attach`: when
+a user phrases the request in natural language ("please look at
+photo.jpg"), the model calls the tool, which loads the file and
+queues it. The user's next message then arrives as a multimodal
+turn carrying the queued file. See the dispatch and replay
+behavior in `chat-multimodal-proposal.md`.
 
 ## What this example does NOT cover
 
-- Tool use — see `examples/autotool/` and `examples/tool-policy/`.
+- A larger tool catalog — `get_time` / `attach_media` are
+  illustrative; for typed tool registration patterns at scale see
+  `examples/autotool/` and `examples/tool-policy/`.
 - `GenerateData[T]` typed output — see `examples/structured/` and
   `examples/extract/`.
 - Streaming compaction — the summarization step uses non-streaming
