@@ -82,6 +82,17 @@ var (
 		"litert_lm_conversation_config_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 
+	// ---- ConversationOptionalArgs ----
+	conversationOptionalArgsCreateFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_create",
+		&ffi.TypePointer)
+	conversationOptionalArgsDeleteFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	conversationOptionalArgsSetVisualTokenBudgetFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_visual_token_budget",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+
 	// ---- Logging ----
 	setMinLogLevelFunc = newLazyFun(
 		"litert_lm_set_min_log_level",
@@ -257,6 +268,9 @@ var (
 	conversationDeleteFunc = newLazyFun(
 		"litert_lm_conversation_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
+	conversationCloneFunc = newLazyFun(
+		"litert_lm_conversation_clone",
+		&ffi.TypePointer, &ffi.TypePointer)
 	conversationSendMessageFunc = newLazyFun(
 		"litert_lm_conversation_send_message",
 		&ffi.TypePointer,

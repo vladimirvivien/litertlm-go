@@ -300,6 +300,43 @@ func (ch *Chat) Close() error {
 	return nil
 }
 
+// Clone returns a new Chat whose underlying Conversation mirrors ch's
+// prefilled state — activation frames and KV cache included. Useful
+// for branching tool loops (run N candidate tools off one prefilled
+// prompt) and for structured-output retries where each attempt should
+// start from the same conversation history.
+//
+// The cloned Chat shares ch's tool registry and dispatch-hop limit.
+// The ConversationConfig is owned by ch; the clone holds none and
+// only releases its Conversation on Close. ch must outlive every
+// clone derived from it; closing ch invalidates the underlying
+// configuration that backs each clone's Conversation.
+//
+// Clone fails when the underlying executor does not implement
+// Session.Clone. As of LiteRT-LM v0.12.0 this is the case for the
+// LiteRT executor used by Gemma 4 on CPU and GPU.
+func (ch *Chat) Clone() (*Chat, error) {
+	ch.mu.Lock()
+	if ch.closed {
+		ch.mu.Unlock()
+		return nil, fmt.Errorf("litertlm: Chat is closed")
+	}
+	conv := ch.conv
+	tools := ch.tools
+	hops := ch.maxToolHops
+	ch.mu.Unlock()
+
+	clonedConv, err := conv.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: Chat.Clone: %w", err)
+	}
+	return &Chat{
+		conv:        clonedConv,
+		tools:       tools,
+		maxToolHops: hops,
+	}, nil
+}
+
 // Send issues a user-role message and returns the assistant's Reply.
 // When the chat has at least one ManagedTool registered and the
 // reply contains tool calls that all map to dispatchable entries,

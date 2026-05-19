@@ -138,6 +138,9 @@ func applySettings(s EngineSettings, cfg *clientConfig) {
 	if cfg.dispatchLibDir != "" {
 		s.SetLitertDispatchLibDir(cfg.dispatchLibDir)
 	}
+	if cfg.maxImages != nil {
+		s.SetMaxNumImages(*cfg.maxImages)
+	}
 }
 
 // Close releases the engine and engine-settings handles. Safe to call

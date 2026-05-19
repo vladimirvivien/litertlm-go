@@ -36,5 +36,9 @@ type Conversation uintptr
 // ConversationConfig wraps a LiteRtLmConversationConfig*.
 type ConversationConfig uintptr
 
+// OptionalArgs wraps a LiteRtLmConversationOptionalArgs* — per-turn
+// knobs passed to Conversation.SendMessage / SendMessageStream.
+type OptionalArgs uintptr
+
 // JsonResponse wraps a LiteRtLmJsonResponse* returned by Conversation calls.
 type JsonResponse uintptr

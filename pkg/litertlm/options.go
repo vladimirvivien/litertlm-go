@@ -30,6 +30,8 @@ type clientConfig struct {
 
 	dispatchLibDir string
 
+	maxImages *int
+
 	defaultSampler *SamplerParams
 }
 
@@ -141,6 +143,14 @@ func WithParallelSectionLoading(on bool) Option {
 // by the NPU backend. Ignored by CPU / GPU backends.
 func WithDispatchLibDir(dir string) Option {
 	return func(c *clientConfig) { c.dispatchLibDir = dir }
+}
+
+// WithMaxImages caps the number of image inputs per generation. The
+// C side gates this option on the legacy ARTISAN backends
+// (cpu_artisan / gpu_artisan); calls with backend "cpu" or "gpu" are
+// accepted but have no effect.
+func WithMaxImages(n int) Option {
+	return func(c *clientConfig) { c.maxImages = &n }
 }
 
 // WithDefaultSampler sets the sampler parameters used for every

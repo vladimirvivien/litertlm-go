@@ -51,6 +51,18 @@ func TestOption_DispatchLibDir(t *testing.T) {
 	}
 }
 
+// TestOption_MaxImages threads WithMaxImages through.
+func TestOption_MaxImages(t *testing.T) {
+	cfg := clientConfig{}
+	if cfg.maxImages != nil {
+		t.Fatalf("maxImages should default to nil")
+	}
+	WithMaxImages(4)(&cfg)
+	if cfg.maxImages == nil || *cfg.maxImages != 4 {
+		t.Errorf("maxImages = %v, want 4", cfg.maxImages)
+	}
+}
+
 // TestOption_LibName verifies WithLibName threads through to the
 // resolved config and respects last-write-wins.
 func TestOption_LibName(t *testing.T) {
