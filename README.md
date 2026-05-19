@@ -84,6 +84,8 @@ The followings walk you through how to build them:
 - Linux / macOS — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
 - Windows — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 
+Minimum supported upstream: **LiteRT-LM v0.12.0**. Earlier builds lack the `optional_args` parameter on `litert_lm_conversation_send_message` / `_stream`.
+
 ## Examples
 
 | Path                          | What it shows                                                      |

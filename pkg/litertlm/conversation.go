@@ -156,11 +156,13 @@ func (c Conversation) SendMessage(messageJSON, extraContext string) (string, err
 		return "", err
 	}
 
+	var optArgs unsafe.Pointer
 	handle, err := callForHandle[JsonResponse](conversationSendMessageFunc,
 		"conversation_send_message",
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
+		unsafe.Pointer(&optArgs),
 	)
 	if err != nil {
 		return "", err

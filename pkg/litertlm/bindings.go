@@ -263,6 +263,7 @@ var (
 		&ffi.TypePointer, // conversation
 		&ffi.TypePointer, // message_json
 		&ffi.TypePointer, // extra_context
+		&ffi.TypePointer, // optional_args
 	)
 	conversationSendMessageStreamFunc = newLazyFun(
 		"litert_lm_conversation_send_message_stream",
@@ -270,6 +271,7 @@ var (
 		&ffi.TypePointer, // conversation
 		&ffi.TypePointer, // message_json
 		&ffi.TypePointer, // extra_context
+		&ffi.TypePointer, // optional_args
 		&ffi.TypePointer, // callback
 		&ffi.TypePointer, // callback_data
 	)

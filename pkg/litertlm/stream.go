@@ -196,12 +196,14 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 	cbAddr := streamTrampAddr
 	cbData := id
 
+	var optArgs unsafe.Pointer
 	var ret int32
 	conversationSendMessageStreamFunc.Call(
 		unsafe.Pointer(&ret),
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
+		unsafe.Pointer(&optArgs),
 		unsafe.Pointer(&cbAddr),
 		unsafe.Pointer(&cbData),
 	)
