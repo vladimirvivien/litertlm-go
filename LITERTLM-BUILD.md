@@ -75,22 +75,39 @@ cc_binary(
 )
 ```
 ### 3. Build the shared libraries
-Run `bazel` to build the binaries. The GPU-capable target needs two extra `--define` flags.
 
 ```bash
-# CPU-only
+# CPU
 bazel build //c/litertlm_c_api:litertlm_c_cpu
 
-# GPU-capable
+# GPU
 bazel build //c/litertlm_c_api:litertlm_c \
     --define=litert_link_capi_so=true \
     --define=resolve_symbols_in_exec=false
 ```
 
-By default, the built files are stored at `bazel-bin/c/litertlm_c_api/*.so` on Linux
-and `*.dylib` on macOS.
+The two `--define` flags are required for the GPU target. See [Build
+mechanics](#build-mechanics) for what they do.
 
-If you need to start over with a clean build, use `bazel clean --expunge` to clear previous builds.
+Built files land in `bazel-bin/c/litertlm_c_api/*.so` on Linux and `*.dylib` on
+macOS. Run `bazel clean --expunge` to start over from scratch.
+
+### 3.5 Verify the build
+
+The GPU shared library must dynamically link `libLiteRt`:
+
+```bash
+# Linux
+objdump -p bazel-bin/c/litertlm_c_api/liblitertlm_c.so | grep NEEDED
+# must include: NEEDED  libLiteRt.so
+
+# macOS
+otool -L bazel-bin/c/litertlm_c_api/liblitertlm_c.dylib | grep -i litert
+# must list libLiteRt.dylib
+```
+
+If `libLiteRt` is absent from the output, rebuild per §3 with both `--define`
+flags.
 
 ### 4. Stage the libraries
 
@@ -128,6 +145,32 @@ LITERTLM_LIB=~/include/litertlm/lib go run ./examples/hello \
     -model ~/models/gemma-4-E2B-it.litertlm \
     -backend cpu
 ```
+
+## Build mechanics
+
+`liblitertlm_c.{so,dylib}` is a thin shim around upstream's `c/engine.{cc,h}`.
+It must share the LiteRT runtime instance with the GPU accelerator plugin
+(`libLiteRtWebGpuAccelerator.{so,dylib}`), which loads `libLiteRt.{so,dylib}` at
+runtime.
+
+Two `--define` flags control how the runtime is linked into the C-API
+shared library:
+
+- `--define=litert_link_capi_so=true` — links the C-API shared library against
+  `libLiteRt.{so,dylib}` dynamically. The C-API library and the accelerator
+  plugin then share one TFLite delegate registry through the same
+  `libLiteRt.{so,dylib}`. Required for GPU.
+- `--define=resolve_symbols_in_exec=false` — required companion when linking
+  dynamically.
+
+The CPU target (`litertlm_c_cpu`) uses `//runtime/core:engine_impl_cpu_only`,
+which has no accelerator-plugin interaction. The flags are optional for CPU.
+
+The Python (`python/litert_lm/BUILD`) and Kotlin
+(`kotlin/java/com/google/ai/edge/litertlm/jni/BUILD`) bindings follow the same
+convention: the BUILD file is link-mode-agnostic, and the `--define` flag at
+the command line controls static vs dynamic. Upstream CI passes both flags on
+every platform (`.github/workflows/ci-build.yml`).
 
 ## Troubleshooting
 
