@@ -5,7 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 )
+
+// reservedToolNamePrefix is reserved for tools synthesized internally
+// by the wrapper (e.g. GenerateData[T]'s capture tool). RegisterTool
+// rejects user-supplied names that start with this prefix.
+const reservedToolNamePrefix = "__litertlm_"
 
 // ToolDefinition is the common contract every tool attached to a Chat
 // satisfies. RawTool and ManagedTool[I, O] both implement it so they
@@ -161,6 +167,10 @@ func RegisterTool[I, O any](
 	if name == "" {
 		return nil, fmt.Errorf("litertlm: RegisterTool: empty name")
 	}
+	if strings.HasPrefix(name, reservedToolNamePrefix) {
+		return nil, fmt.Errorf("litertlm: RegisterTool %q: names starting with %q are reserved for wrapper-internal tools",
+			name, reservedToolNamePrefix)
+	}
 	if handler == nil {
 		return nil, fmt.Errorf("litertlm: RegisterTool %q: nil handler", name)
 	}
@@ -193,6 +203,18 @@ func RegisterTool[I, O any](
 	}
 	c.tools[name] = tool
 	return tool, nil
+}
+
+// unregisterTool removes name from the client's tool registry. Used
+// by internal synthesized-tool flows that need cleanup paths. No-op
+// when name is absent.
+func (c *Client) unregisterTool(name string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.tools, name)
 }
 
 // paramsSchemaOf generates a formal JSON-Schema object for type t.

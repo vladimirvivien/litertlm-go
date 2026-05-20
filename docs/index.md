@@ -19,9 +19,10 @@ A Go binding for Google's
   declarations, and structured `tool_calls` parsing.
   → [Chat guide](chat.md)
 - **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
-  that return `*T` populated from the model's JSON output, with retry
-  and tolerant parsing. The `Multi` variant accepts image and audio
-  Parts. → [Structured output](structured-output.md)
+  that return `*T` populated from the model's response via a
+  synthesized tool-call capture (primary path) with a
+  prompt-engineered fallback. The `Multi` variant accepts image and
+  audio Parts. → [Structured output](structured-output.md)
 - **Low-level API** — every C-API symbol exposed as a Go method.
   Useful when you need explicit prefill→decode, scoring, token
   introspection, or deterministic resource lifetimes.

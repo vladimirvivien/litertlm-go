@@ -1,8 +1,8 @@
 # Structured output
 
-Use `GenerateData[T]` to return an instance of `*T` that is automatically
-unmarshaled with the model's JSON output. For this convenience to work properly,
-you must first declare your data type as shown in the snippet below.
+`GenerateData[T]` and `GenerateDataMulti[T]` produce a typed `*T`
+populated from the model's response, without manual JSON parsing in
+caller code.
 
 ```go
 type Recipe struct {
@@ -22,11 +22,7 @@ fmt.Println(recipe.Title)
 fmt.Println(recipe.Ingredients)
 ```
 
-## Using GenerateData
-
-`Client.GenerateData` mirrors the functionalities of `Client.Generate(ctx, prompt, opts...)` 
-with the additional type parameter to store the response from the LLM.
-
+## Signatures
 
 ```go
 func GenerateData[T any](
@@ -35,23 +31,67 @@ func GenerateData[T any](
     prompt string,
     opts ...GenOption,
 ) (*T, error)
+
+func GenerateDataMulti[T any](
+    ctx context.Context,
+    c *Client,
+    parts []Part,
+    opts ...GenOption,
+) (*T, error)
 ```
 
+`T` must be a struct or pointer-to-struct for the primary path. Other
+kinds (slices, scalars, maps) route through the fallback path described
+below.
 
-### How it works
+## How it works
 
-1. **Schema reflection.** Recursively walk `reflect.TypeFor[T]()` and
-   emit a compact instruction-friendly hint:
+Each attempt runs two paths in sequence: the synthesized tool-call
+path first, then the prompt-engineered fallback when the first path
+does not deliver a value.
 
-    ```
-    {"title": <string>, "ingredients": [<string>], "steps": [<string>]}
-    ```
+### Primary: synthesized tool-call capture
 
-    Honors `json` tags including `,omitempty` and `-`. Unsupported kinds (channel, func,
-    non-string-keyed map) fail at call time, before hitting the model.
+1. **Synthesize a capture tool** keyed on `reflect.TypeFor[T]()`. The
+   tool's JSON-Schema parameters are derived from `T`'s exported
+   fields (same reflection rules as `RegisterTool`). The tool is
+   cached on the Client; subsequent calls of the same type reuse the
+   registration.
+2. **Open a one-hop Chat** with the synthesized tool attached and the
+   prompt augmented with a directive instructing the model to deliver
+   the structured value as the tool's arguments.
+3. **Dispatch.** The model emits a tool call inside the family's
+   tool-call markers (`<|tool_call|>...<|/tool_call|>` for Gemma 4,
+   `<tool_call>...</tool_call>` for Qwen 3; per-family marker syntax
+   lives in upstream `runtime/conversation/model_data_processor/`). The
+   C-side `model_data_processor` extracts the JSON envelope under strict
+   parsing and surfaces `{name, arguments}`. The wrapper unmarshals
+   `arguments` into a fresh `T` and writes it to a per-call slot in
+   `ctx.Value`.
+4. **Return** the captured `*T`.
 
-2. **Prompt augmentation.** A special markup  hint is inserted before the
-   user prompt with a default instruction:
+Markdown fences, prose preambles, and unbalanced braces cannot appear
+in `arguments` — the family markers bracket the model's output and
+the C-side parser is strict.
+
+### Fallback: prompt-engineered + tolerant parse
+
+The fallback runs when the primary path returns nil: `T` is not a
+struct, chat construction failed, the transport errored, or the model
+declined to call the tool.
+
+1. **Schema reflection.** Walk `reflect.TypeFor[T]()` and emit a
+   compact shape hint:
+
+   ```
+   {"title": <string>, "ingredients": [<string>], "steps": [<string>]}
+   ```
+
+   `json` tags including `,omitempty` and `-` are honored. Unsupported
+   kinds (channel, func, non-string-keyed map) fail at call time.
+
+2. **Prompt augmentation.** Prepend a default instruction containing
+   the shape hint to the last text Part:
 
    ```
    Respond with valid JSON only — no commentary, no markdown
@@ -59,39 +99,43 @@ func GenerateData[T any](
    {shape}
    ```
 
-    You can use `WithSchemaInstruction(s)` to overide the instruction
-    if you want different wording where string `s` must contain one 
-    `%s` placeholder.
+   Override with `WithSchemaInstruction(s)` where `s` is a Printf
+   format string containing one `%s` placeholder for the shape.
 
-3. **Generate.** Internally `Client.GenerateData` uses `Client.Generate`, so
-   `ctx` cancellation, sampler params, and `WithMaxOutputTokens` all
-   work as usual.
+3. **Generate.** Routes through `Client.Generate` /
+   `Client.GenerateMulti`; sampler params, `WithMaxOutputTokens`, and
+   `ctx` cancellation apply.
 
-4. **Tolerant extraction.** The model often wraps JSON in
-   ```` ```json … ``` ``` fences or a prose preamble. The extractor
-   strips fences, finds the first balanced `{...}` (or `[...]` for
-   slice `T`), and respects string literals so braces inside string
-   values don't fool the depth counter.
+4. **Tolerant extraction.** Strip markdown fences, locate the first
+   balanced `{...}` (or `[...]` for slice `T`), respect string
+   literals so braces inside string values do not confuse the depth
+   counter.
 
-5. **Unmarshal** Finally, the returned JSON is unmarshaled into a value of type 
-   `*T` via `encoding/json`.
+5. **Unmarshal** into `*T` via `encoding/json`.
 
-If extraction or unmarshal fails, the error wraps in
-`*GenerateDataError` and — if `WithRetries(n)` was set — the call
-re-runs. Up to `1 + n` total attempts.
+## Retry semantics
 
-### Function options
+`WithRetries(n)` controls iteration count: each attempt runs the
+primary path then the fallback path in sequence. The full pair counts
+as one attempt; up to `1+n` attempts run before returning the last
+parse error.
 
-| Option                              | Effect                                                                  |
-|-------------------------------------|-------------------------------------------------------------------------|
-| `WithRetries(n)`                    | Max retry attempts on parse failure. Default 0 (one total attempt).     |
-| `WithSchemaInstruction(s)`          | Override the default preamble. `s` is a Printf format string with one `%s` for the shape. |
-| `WithMaxOutputTokens(n)`            | Cap output tokens.                                                      |
-| `WithSampler(p)`                    | Override the Client's default sampler.                                  |
+Retries fire on parse-path failures. Generate-phase errors (`ctx.Err()`,
+FFI failures, model crashes) propagate immediately.
 
-### Error handling
-`GenerateData` returns a structured error to allow users to distinguish between structural
-and parsing errors. Parsing errors can happen if the model sends unfinished data.
+## Options
+
+| Option                     | Effect                                                                                |
+|----------------------------|---------------------------------------------------------------------------------------|
+| `WithRetries(n)`           | Max retry attempts on parse failure. Default 0 (one total attempt).                   |
+| `WithSchemaInstruction(s)` | Override the fallback path's default preamble. `s` is a Printf format string with one `%s`. |
+| `WithMaxOutputTokens(n)`   | Cap output tokens on the fallback path.                                               |
+| `WithSampler(p)`           | Override the Client's default sampler on the fallback path.                           |
+
+## Error handling
+
+`GenerateData` returns a `*GenerateDataError` on failure. Use
+`errors.As` to distinguish phases.
 
 ```go
 recipe, err := litertlm.GenerateData[Recipe](ctx, client, prompt)
@@ -110,7 +154,7 @@ if err != nil {
 }
 ```
 
-Type `*GenerateDataError`:
+Type:
 
 ```go
 type GenerateDataError struct {
@@ -121,14 +165,10 @@ type GenerateDataError struct {
 }
 ```
 
-**Retries fire only on parse failures.** Generate-phase errors
-(`ctx.Err()`, FFI failures, model crashes) propagate the error and fails immediately.
-
 ## Multimodal: `GenerateDataMulti[T]`
 
-Use `GenerateDataMulti[T]` to extract structured data from
-inputs that include images or audio (vision-language model required;
-configure with `WithVisionBackend` at `New` time).
+`GenerateDataMulti[T]` accepts a `[]Part` carrying image, audio, and
+text segments. Requires a multimodal model.
 
 ```go
 img, err := litertlm.ImageFromFile("/path/to/recipe-card.jpg")
@@ -143,22 +183,14 @@ recipe, err := litertlm.GenerateDataMulti[Recipe](ctx, client,
 )
 ```
 
-Schema-injection rule: the JSON-shape instruction is **prepended to
-the last text Part** in `parts`. If `parts` contains no text Part, a
-synthesized `Text(instruction)` is appended at the end. The caller's
-slice is never mutated.
-
-```go
-func GenerateDataMulti[T any](
-    ctx context.Context,
-    c *Client,
-    parts []Part,
-    opts ...GenOption,
-) (*T, error)
-```
+Placement rule for the tool-call directive (primary path) and the
+schema instruction (fallback path): both prepend to the LAST text Part
+in `parts`. When `parts` contains no text Part, a synthesized
+`Text(...)` is appended at the end. The caller's slice is never
+mutated.
 
 `GenerateData[T]` is the text-only convenience over
-`GenerateDataMulti[T]` — pass a string prompt instead of `[]Part`.
+`GenerateDataMulti[T]`.
 
 ## See also
 
@@ -167,3 +199,5 @@ func GenerateDataMulti[T any](
 - [`examples/extract/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/extract)
   — image-to-JSON extraction with `GenerateDataMulti`.
 - [Client](client.md#multimodal-inputs) — the underlying multimodal API.
+- [Tools](tools.md) — `RegisterTool` / `WithTool` for user-defined
+  tool dispatch (the same machinery the primary path uses).

@@ -1,19 +1,24 @@
 # Example: Typed Structured Output
 
 Generates a typed Go value (`Recipe { title, ingredients, steps }`)
-directly from a model prompt via `GenerateData[T]`, which appends a
-JSON-shape instruction and unmarshals the response into the target
-type.
+directly from a model prompt via `GenerateData[T]`. The model invokes
+a synthesized capture tool whose arguments are unmarshaled into the
+target type; a prompt-engineered fallback runs when the model declines
+to call the tool.
 
 ## What this example shows
 
-- `litertlm.GenerateData[T](ctx, client, prompt)` returning a `*T`
-  populated from the model's JSON output.
-- `litertlm.WithRetries(n)` to retry on parse failure when the model
-  emits malformed JSON.
-- `*GenerateDataError` distinguishing parse failures (model returned
-  text that did not unmarshal) from generate failures (FFI / ctx
-  cancellation).
+- `litertlm.GenerateData[T](ctx, client, prompt)` returning a typed
+  `*T` populated from the model's response.
+- `litertlm.WithRetries(n)` controlling attempt count when the
+  fallback path's tolerant JSON parser fails.
+- `*GenerateDataError` distinguishing parse failures from generate
+  failures (FFI / ctx cancellation).
+
+Recipe extraction routes through the primary tool-call path on Gemma 4;
+the fallback path activates only when the model declines to call the
+synthesized capture tool. See [docs/structured-output.md](../../docs/structured-output.md)
+for the full pipeline.
 
 ## Prerequisites
 
@@ -66,19 +71,23 @@ A JSON-pretty-printed Recipe struct, e.g.:
 
 ## Notes
 
-- **Model reliability.** Gemma 4 E4B (4B parameters) follows the
-  injected JSON instruction reliably; the smaller E2B variant is
-  less consistent and benefits from `WithRetries`.
-- **Customising the instruction** - use `WithSchemaInstruction(s)` to
-  override the default preamble.
+- **Primary path.** Gemma 4 E2B and E4B both reliably invoke the
+  synthesized capture tool on this prompt shape. The model may leave
+  individual struct fields empty when the JSON-Schema `required`
+  marker is not strictly honored; the wrapper unmarshals partial
+  arguments and zero-values the missing fields.
+- **Fallback path.** Activates when the model declines to call the
+  tool. Augments the prompt with a JSON-shape instruction and runs a
+  tolerant parser over the response. `WithSchemaInstruction(s)`
+  overrides the fallback's default preamble; `s` is a Printf format
+  string with one `%s` for the shape:
 
   ```go
   litertlm.WithSchemaInstruction(
       "Output strictly valid JSON matching: %s. Do not include any explanation.")
   ```
 
-- **What does the shape hint look like?** For the `Recipe` struct
-  above, the helper inserts:
+  The fallback's shape hint for the `Recipe` struct above:
 
   ```
   {"title": <string>, "ingredients": [<string>], "steps": [<string>]}

@@ -268,6 +268,68 @@ func TestRegisterTool_RejectsNonStructInput(t *testing.T) {
 	}
 }
 
+func TestRegisterTool_RejectsReservedPrefix(t *testing.T) {
+	c := &Client{}
+	handler := func(ctx context.Context, in weatherIn) (weatherOut, error) {
+		return weatherOut{}, nil
+	}
+	cases := []string{
+		"__litertlm_",
+		"__litertlm_capture",
+		"__litertlm_capture_Person",
+	}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := RegisterTool(c, name, "d", handler)
+			if err == nil {
+				t.Fatalf("RegisterTool(%q) succeeded; want reserved-prefix error", name)
+			}
+			if got, ok := c.tools[name]; ok {
+				t.Errorf("rejected tool was still stored: %v", got)
+			}
+		})
+	}
+}
+
+func TestRegisterTool_AcceptsNamesContainingReservedPrefix(t *testing.T) {
+	c := &Client{}
+	handler := func(ctx context.Context, in weatherIn) (weatherOut, error) {
+		return weatherOut{}, nil
+	}
+	if _, err := RegisterTool(c, "my__litertlm_thing", "d", handler); err != nil {
+		t.Fatalf("RegisterTool: %v — prefix rejection must match start-of-name only", err)
+	}
+}
+
+// ---- unregisterTool -----------------------------------------------------
+
+func TestUnregisterTool_RemovesEntry(t *testing.T) {
+	c := &Client{}
+	handler := func(ctx context.Context, in weatherIn) (weatherOut, error) {
+		return weatherOut{}, nil
+	}
+	if _, err := RegisterTool(c, "weather", "d", handler); err != nil {
+		t.Fatalf("RegisterTool: %v", err)
+	}
+	c.unregisterTool("weather")
+	if _, ok := c.tools["weather"]; ok {
+		t.Error("unregisterTool: entry still present")
+	}
+}
+
+func TestUnregisterTool_NoOpForMissing(t *testing.T) {
+	c := &Client{}
+	c.unregisterTool("never_registered") // must not panic
+	if len(c.tools) != 0 {
+		t.Errorf("unregisterTool created entries: %v", c.tools)
+	}
+}
+
+func TestUnregisterTool_NilClient(t *testing.T) {
+	var c *Client
+	c.unregisterTool("anything") // must not panic
+}
+
 // ---- ManagedTool.invoke -------------------------------------------------
 
 func TestManagedTool_Invoke(t *testing.T) {

@@ -1,11 +1,11 @@
 // structured demonstrates type-safe structured-output extraction with
 // litertlm.GenerateData[T]. The model is asked for a Recipe; the
-// helper injects a JSON-shape instruction, generates, extracts the
-// JSON from the (possibly markdown-fenced, prose-padded) reply, and
-// unmarshals into the typed Go struct.
+// helper returns a typed *Recipe populated from the model's response.
 //
-// Local LLMs occasionally produce invalid JSON; bump `-retries` if
-// the first attempt fails.
+// GenerateData[T] routes through a synthesized tool-call capture when
+// T is a struct, with a prompt-engineered fallback for other cases or
+// when the model declines to call the tool. See docs/structured-output.md
+// for the full pipeline; -retries N controls fallback-path attempts.
 //
 // See README.md in this directory for prerequisites and usage.
 package main

@@ -9,13 +9,13 @@ description loaded from disk.
 
 - Loading an image with `litertlm.ImageFromFile`.
 - `GenerateDataMulti[Scene]` returns a populated `*Scene` directly
-  from the model's image understanding; the JSON-shape instruction is
-  injected automatically.
-- `WithRetries(n)` re-runs on parse failure (model emits
-  almost-JSON or wraps its answer in markdown fences).
-- `*GenerateDataError` distinguishes parse failures (model returned
-  text that couldn't unmarshal) from generate failures (FFI / ctx
-  cancellation).
+  from the model's image understanding via the synthesized tool-call
+  capture path (with a prompt-engineered fallback when the model
+  declines to emit a tool call).
+- `WithRetries(n)` controls attempt count when the fallback path's
+  tolerant JSON parser fails.
+- `*GenerateDataError` distinguishes parse failures from generate
+  failures (FFI / ctx cancellation).
 - A follow-up text-only `client.Generate` call that produces a brief
   alignment assessment between the extracted JSON and the reference.
 
@@ -75,10 +75,11 @@ LITERTLM_LIB=/abs/path/to/dist/lib \
   Define your own `T` to extract any shape — e.g.,
   `Recipe { Title, Ingredients, Steps }` for a recipe-card photo,
   `BusinessCard { Name, Phone, Email, Company }` for a contact image.
-- **Parse failures.** The tolerant extractor strips markdown-fenced
-  JSON (`` ```json ... ``` ``) and trailing prose. Fields outside the
-  schema surface as `*GenerateDataError` with `Phase == "parse"`; the
-  raw output is on the error for inspection.
+- **Parse failures.** Surface only when both the tool-call primary
+  path and the fallback path fail. The fallback's tolerant extractor
+  strips markdown-fenced JSON (`` ```json ... ``` ``) and trailing
+  prose; parse-phase errors arrive as `*GenerateDataError` with
+  `Phase == "parse"` and the raw output attached.
 - **Alignment is a qualitative signal.** The assessment step is a
   normal text generation; treat it as a sanity check, not an
   evaluation harness.
