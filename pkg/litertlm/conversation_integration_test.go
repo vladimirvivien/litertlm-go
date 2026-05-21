@@ -9,11 +9,15 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-// requireTestModel returns lib-dir and model paths when both env vars
-// are set; otherwise calls t.Skip. Integration tests that need a real
-// engine call this once at entry.
+// requireTestModel returns lib-dir and model paths from
+// LITERTLM_TEST_LIB and LITERTLM_TEST_MODEL. Calls t.Skip when
+// testing.Short() is set or when either env var is empty.
+// Integration tests that need a real engine call this once at entry.
 func requireTestModel(t *testing.T) (libDir, modelPath string) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 	libDir = os.Getenv("LITERTLM_TEST_LIB")
 	modelPath = os.Getenv("LITERTLM_TEST_MODEL")
 	if libDir == "" || modelPath == "" {
