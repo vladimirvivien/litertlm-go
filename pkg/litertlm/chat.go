@@ -337,6 +337,48 @@ func (ch *Chat) Clone() (*Chat, error) {
 	}, nil
 }
 
+// TokenUsage carries the cumulative token counts a Chat has processed
+// across all turns.
+type TokenUsage struct {
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+}
+
+// TokenCount returns the cumulative tokens this Chat's underlying
+// Conversation has processed. PromptTokens sums prefill counts across
+// turns; CompletionTokens sums decode counts. Tool-dispatch hops
+// within a single Send count as additional turns.
+//
+// Requires litertlm.WithBenchmarkEnabled on the Client at New time.
+// Without it, the C side reports zero turns and TokenCount returns
+// a zero TokenUsage with no error.
+func (ch *Chat) TokenCount() (TokenUsage, error) {
+	ch.mu.Lock()
+	closed := ch.closed
+	conv := ch.conv
+	ch.mu.Unlock()
+	if closed {
+		return TokenUsage{}, fmt.Errorf("litertlm: Chat is closed")
+	}
+
+	bi, err := conv.BenchmarkInfo()
+	if err != nil {
+		return TokenUsage{}, fmt.Errorf("litertlm: Chat.TokenCount: %w", err)
+	}
+	defer bi.Delete()
+
+	var usage TokenUsage
+	for i, n := 0, bi.NumPrefillTurns(); i < n; i++ {
+		usage.PromptTokens += bi.PrefillTokenCount(i)
+	}
+	for i, n := 0, bi.NumDecodeTurns(); i < n; i++ {
+		usage.CompletionTokens += bi.DecodeTokenCount(i)
+	}
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	return usage, nil
+}
+
 // Send issues a user-role message and returns the assistant's Reply.
 // When the chat has at least one ManagedTool registered and the
 // reply contains tool calls that all map to dispatchable entries,
