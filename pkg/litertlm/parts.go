@@ -86,6 +86,15 @@ func AudioFromFile(path string) (Part, error) {
 // parts and for binary parts constructed without a MIME.
 func (p Part) Mime() string { return p.mime }
 
+// TextContent returns the text payload of a text Part. Empty string
+// when the Part holds image or audio bytes; use IsText to disambiguate.
+func (p Part) TextContent() string {
+	if p.kind == partText {
+		return p.text
+	}
+	return ""
+}
+
 // IsText reports whether the Part holds text.
 func (p Part) IsText() bool { return p.kind == partText }
 
@@ -131,12 +140,12 @@ func partsHasBinary(parts []Part) bool {
 	return false
 }
 
-// partsToConversationMessage builds the JSON user-message envelope
-// the Conversation API expects for multimodal turns. Image and audio
-// bytes are base64-encoded and delivered as `{"type":"image","blob":...}`
-// / `{"type":"audio","blob":...}`. Text Parts become
-// `{"type":"text","text":...}`.
-func partsToConversationMessage(parts []Part) (string, error) {
+// renderPartsContent builds the content array the C side expects for
+// a message: a list of typed entries, one per Part. Image and audio
+// bytes are base64-encoded into a "blob" field; text becomes a "text"
+// field. Used by both the current-turn multimodal path and the
+// initial-history encoder.
+func renderPartsContent(parts []Part) []map[string]any {
 	content := make([]map[string]any, 0, len(parts))
 	for _, p := range parts {
 		switch p.kind {
@@ -157,9 +166,15 @@ func partsToConversationMessage(parts []Part) (string, error) {
 			})
 		}
 	}
+	return content
+}
+
+// partsToConversationMessage builds the JSON user-message envelope
+// the Conversation API expects for multimodal turns.
+func partsToConversationMessage(parts []Part) (string, error) {
 	msg := map[string]any{
 		"role":    "user",
-		"content": content,
+		"content": renderPartsContent(parts),
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {

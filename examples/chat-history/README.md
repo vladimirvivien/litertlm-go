@@ -6,7 +6,7 @@ Resume a prior conversation by seeding `Chat` with a transcript.
 
 | Option | Effect |
 |---|---|
-| `WithInitialMessages([]Message)` | Pre-seeds the conversation with prior `{role, content}` turns. Appended after the system prompt, before the first `Send`. |
+| `WithInitialMessages([]Message)` | Pre-seeds the conversation with prior turns. Each `Message{Role, Parts}` carries a role and a `[]Part` body (text, image, audio, mixed). Appended after the system prompt, before the first `Send`. |
 | `WithExtraContext(json)` | Attaches a JSON-object preamble (RAG-style notes) to the conversation. The C side requires a JSON **object** — arrays, scalars, and free text are silently dropped. |
 | `WithFilterChannelContentFromKVCache(bool)` | Excludes `<|channel> ... <channel|>` reasoning tokens from the KV cache so they do not persist across turns. |
 | `WithMaxToolHops(n)` | Caps the dispatch loop's iterations. Takes effect only when `ManagedTools` are registered (`RegisterTool`); without tools the value is inert. |

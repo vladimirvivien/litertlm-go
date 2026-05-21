@@ -79,12 +79,12 @@ func TestChatOption_WithToolAccumulates(t *testing.T) {
 }
 
 func TestChatOption_InitialMessagesCopy(t *testing.T) {
-	msgs := []Message{{Role: "user", Content: "hi"}}
+	msgs := []Message{{Role: "user", Parts: []Part{Text("hi")}}}
 	cfg := chatConfig{}
 	WithInitialMessages(msgs)(&cfg)
-	msgs[0].Content = "mutated"
-	if cfg.initialMessages[0].Content != "hi" {
-		t.Errorf("expected defensive copy")
+	msgs[0].Role = "mutated"
+	if cfg.initialMessages[0].Role != "user" {
+		t.Errorf("expected defensive copy of the outer slice")
 	}
 }
 
@@ -110,6 +110,66 @@ func TestChatOption_EncodeSystemPromptUnset(t *testing.T) {
 	got, err := encodeSystemPrompt(chatConfig{})
 	if err != nil || got != "" {
 		t.Errorf("unset system prompt: got %q err=%v, want empty/nil", got, err)
+	}
+}
+
+// TestEncodeMessages_TextOnly verifies a pure-text history seeds as
+// {role, content:[{type:"text",text:...}]} per message.
+func TestEncodeMessages_TextOnly(t *testing.T) {
+	msgs := []Message{
+		{Role: "user", Parts: []Part{Text("hello")}},
+		{Role: "assistant", Parts: []Part{Text("hi back")}},
+	}
+	got, err := encodeMessages(msgs)
+	if err != nil {
+		t.Fatalf("encodeMessages: %v", err)
+	}
+	wantSubs := []string{
+		`"role":"user"`, `"text":"hello"`,
+		`"role":"assistant"`, `"text":"hi back"`,
+		`"type":"text"`,
+	}
+	for _, s := range wantSubs {
+		if !strings.Contains(got, s) {
+			t.Errorf("encoded message missing %q in %s", s, got)
+		}
+	}
+}
+
+// TestEncodeMessages_Multimodal verifies a history mixing text and
+// image parts emits both content entry types and base64-encodes the
+// image bytes.
+func TestEncodeMessages_Multimodal(t *testing.T) {
+	imgBytes := []byte{0x89, 'P', 'N', 'G'}
+	msgs := []Message{
+		{Role: "user", Parts: []Part{Image(imgBytes), Text("what is this?")}},
+		{Role: "assistant", Parts: []Part{Text("a PNG header")}},
+	}
+	got, err := encodeMessages(msgs)
+	if err != nil {
+		t.Fatalf("encodeMessages: %v", err)
+	}
+	wantSubs := []string{
+		`"type":"image"`,
+		`"blob":"iVBORw=="`, // base64 of 0x89 'P' 'N' 'G'
+		`"type":"text"`,
+		`"text":"what is this?"`,
+		`"role":"assistant"`,
+	}
+	for _, s := range wantSubs {
+		if !strings.Contains(got, s) {
+			t.Errorf("encoded message missing %q in %s", s, got)
+		}
+	}
+}
+
+// TestEncodeMessages_EmptyRoleRejected verifies an empty Role is
+// rejected up front rather than letting the C side fail mid-render.
+func TestEncodeMessages_EmptyRoleRejected(t *testing.T) {
+	msgs := []Message{{Role: "", Parts: []Part{Text("orphan")}}}
+	_, err := encodeMessages(msgs)
+	if err == nil {
+		t.Fatal("expected error for empty Role")
 	}
 }
 

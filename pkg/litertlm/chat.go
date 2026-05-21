@@ -30,10 +30,13 @@ type ToolCallFunction struct {
 }
 
 // Message is one message in a conversation history. Used by
-// WithInitialMessages to seed a Chat with prior turns.
+// WithInitialMessages to seed a Chat with prior turns. Parts may
+// carry text, image, and audio content in the same []Part shape
+// accepted by SendMulti; pure-text history uses
+// []Part{Text("...")}.
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role  string
+	Parts []Part
 }
 
 // ---- ChatOption -----------------------------------------------------------
@@ -77,7 +80,10 @@ func WithTool(defs ...ToolDefinition) ChatOption {
 
 // WithInitialMessages seeds the conversation with a prior history.
 // Messages are appended after the system prompt (if any) and before
-// the first Send.
+// the first Send. Each Message carries Role plus a []Part body —
+// text-only history uses []Part{Text("...")}; multimodal history
+// may include Image / Audio parts the same way SendMulti accepts
+// them.
 func WithInitialMessages(msgs []Message) ChatOption {
 	return func(c *chatConfig) {
 		c.initialMessages = append([]Message(nil), msgs...)
@@ -996,11 +1002,24 @@ func encodeTools(defs []ToolDefinition) (string, error) {
 	return string(b), nil
 }
 
+// encodeMessages renders []Message as the JSON array the C side
+// expects: each entry has {role, content:[<parts>]}. Empty Role is
+// rejected; empty Parts emits an empty content array.
 func encodeMessages(msgs []Message) (string, error) {
 	if len(msgs) == 0 {
 		return "", nil
 	}
-	b, err := json.Marshal(msgs)
+	list := make([]map[string]any, len(msgs))
+	for i, m := range msgs {
+		if m.Role == "" {
+			return "", fmt.Errorf("litertlm: initial message %d: empty role", i)
+		}
+		list[i] = map[string]any{
+			"role":    m.Role,
+			"content": renderPartsContent(m.Parts),
+		}
+	}
+	b, err := json.Marshal(list)
 	if err != nil {
 		return "", fmt.Errorf("marshal initial messages: %w", err)
 	}

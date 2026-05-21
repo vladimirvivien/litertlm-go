@@ -15,10 +15,10 @@ import (
 )
 
 var defaultHistory = []litertlm.Message{
-	{Role: "user", Content: "Hi, my name is Vlad and I'm building a Go binding for LiteRT-LM."},
-	{Role: "assistant", Content: "Hello Vlad. Are you using cgo or a pure-Go FFI approach?"},
-	{Role: "user", Content: "Pure-Go via purego and jupiterrider/ffi. No cgo."},
-	{Role: "assistant", Content: "Nice — that avoids the cross-compilation headaches cgo would introduce."},
+	{Role: "user", Parts: []litertlm.Part{litertlm.Text("Hi, my name is Vlad and I'm building a Go binding for LiteRT-LM.")}},
+	{Role: "assistant", Parts: []litertlm.Part{litertlm.Text("Hello Vlad. Are you using cgo or a pure-Go FFI approach?")}},
+	{Role: "user", Parts: []litertlm.Part{litertlm.Text("Pure-Go via purego and jupiterrider/ffi. No cgo.")}},
+	{Role: "assistant", Parts: []litertlm.Part{litertlm.Text("Nice — that avoids the cross-compilation headaches cgo would introduce.")}},
 }
 
 const defaultMessage = "What did I say my name was, and which FFI libraries am I using?"
@@ -96,7 +96,14 @@ func main() {
 
 	fmt.Println("=== Seeded history ===")
 	for _, m := range history {
-		fmt.Printf("%-10s %s\n", m.Role+">", m.Content)
+		var body string
+		for _, p := range m.Parts {
+			if p.IsText() {
+				body = p.TextContent()
+				break
+			}
+		}
+		fmt.Printf("%-10s %s\n", m.Role+">", body)
 	}
 	fmt.Println()
 
@@ -114,9 +121,16 @@ func loadHistory(path string) ([]litertlm.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	var msgs []litertlm.Message
-	if err := json.Unmarshal(b, &msgs); err != nil {
+	var raw []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	msgs := make([]litertlm.Message, len(raw))
+	for i, r := range raw {
+		msgs[i] = litertlm.Message{Role: r.Role, Parts: []litertlm.Part{litertlm.Text(r.Content)}}
 	}
 	return msgs, nil
 }

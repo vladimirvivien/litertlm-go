@@ -33,7 +33,7 @@ Chat configuration:
 |---------------------------------|-------------------------------------------------------------------------------------------------|
 | `WithSystemPrompt(s)`           | The system message. **Pass just the content** — the C side wraps it in a `{role,content}` envelope itself. |
 | `WithTool(defs ...)`            | One or more `ToolDefinition`s the model may call. Mix `RawTool` (hand-built) and `ManagedTool` (typed handler) freely. |
-| `WithInitialMessages(msgs)`     | Seed history with prior turns.                                                                  |
+| `WithInitialMessages(msgs)`     | Seed history with prior turns. Each `Message{Role, Parts}` carries a `[]Part` body — text-only history uses `[]Part{Text("...")}`, multimodal history may include `Image` / `Audio` parts. |
 | `WithConstrainedDecoding(on)`   | Toggle the engine's constrained-decoding mode (boolean only — schema delivery is upstream-pending). |
 | `WithExtraContext(json)`        | JSON string used as the conversation preface's extra context.                                   |
 | `WithFilterChannelContentFromKVCache(on)` | Exclude the model's reasoning-channel tokens from the KV cache (won't persist across turns). |
@@ -230,6 +230,20 @@ chat.Send(ctx, "What about the third day?")   // model knows the prior itinerary
 ```
 
 When you need a fresh context, open a new `Chat`.
+
+Seeding history with `WithInitialMessages` accepts both text-only and
+multimodal turns:
+
+```go
+img, _ := litertlm.ImageFromFile("photo.jpg")
+chat, _ := client.NewChat(ctx,
+    litertlm.WithInitialMessages([]litertlm.Message{
+        {Role: "user", Parts: []litertlm.Part{img, litertlm.Text("What is this?")}},
+        {Role: "assistant", Parts: []litertlm.Part{litertlm.Text("A wooden table with a lamp.")}},
+    }),
+)
+chat.Send(ctx, "What's the dominant color?")  // resumes with image in KV
+```
 
 ## Introspection
 

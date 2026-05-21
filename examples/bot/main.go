@@ -699,7 +699,11 @@ func historyTextForProjection(turns []turn) string {
 	}
 	var b strings.Builder
 	for _, m := range msgs {
-		b.WriteString(m.Content)
+		for _, p := range m.Parts {
+			if p.IsText() {
+				b.WriteString(p.TextContent())
+			}
+		}
 		b.WriteByte('\n')
 	}
 	return b.String()
@@ -856,7 +860,7 @@ func bridgeMemory(turns []turn) ([]litertlm.Message, string) {
 		if role == "bot" {
 			role = "assistant"
 		}
-		msgs = append(msgs, litertlm.Message{Role: role, Content: t.body})
+		msgs = append(msgs, litertlm.Message{Role: role, Parts: []litertlm.Part{litertlm.Text(t.body)}})
 	}
 	return msgs, summary
 }
