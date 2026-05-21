@@ -44,7 +44,7 @@ const captureDirective = "Respond by calling the available tool with the structu
 // *GenerateDataError; use errors.As to inspect Phase / Raw / Attempts.
 // Generate-phase errors (ctx cancellation, FFI failure) propagate
 // immediately and do not trigger retries.
-func GenerateData[T any](ctx context.Context, c *Client, prompt string, opts ...GenOption) (*T, error) {
+func GenerateData[T any](ctx context.Context, c *Client, prompt string, opts ...RuntimeOption) (*T, error) {
 	return GenerateDataMulti[T](ctx, c, []Part{Text(prompt)}, opts...)
 }
 
@@ -55,11 +55,11 @@ func GenerateData[T any](ctx context.Context, c *Client, prompt string, opts ...
 // through to the prompt-engineered path if the tool-call did not
 // deliver a value. Retries (WithRetries(n)) repeat the full sequence
 // up to 1+n times. Generate-phase errors propagate immediately.
-func GenerateDataMulti[T any](ctx context.Context, c *Client, parts []Part, opts ...GenOption) (*T, error) {
+func GenerateDataMulti[T any](ctx context.Context, c *Client, parts []Part, opts ...RuntimeOption) (*T, error) {
 	if c == nil {
 		return nil, fmt.Errorf("litertlm: GenerateDataMulti: nil client")
 	}
-	cfg := resolveGenConfig(opts)
+	cfg := resolveRuntimeConfig(opts)
 
 	var lastErr error
 	for attempt := 1; attempt <= 1+cfg.retries; attempt++ {
@@ -119,7 +119,7 @@ func tryCaptureToolSilent[T any](ctx context.Context, c *Client, parts []Part) *
 // response. attempt is 1-indexed and used solely for error reporting;
 // the outer retry loop in GenerateDataMulti drives iteration.
 func generateDataPromptEngineered[T any](
-	ctx context.Context, c *Client, parts []Part, cfg genConfig, attempt int,
+	ctx context.Context, c *Client, parts []Part, cfg runtimeConfig, attempt int,
 ) (*T, error) {
 	t := reflect.TypeFor[T]()
 	shape, err := shapeOf(t)

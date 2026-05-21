@@ -15,8 +15,8 @@ type Chunk struct {
 // Generate runs synchronous inference for prompt and returns the first
 // candidate's text. Cancelling ctx aborts the in-flight inference (via
 // Session.Cancel) and returns ctx.Err.
-func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption) (string, error) {
-	return c.generateMulti(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
+func (c *Client) Generate(ctx context.Context, prompt string, opts ...RuntimeOption) (string, error) {
+	return c.generateMulti(ctx, []Part{Text(prompt)}, resolveRuntimeConfig(opts))
 }
 
 // GenerateMulti is the multimodal sibling of Generate. parts may
@@ -26,8 +26,8 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...GenOption)
 // Image and audio Parts require WithVisionBackend / WithAudioBackend
 // at New time and a model whose .litertlm package includes the
 // corresponding tower.
-func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...GenOption) (string, error) {
-	return c.generateMulti(ctx, parts, resolveGenConfig(opts))
+func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...RuntimeOption) (string, error) {
+	return c.generateMulti(ctx, parts, resolveRuntimeConfig(opts))
 }
 
 // generateMulti is the resolved-config sibling of GenerateMulti.
@@ -36,7 +36,7 @@ func (c *Client) GenerateMulti(ctx context.Context, parts []Part, opts ...GenOpt
 // Routing: text-only parts use Session.GenerateContent. Parts
 // containing image or audio go through a Conversation, whose
 // pipeline preprocesses the bytes before invoking the session.
-func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig) (string, error) {
+func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg runtimeConfig) (string, error) {
 	if partsHasBinary(parts) {
 		text, _, err := c.runMultimodalConversation(ctx, parts, cfg)
 		return text, err
@@ -71,7 +71,7 @@ func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg genConfig)
 // assistant's text plus a benchmark snapshot when the Client was
 // constructed with WithBenchmarkEnabled. Used when parts contains
 // image or audio Parts.
-func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) (string, *Benchmark, error) {
+func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg runtimeConfig) (string, *Benchmark, error) {
 	conv, convCfg, err := c.openMultimodalConversation(cfg)
 	if err != nil {
 		return "", nil, err
@@ -104,7 +104,7 @@ func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cf
 // openMultimodalConversation creates a fresh ConversationConfig +
 // Conversation pair with cfg's per-call SessionConfig (sampler,
 // max-output-tokens) attached. Caller must Delete both handles.
-func (c *Client) openMultimodalConversation(cfg genConfig) (Conversation, ConversationConfig, error) {
+func (c *Client) openMultimodalConversation(cfg runtimeConfig) (Conversation, ConversationConfig, error) {
 	sampler := cfg.sampler
 	if sampler == nil {
 		sampler = c.cfg.defaultSampler
@@ -155,17 +155,17 @@ func (c *Client) openMultimodalConversation(cfg genConfig) (Conversation, Conver
 //	    if err != nil { return err }
 //	    fmt.Print(chunk.Text)
 //	}
-func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...GenOption) iter.Seq2[Chunk, error] {
-	return c.generateMultiStream(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
+func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...RuntimeOption) iter.Seq2[Chunk, error] {
+	return c.generateMultiStream(ctx, []Part{Text(prompt)}, resolveRuntimeConfig(opts))
 }
 
 // GenerateMultiStream is the multimodal sibling of GenerateStream.
 // See GenerateMulti for parts semantics.
-func (c *Client) GenerateMultiStream(ctx context.Context, parts []Part, opts ...GenOption) iter.Seq2[Chunk, error] {
-	return c.generateMultiStream(ctx, parts, resolveGenConfig(opts))
+func (c *Client) GenerateMultiStream(ctx context.Context, parts []Part, opts ...RuntimeOption) iter.Seq2[Chunk, error] {
+	return c.generateMultiStream(ctx, parts, resolveRuntimeConfig(opts))
 }
 
-func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg genConfig) iter.Seq2[Chunk, error] {
+func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg runtimeConfig) iter.Seq2[Chunk, error] {
 	if partsHasBinary(parts) {
 		return c.streamMultimodalConversation(ctx, parts, cfg)
 	}
@@ -194,7 +194,7 @@ func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg genC
 
 // streamMultimodalConversation drives a Conversation streaming send
 // for multimodal parts. Mirrors the Session-path streamer.
-func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part, cfg genConfig) iter.Seq2[Chunk, error] {
+func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part, cfg runtimeConfig) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		conv, convCfg, err := c.openMultimodalConversation(cfg)
 		if err != nil {
@@ -229,17 +229,17 @@ func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part,
 // returned *Response exposes per-candidate text plus score and
 // token-length accessors. Lifetime is GC-managed via
 // runtime.AddCleanup — see the Response godoc.
-func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...GenOption) (*Response, error) {
-	return c.generateMultiResponse(ctx, []Part{Text(prompt)}, resolveGenConfig(opts))
+func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...RuntimeOption) (*Response, error) {
+	return c.generateMultiResponse(ctx, []Part{Text(prompt)}, resolveRuntimeConfig(opts))
 }
 
 // GenerateMultiResponse is the multimodal sibling of GenerateResponse.
 // See GenerateMulti for parts semantics.
-func (c *Client) GenerateMultiResponse(ctx context.Context, parts []Part, opts ...GenOption) (*Response, error) {
-	return c.generateMultiResponse(ctx, parts, resolveGenConfig(opts))
+func (c *Client) GenerateMultiResponse(ctx context.Context, parts []Part, opts ...RuntimeOption) (*Response, error) {
+	return c.generateMultiResponse(ctx, parts, resolveRuntimeConfig(opts))
 }
 
-func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg genConfig) (*Response, error) {
+func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg runtimeConfig) (*Response, error) {
 	if partsHasBinary(parts) {
 		text, bench, err := c.runMultimodalConversation(ctx, parts, cfg)
 		if err != nil {

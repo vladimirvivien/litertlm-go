@@ -187,13 +187,13 @@ func (c *Client) TokenLength(text string) (int, error) {
 	return len(tokens), nil
 }
 
-// resolveGenConfig applies opts to a fresh genConfig, returning the
+// resolveRuntimeConfig applies opts to a fresh runtimeConfig, returning the
 // result. Public entry points apply opts here once and pass the
 // resolved cfg into the internal helpers — that lets GenerateData
 // reuse the same cfg without re-applying options that don't matter
 // to the underlying generation path.
-func resolveGenConfig(opts []GenOption) genConfig {
-	cfg := genConfig{}
+func resolveRuntimeConfig(opts []RuntimeOption) runtimeConfig {
+	cfg := runtimeConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -208,7 +208,7 @@ func resolveGenConfig(opts []GenOption) genConfig {
 // caution; the C-side thread-safety contract for engine_create_session
 // is not documented and contention here is negligible (sessions are
 // cheap to construct relative to inference).
-func (c *Client) openSession(cfg genConfig) (Session, error) {
+func (c *Client) openSession(cfg runtimeConfig) (Session, error) {
 	// Resolve effective sampler: per-call > Client default > none.
 	sampler := cfg.sampler
 	if sampler == nil {

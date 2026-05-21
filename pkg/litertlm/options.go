@@ -3,9 +3,11 @@ package litertlm
 // Option configures a Client at New time.
 type Option func(*clientConfig)
 
-// GenOption tunes a single Generate / GenerateStream call without
-// rebuilding the Client.
-type GenOption func(*genConfig)
+// RuntimeOption tunes a single inference call without rebuilding the
+// Client. Apply via the variadic opts parameter on Client.Generate,
+// Client.GenerateMulti, Client.GenerateStream, Client.GenerateResponse,
+// and GenerateData / GenerateDataMulti.
+type RuntimeOption func(*runtimeConfig)
 
 // clientConfig is the resolved configuration produced by composing
 // defaults, environment fallbacks, and user-supplied Options.
@@ -35,8 +37,8 @@ type clientConfig struct {
 	defaultSampler *SamplerParams
 }
 
-// genConfig is the resolved per-call configuration.
-type genConfig struct {
+// runtimeConfig is the resolved per-call configuration.
+type runtimeConfig struct {
 	maxOutputTokens int
 	sampler         *SamplerParams
 
@@ -166,14 +168,14 @@ func WithDefaultSampler(p SamplerParams) Option {
 
 // WithMaxOutputTokens caps output tokens for a single Generate /
 // GenerateStream call.
-func WithMaxOutputTokens(n int) GenOption {
-	return func(c *genConfig) { c.maxOutputTokens = n }
+func WithMaxOutputTokens(n int) RuntimeOption {
+	return func(c *runtimeConfig) { c.maxOutputTokens = n }
 }
 
 // WithSampler overrides the Client's default sampler for a single
 // Generate / GenerateStream call.
-func WithSampler(p SamplerParams) GenOption {
-	return func(c *genConfig) {
+func WithSampler(p SamplerParams) RuntimeOption {
+	return func(c *runtimeConfig) {
 		pp := p
 		c.sampler = &pp
 	}
@@ -183,14 +185,14 @@ func WithSampler(p SamplerParams) GenOption {
 // in GenerateData. n=0 means no retries (one total attempt). Retries
 // only fire on parse-phase failures; generate-phase errors propagate
 // immediately. Ignored by Generate / GenerateStream.
-func WithRetries(n int) GenOption {
-	return func(c *genConfig) { c.retries = n }
+func WithRetries(n int) RuntimeOption {
+	return func(c *runtimeConfig) { c.retries = n }
 }
 
 // WithSchemaInstruction overrides the default instruction GenerateData
 // inserts before the user prompt. The value must be a Printf format
 // string with one %s placeholder where the shape hint will be
 // rendered. Ignored by Generate / GenerateStream.
-func WithSchemaInstruction(s string) GenOption {
-	return func(c *genConfig) { c.schemaInstruction = s }
+func WithSchemaInstruction(s string) RuntimeOption {
+	return func(c *runtimeConfig) { c.schemaInstruction = s }
 }

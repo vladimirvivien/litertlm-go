@@ -29,14 +29,14 @@ func GenerateData[T any](
     ctx context.Context,
     c *Client,
     prompt string,
-    opts ...GenOption,
+    opts ...RuntimeOption,
 ) (*T, error)
 
 func GenerateDataMulti[T any](
     ctx context.Context,
     c *Client,
     parts []Part,
-    opts ...GenOption,
+    opts ...RuntimeOption,
 ) (*T, error)
 ```
 

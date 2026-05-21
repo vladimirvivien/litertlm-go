@@ -57,7 +57,7 @@ func main() {
 	defer client.Close()
 
 	parts := []litertlm.Part{img, litertlm.Text(*prompt)}
-	opts := []litertlm.GenOption{litertlm.WithMaxOutputTokens(*maxTokens)}
+	opts := []litertlm.RuntimeOption{litertlm.WithMaxOutputTokens(*maxTokens)}
 
 	fmt.Printf("image:  %s\n", *imagePath)
 	fmt.Printf("prompt: %s\n\n", *prompt)

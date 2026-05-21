@@ -153,9 +153,9 @@ func TestOption_DefaultSampler(t *testing.T) {
 	}
 }
 
-// TestGenOption_Composition checks per-call options.
-func TestGenOption_Composition(t *testing.T) {
-	g := genConfig{}
+// TestRuntimeOption_Composition checks per-call options.
+func TestRuntimeOption_Composition(t *testing.T) {
+	g := runtimeConfig{}
 	WithMaxOutputTokens(256)(&g)
 	if g.maxOutputTokens != 256 {
 		t.Errorf("maxOutputTokens = %d", g.maxOutputTokens)
