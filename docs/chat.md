@@ -129,6 +129,23 @@ reply, err := chat.SendMulti(ctx, []litertlm.Part{img, litertlm.Text("...")},
 )
 ```
 
+`WithReturnToolRequests(true)` bypasses the auto-dispatch loop on
+`Send`, `SendMulti`, and `SendToolResult`. The first reply
+containing tool calls is returned directly via `Reply.ToolCalls()`
+even when every call maps to a registered `ManagedTool`. Pair with
+`Chat.SendToolResult` to feed the result back. Streaming methods
+ignore this flag — `SendStream` / `SendMultiStream` always run the
+dispatch loop.
+
+```go
+reply, err := chat.Send(ctx, "What's the weather in Paris?",
+    litertlm.WithReturnToolRequests(true),
+)
+for _, call := range reply.ToolCalls() {
+    // inspect call.Function.Name / Arguments before dispatching manually
+}
+```
+
 `WithSampler` and `WithMaxOutputTokens` are not per-call on Chat —
 they apply at `NewChat` time on the Client's session config.
 

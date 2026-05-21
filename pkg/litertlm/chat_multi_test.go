@@ -127,7 +127,7 @@ func TestSendMulti_DispatchLoopMultimodal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("partsToConversationMessage: %v", err)
 	}
-	reply, err := ch.send(ctx, transport, msgJSON, OptionalArgs(0))
+	reply, err := ch.send(ctx, transport, msgJSON, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("ch.send: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestSendMulti_TransportError(t *testing.T) {
 	transport := &fakeTransport{} // empty replies → SendMessage returns error
 	ch := &Chat{conv: Conversation(1)}
 	msgJSON, _ := partsToConversationMessage([]Part{Text("hi")})
-	if _, err := ch.send(context.Background(), transport, msgJSON, OptionalArgs(0)); err == nil {
+	if _, err := ch.send(context.Background(), transport, msgJSON, OptionalArgs(0), false); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }

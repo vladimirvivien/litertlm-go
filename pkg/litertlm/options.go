@@ -48,6 +48,12 @@ type runtimeConfig struct {
 	// Chat.Send*-specific. Generate / GenerateData ignore this.
 	// Nil-when-unset preserves the C-side default.
 	visualTokenBudget *int
+
+	// Chat.Send / SendMulti / SendToolResult only. When true, the
+	// dispatch loop is bypassed and the first reply containing
+	// tool calls is returned to the caller for manual handling.
+	// Ignored by Client.Generate*, SendStream, and SendMultiStream.
+	returnToolRequests bool
 }
 
 // ---- constructor options ----
@@ -206,4 +212,16 @@ func WithSchemaInstruction(s string) RuntimeOption {
 // Ignored by Client.Generate* and GenerateData.
 func WithVisualTokenBudget(n int) RuntimeOption {
 	return func(c *runtimeConfig) { c.visualTokenBudget = &n }
+}
+
+// WithReturnToolRequests bypasses the Chat dispatch loop for a single
+// turn. When true, the first reply containing tool calls is returned
+// directly via Reply.ToolCalls() for manual handling, even when every
+// call maps to a registered ManagedTool. Pair with Chat.SendToolResult
+// to feed the result back into the conversation.
+//
+// Applies to Chat.Send, SendMulti, and SendToolResult. Ignored by
+// Client.Generate*, GenerateData, SendStream, and SendMultiStream.
+func WithReturnToolRequests(on bool) RuntimeOption {
+	return func(c *runtimeConfig) { c.returnToolRequests = on }
 }

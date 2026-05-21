@@ -131,7 +131,7 @@ func TestDispatch_SingleCallThenText(t *testing.T) {
 			textReply("The sum is 42."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0))
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -147,6 +147,36 @@ func TestDispatch_SingleCallThenText(t *testing.T) {
 	}
 	if !strings.Contains(transport.sentMsgs[1], `"sum":42`) {
 		t.Errorf("tool result should contain sum=42; got %s", transport.sentMsgs[1])
+	}
+}
+
+// TestDispatch_ReturnToolRequests verifies that with the per-call
+// flag set, ch.send returns the first reply containing tool calls
+// even when every call maps to a registered ManagedTool. Only one
+// turn should hit the transport — no tool-result follow-up.
+func TestDispatch_ReturnToolRequests(t *testing.T) {
+	c := &Client{}
+	add := newAddTool(t, c)
+	registry, _ := buildToolRegistry([]ToolDefinition{add})
+	ch := &Chat{tools: registry}
+	transport := &fakeTransport{
+		replies: []string{
+			toolCallReply("add", map[string]any{"a": 17, "b": 25}),
+		},
+	}
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0), true)
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if !reply.HasToolCalls() {
+		t.Fatal("reply should carry the tool call for manual handling")
+	}
+	calls := reply.ToolCalls()
+	if len(calls) != 1 || calls[0].Function.Name != "add" {
+		t.Errorf("reply tool calls = %+v, want one 'add'", calls)
+	}
+	if len(transport.sentMsgs) != 1 {
+		t.Errorf("transport should have seen exactly one turn; sentMsgs = %d", len(transport.sentMsgs))
 	}
 }
 
@@ -179,7 +209,7 @@ func TestDispatch_MultiCallsInOneReply(t *testing.T) {
 			textReply("done"),
 		},
 	}
-	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`, OptionalArgs(0)); err != nil {
+	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`, OptionalArgs(0), false); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	// Second message should bundle both results in one tool-role envelope.
@@ -199,7 +229,7 @@ func TestDispatch_BailsOnUnknownTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("nonexistent", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -220,7 +250,7 @@ func TestDispatch_BailsOnRawTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("manual", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -234,7 +264,7 @@ func TestDispatch_NoManagedToolsRegistered(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("anything", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -254,7 +284,7 @@ func TestDispatch_ToolPolicyReturnOnError(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("bad", map[string]any{"a": 1, "b": 2})},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err == nil {
 		t.Fatal("expected dispatcher to propagate handler error")
 	}
@@ -275,7 +305,7 @@ func TestDispatch_ToolPolicyInformOnError(t *testing.T) {
 			textReply("Sorry, please retry later."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -306,7 +336,7 @@ func TestDispatch_HopsExceeded(t *testing.T) {
 			toolCallReply("add", map[string]any{"a": 3, "b": 3}),
 		},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
 	if err == nil {
 		t.Fatal("expected ErrToolHopsExceeded")
 	}

@@ -344,7 +344,8 @@ func (ch *Chat) Clone() (*Chat, error) {
 // until the model produces a text-only reply (or the dispatch cap is
 // reached). Replies containing any non-dispatchable tool call (a
 // RawTool or an unknown name) are returned as-is for manual handling
-// with Reply.ToolCalls() + Chat.SendToolResult.
+// with Reply.ToolCalls() + Chat.SendToolResult. WithReturnToolRequests
+// forces this manual-handling path even for fully dispatchable calls.
 //
 // Per-call opts apply to this turn (and every dispatch hop it
 // triggers). Text-only turns ignore multimodal knobs such as
@@ -359,12 +360,13 @@ func (ch *Chat) Send(ctx context.Context, message string, opts ...RuntimeOption)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: marshal: %w", err)
 	}
-	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	cfg := resolveRuntimeConfig(opts)
+	optArgs, err := buildOptionalArgs(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: %w", err)
 	}
 	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, string(msgJSON), optArgs)
+	return ch.send(ctx, ch.conv, string(msgJSON), optArgs, cfg.returnToolRequests)
 }
 
 // SendStream issues a user-role message and returns an iterator over
@@ -435,7 +437,8 @@ func extractStreamChunkText(raw string) string {
 }
 
 // SendMulti issues a multimodal user-role message and returns the
-// assistant's Reply. Tool dispatch behaves identically to Send.
+// assistant's Reply. Tool dispatch behaves identically to Send;
+// WithReturnToolRequests bypasses dispatch the same way.
 //
 // Image / audio Parts require the Client's WithVisionBackend /
 // WithAudioBackend at New time. A []Part containing only text Parts
@@ -461,12 +464,13 @@ func (ch *Chat) SendMulti(ctx context.Context, parts []Part, opts ...RuntimeOpti
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
 	}
-	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	cfg := resolveRuntimeConfig(opts)
+	optArgs, err := buildOptionalArgs(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
 	}
 	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, msgJSON, optArgs)
+	return ch.send(ctx, ch.conv, msgJSON, optArgs, cfg.returnToolRequests)
 }
 
 // SendMultiStream is the streaming sibling of SendMulti. Chunk.Text
@@ -622,8 +626,9 @@ func extractStreamEnvelope(raw string) (string, []ToolCall) {
 //
 // Like Send, SendToolResult enters the auto-dispatch loop when the
 // model's reply contains tool calls all mapping to ManagedTools.
-// Per-call opts apply to this turn (and every dispatch hop it
-// triggers). Tool-result turns carry no images, so
+// WithReturnToolRequests bypasses dispatch and returns the reply
+// for manual handling. Per-call opts apply to this turn (and every
+// dispatch hop it triggers). Tool-result turns carry no images, so
 // WithVisualTokenBudget is a no-op here.
 func (ch *Chat) SendToolResult(ctx context.Context, name string, result any, opts ...RuntimeOption) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
@@ -633,12 +638,13 @@ func (ch *Chat) SendToolResult(ctx context.Context, name string, result any, opt
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
-	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	cfg := resolveRuntimeConfig(opts)
+	optArgs, err := buildOptionalArgs(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
 	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, msgJSON, optArgs)
+	return ch.send(ctx, ch.conv, msgJSON, optArgs, cfg.returnToolRequests)
 }
 
 // toolResult holds one tool's response within a tool-role message.
@@ -666,8 +672,10 @@ func encodeToolResults(results []toolResult) (string, error) {
 
 // send drives the dispatch loop. transport is parameterized so tests
 // can inject a stub satisfying chatTransport. opts is reused across
-// every dispatch hop.
-func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs) (*Reply, error) {
+// every dispatch hop. When returnToolRequests is true the loop exits
+// after the first reply that carries tool calls, returning it to the
+// caller for manual handling.
+func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, returnToolRequests bool) (*Reply, error) {
 	cap := ch.maxToolHops
 	if cap <= 0 {
 		cap = defaultMaxToolHops
@@ -678,7 +686,7 @@ func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON strin
 		if err != nil {
 			return nil, err
 		}
-		if !reply.HasToolCalls() || !ch.allCallsDispatchable(reply) {
+		if !reply.HasToolCalls() || !ch.allCallsDispatchable(reply) || returnToolRequests {
 			return reply, nil
 		}
 		if hop >= cap {
