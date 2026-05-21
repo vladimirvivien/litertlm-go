@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeTransport scripts replies for the dispatch loop tests. Each
@@ -131,7 +132,7 @@ func TestDispatch_SingleCallThenText(t *testing.T) {
 			textReply("The sum is 42."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0), false)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, runtimeConfig{})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestDispatch_ReturnToolRequests(t *testing.T) {
 			toolCallReply("add", map[string]any{"a": 17, "b": 25}),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0), true)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, runtimeConfig{returnToolRequests: true})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestDispatch_MultiCallsInOneReply(t *testing.T) {
 			textReply("done"),
 		},
 	}
-	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`, OptionalArgs(0), false); err != nil {
+	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`, runtimeConfig{}); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	// Second message should bundle both results in one tool-role envelope.
@@ -229,7 +230,7 @@ func TestDispatch_BailsOnUnknownTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("nonexistent", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -250,7 +251,7 @@ func TestDispatch_BailsOnRawTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("manual", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -264,7 +265,7 @@ func TestDispatch_NoManagedToolsRegistered(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("anything", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -284,7 +285,7 @@ func TestDispatch_ToolPolicyReturnOnError(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("bad", map[string]any{"a": 1, "b": 2})},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err == nil {
 		t.Fatal("expected dispatcher to propagate handler error")
 	}
@@ -305,7 +306,7 @@ func TestDispatch_ToolPolicyInformOnError(t *testing.T) {
 			textReply("Sorry, please retry later."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -336,7 +337,7 @@ func TestDispatch_HopsExceeded(t *testing.T) {
 			toolCallReply("add", map[string]any{"a": 3, "b": 3}),
 		},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0), false)
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{})
 	if err == nil {
 		t.Fatal("expected ErrToolHopsExceeded")
 	}
@@ -370,5 +371,233 @@ func TestWithMaxToolHops_IgnoresNonPositive(t *testing.T) {
 	WithMaxToolHops(7)(&cfg)
 	if cfg.maxToolHops != 7 {
 		t.Errorf("positive should set; got %d", cfg.maxToolHops)
+	}
+}
+
+// ---- parallel dispatch -------------------------------------------------
+
+// orderedToolPair registers a "slow" tool and a "fast" tool. The slow
+// handler blocks until release is closed; the fast handler returns
+// immediately. The returned counts struct tracks invocation order so
+// tests can verify result ordering is independent of completion order.
+type orderedToolPair struct {
+	tools   []ToolDefinition
+	release chan struct{}
+}
+
+func newOrderedToolPair(t *testing.T, c *Client) *orderedToolPair {
+	t.Helper()
+	p := &orderedToolPair{release: make(chan struct{})}
+	slow, err := RegisterTool(c, "slow", "slow tool",
+		func(ctx context.Context, _ addIn) (addOut, error) {
+			<-p.release
+			return addOut{Sum: 1}, nil
+		})
+	if err != nil {
+		t.Fatalf("RegisterTool slow: %v", err)
+	}
+	fast, err := RegisterTool(c, "fast", "fast tool",
+		func(ctx context.Context, _ addIn) (addOut, error) {
+			return addOut{Sum: 2}, nil
+		})
+	if err != nil {
+		t.Fatalf("RegisterTool fast: %v", err)
+	}
+	p.tools = []ToolDefinition{slow, fast}
+	return p
+}
+
+// TestDispatch_ParallelPreservesCallOrder verifies that with
+// maxConcurrentTools > 1, the tool-role follow-up bundles results in
+// the order the model emitted the calls, even when the slow handler
+// finishes after the fast one.
+func TestDispatch_ParallelPreservesCallOrder(t *testing.T) {
+	c := &Client{}
+	pair := newOrderedToolPair(t, c)
+	registry, _ := buildToolRegistry(pair.tools)
+	ch := &Chat{tools: registry}
+	transport := &fakeTransport{
+		replies: []string{
+			multiToolCallReply(
+				struct {
+					Name string
+					Args map[string]any
+				}{"slow", map[string]any{"a": 0, "b": 0}},
+				struct {
+					Name string
+					Args map[string]any
+				}{"fast", map[string]any{"a": 0, "b": 0}},
+			),
+			textReply("done"),
+		},
+	}
+
+	// Release the slow handler after a short delay so the fast handler
+	// definitely finishes first.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		close(pair.release)
+	}()
+
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{maxConcurrentTools: 4})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if len(transport.sentMsgs) != 2 {
+		t.Fatalf("sentMsgs = %d, want 2", len(transport.sentMsgs))
+	}
+	bundled := transport.sentMsgs[1]
+	slowIdx := strings.Index(bundled, `"name":"slow"`)
+	fastIdx := strings.Index(bundled, `"name":"fast"`)
+	if slowIdx < 0 || fastIdx < 0 {
+		t.Fatalf("bundled tool-role message missing names: %s", bundled)
+	}
+	if slowIdx > fastIdx {
+		t.Errorf("result ordering reversed (fast before slow); bundle: %s", bundled)
+	}
+}
+
+// TestDispatch_ParallelActuallyConcurrent verifies handlers run with
+// real overlap when maxConcurrentTools > 1, by observing the peak
+// in-flight count.
+func TestDispatch_ParallelActuallyConcurrent(t *testing.T) {
+	c := &Client{}
+	var mu sync.Mutex
+	var inFlight, peak int
+	body := func(ctx context.Context, _ addIn) (addOut, error) {
+		mu.Lock()
+		inFlight++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return addOut{Sum: 0}, nil
+	}
+	t1, _ := RegisterTool(c, "t1", "", body)
+	t2, _ := RegisterTool(c, "t2", "", body)
+	t3, _ := RegisterTool(c, "t3", "", body)
+	registry, _ := buildToolRegistry([]ToolDefinition{t1, t2, t3})
+	ch := &Chat{tools: registry}
+	transport := &fakeTransport{
+		replies: []string{
+			multiToolCallReply(
+				struct {
+					Name string
+					Args map[string]any
+				}{"t1", map[string]any{"a": 0, "b": 0}},
+				struct {
+					Name string
+					Args map[string]any
+				}{"t2", map[string]any{"a": 0, "b": 0}},
+				struct {
+					Name string
+					Args map[string]any
+				}{"t3", map[string]any{"a": 0, "b": 0}},
+			),
+			textReply("done"),
+		},
+	}
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{maxConcurrentTools: 3})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if peak < 2 {
+		t.Errorf("peak in-flight = %d, want >=2 (parallelism did not engage)", peak)
+	}
+}
+
+// TestDispatch_ParallelErrorPropagates verifies that a ReturnOnError
+// handler failure terminates a parallel batch with that handler's
+// error (errgroup-style "first to fail in real time wins").
+func TestDispatch_ParallelErrorPropagates(t *testing.T) {
+	c := &Client{}
+	failErr := errors.New("handler-failed")
+	bad, _ := RegisterTool(c, "bad", "",
+		func(ctx context.Context, _ addIn) (addOut, error) {
+			return addOut{}, failErr
+		})
+	good, _ := RegisterTool(c, "good", "",
+		func(ctx context.Context, _ addIn) (addOut, error) {
+			time.Sleep(10 * time.Millisecond)
+			return addOut{Sum: 1}, nil
+		})
+	registry, _ := buildToolRegistry([]ToolDefinition{bad, good})
+	ch := &Chat{tools: registry}
+	transport := &fakeTransport{
+		replies: []string{
+			multiToolCallReply(
+				struct {
+					Name string
+					Args map[string]any
+				}{"bad", map[string]any{"a": 0, "b": 0}},
+				struct {
+					Name string
+					Args map[string]any
+				}{"good", map[string]any{"a": 0, "b": 0}},
+			),
+		},
+	}
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{maxConcurrentTools: 4})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !errors.Is(err, failErr) {
+		t.Errorf("err = %v, want wrap of failErr", err)
+	}
+}
+
+// BenchmarkDispatch compares sequential and parallel dispatch with
+// three handlers that each sleep 5ms. Run with:
+//
+//	go test -bench=BenchmarkDispatch -benchtime=20x ./pkg/litertlm/
+func BenchmarkDispatch(b *testing.B) {
+	c := &Client{}
+	body := func(ctx context.Context, _ addIn) (addOut, error) {
+		time.Sleep(5 * time.Millisecond)
+		return addOut{Sum: 0}, nil
+	}
+	t1, _ := RegisterTool(c, "t1", "", body)
+	t2, _ := RegisterTool(c, "t2", "", body)
+	t3, _ := RegisterTool(c, "t3", "", body)
+	registry, _ := buildToolRegistry([]ToolDefinition{t1, t2, t3})
+
+	callsReply := multiToolCallReply(
+		struct {
+			Name string
+			Args map[string]any
+		}{"t1", map[string]any{"a": 0, "b": 0}},
+		struct {
+			Name string
+			Args map[string]any
+		}{"t2", map[string]any{"a": 0, "b": 0}},
+		struct {
+			Name string
+			Args map[string]any
+		}{"t3", map[string]any{"a": 0, "b": 0}},
+	)
+
+	for _, bc := range []struct {
+		name string
+		max  int
+	}{
+		{"Sequential", 0},
+		{"Parallel3", 3},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				ch := &Chat{tools: registry}
+				transport := &fakeTransport{
+					replies: []string{callsReply, textReply("done")},
+				}
+				_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, runtimeConfig{maxConcurrentTools: bc.max})
+				if err != nil {
+					b.Fatalf("send: %v", err)
+				}
+			}
+		})
 	}
 }

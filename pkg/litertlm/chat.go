@@ -402,13 +402,7 @@ func (ch *Chat) Send(ctx context.Context, message string, opts ...RuntimeOption)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: marshal: %w", err)
 	}
-	cfg := resolveRuntimeConfig(opts)
-	optArgs, err := buildOptionalArgs(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("litertlm: Send: %w", err)
-	}
-	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, string(msgJSON), optArgs, cfg.returnToolRequests)
+	return ch.send(ctx, ch.conv, string(msgJSON), resolveRuntimeConfig(opts))
 }
 
 // SendStream issues a user-role message and returns an iterator over
@@ -440,13 +434,7 @@ func (ch *Chat) SendStream(ctx context.Context, message string, opts ...RuntimeO
 			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: marshal: %w", err))
 			return
 		}
-		optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
-		if err != nil {
-			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: %w", err))
-			return
-		}
-		defer optArgs.Delete()
-		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), optArgs, yield)
+		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), resolveRuntimeConfig(opts), yield)
 	}
 }
 
@@ -506,13 +494,7 @@ func (ch *Chat) SendMulti(ctx context.Context, parts []Part, opts ...RuntimeOpti
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
 	}
-	cfg := resolveRuntimeConfig(opts)
-	optArgs, err := buildOptionalArgs(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
-	}
-	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, msgJSON, optArgs, cfg.returnToolRequests)
+	return ch.send(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts))
 }
 
 // SendMultiStream is the streaming sibling of SendMulti. Chunk.Text
@@ -539,13 +521,7 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...Runti
 			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
 			return
 		}
-		optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
-		if err != nil {
-			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
-			return
-		}
-		defer optArgs.Delete()
-		ch.streamWithDispatch(ctx, ch.conv, msgJSON, optArgs, yield)
+		ch.streamWithDispatch(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts), yield)
 	}
 }
 
@@ -558,8 +534,16 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...Runti
 // very end after all dispatch is finished.
 //
 // transport is parameterized so tests inject a stub satisfying
-// chatTransport. opts is reused across every dispatch hop.
-func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, yield func(Chunk, error) bool) {
+// chatTransport. cfg carries per-call knobs; OptionalArgs are
+// materialized once here and reused across every dispatch hop.
+func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, cfg runtimeConfig, yield func(Chunk, error) bool) {
+	optArgs, err := buildOptionalArgs(cfg)
+	if err != nil {
+		yield(Chunk{}, err)
+		return
+	}
+	defer optArgs.Delete()
+
 	cap := ch.maxToolHops
 	if cap <= 0 {
 		cap = defaultMaxToolHops
@@ -567,7 +551,7 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 
 	for hop := 0; ; hop++ {
 		var calls []ToolCall
-		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, opts, &calls, yield)
+		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, optArgs, &calls, yield)
 		if cancelled || streamErr != nil {
 			if streamErr != nil {
 				yield(Chunk{}, streamErr)
@@ -587,7 +571,7 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 			yield(Chunk{}, &ToolHopsError{LastReply: reply, Hops: cap})
 			return
 		}
-		results, err := ch.invokeOrInform(ctx, calls)
+		results, err := ch.invokeOrInform(ctx, calls, cfg.maxConcurrentTools)
 		if err != nil {
 			yield(Chunk{}, err)
 			return
@@ -680,13 +664,7 @@ func (ch *Chat) SendToolResult(ctx context.Context, name string, result any, opt
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
-	cfg := resolveRuntimeConfig(opts)
-	optArgs, err := buildOptionalArgs(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
-	}
-	defer optArgs.Delete()
-	return ch.send(ctx, ch.conv, msgJSON, optArgs, cfg.returnToolRequests)
+	return ch.send(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts))
 }
 
 // toolResult holds one tool's response within a tool-role message.
@@ -713,28 +691,34 @@ func encodeToolResults(results []toolResult) (string, error) {
 }
 
 // send drives the dispatch loop. transport is parameterized so tests
-// can inject a stub satisfying chatTransport. opts is reused across
-// every dispatch hop. When returnToolRequests is true the loop exits
-// after the first reply that carries tool calls, returning it to the
-// caller for manual handling.
-func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, returnToolRequests bool) (*Reply, error) {
+// can inject a stub satisfying chatTransport. cfg carries per-call
+// knobs (visual token budget, return-tool-requests flag, dispatch
+// concurrency); OptionalArgs are materialized once here and reused
+// across every dispatch hop.
+func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, cfg runtimeConfig) (*Reply, error) {
+	optArgs, err := buildOptionalArgs(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer optArgs.Delete()
+
 	cap := ch.maxToolHops
 	if cap <= 0 {
 		cap = defaultMaxToolHops
 	}
 
 	for hop := 0; ; hop++ {
-		reply, err := sendOne(ctx, transport, msgJSON, opts)
+		reply, err := sendOne(ctx, transport, msgJSON, optArgs)
 		if err != nil {
 			return nil, err
 		}
-		if !reply.HasToolCalls() || !ch.allCallsDispatchable(reply) || returnToolRequests {
+		if !reply.HasToolCalls() || !ch.allCallsDispatchable(reply) || cfg.returnToolRequests {
 			return reply, nil
 		}
 		if hop >= cap {
 			return nil, &ToolHopsError{LastReply: reply, Hops: cap}
 		}
-		results, err := ch.invokeAll(ctx, reply.ToolCalls())
+		results, err := ch.invokeAll(ctx, reply.ToolCalls(), cfg.maxConcurrentTools)
 		if err != nil {
 			return nil, err
 		}
@@ -797,37 +781,18 @@ func (ch *Chat) allCallsDispatchable(reply *Reply) bool {
 	return true
 }
 
-// invokeAll dispatches every call sequentially and returns the
-// results bundled for one tool-role message. A handler error obeys
-// the tool's ToolPolicy: ToolPolicyReturnOnError propagates as a Go
-// error and stops the loop; ToolPolicyInformOnError marshals the
-// error message as the tool's response so the model can react.
-func (ch *Chat) invokeAll(ctx context.Context, calls []ToolCall) ([]toolResult, error) {
-	results := make([]toolResult, 0, len(calls))
-	for _, call := range calls {
-		def := ch.tools[call.Function.Name]
-		d := def.(dispatchable)
-
-		argsJSON, err := json.Marshal(call.Function.Arguments)
-		if err != nil {
-			return nil, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
-		}
-		out, err := d.invoke(ctx, argsJSON)
-		if err != nil {
-			switch d.policy() {
-			case ToolPolicyInformOnError:
-				results = append(results, toolResult{
-					name:     call.Function.Name,
-					response: map[string]any{"error": err.Error()},
-				})
-				continue
-			default: // ToolPolicyReturnOnError
-				return nil, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
-			}
-		}
-		results = append(results, toolResult{name: call.Function.Name, response: out})
-	}
-	return results, nil
+// invokeAll dispatches every call and returns the results bundled for
+// one tool-role message. maxConcurrent <= 1 runs sequentially (the
+// default); maxConcurrent > 1 runs handlers in parallel capped at
+// that many in-flight. Result ordering matches call order regardless
+// of completion order.
+//
+// A handler error obeys the tool's ToolPolicy: ToolPolicyReturnOnError
+// propagates as a Go error and stops the loop; ToolPolicyInformOnError
+// marshals the error message as the tool's response so the model can
+// react. The first ReturnOnError failure in call order wins.
+func (ch *Chat) invokeAll(ctx context.Context, calls []ToolCall, maxConcurrent int) ([]toolResult, error) {
+	return runDispatch(ctx, calls, maxConcurrent, ch.dispatchManaged)
 }
 
 // invokeOrInform is the streaming-path dispatcher. Dispatchable calls
@@ -838,48 +803,130 @@ func (ch *Chat) invokeAll(ctx context.Context, calls []ToolCall) ([]toolResult, 
 // in the next turn and can recover (e.g. by apologizing or by
 // choosing a real tool). The dispatch loop's hop cap still applies,
 // so a model that hallucinates indefinitely is bounded.
-func (ch *Chat) invokeOrInform(ctx context.Context, calls []ToolCall) ([]toolResult, error) {
-	results := make([]toolResult, 0, len(calls))
-	for _, call := range calls {
-		def, ok := ch.tools[call.Function.Name]
-		if !ok {
-			results = append(results, toolResult{
-				name: call.Function.Name,
-				response: map[string]any{
-					"error":           fmt.Sprintf("tool %q is not registered", call.Function.Name),
-					"available_tools": ch.dispatchableToolNames(),
-				},
-			})
-			continue
+//
+// maxConcurrent has the same semantics as invokeAll.
+func (ch *Chat) invokeOrInform(ctx context.Context, calls []ToolCall, maxConcurrent int) ([]toolResult, error) {
+	return runDispatch(ctx, calls, maxConcurrent, ch.dispatchOrInform)
+}
+
+// dispatchManaged is the per-call entry for invokeAll. The caller has
+// already verified every call maps to a dispatchable ManagedTool.
+func (ch *Chat) dispatchManaged(ctx context.Context, call ToolCall) (toolResult, error) {
+	d := ch.tools[call.Function.Name].(dispatchable)
+	argsJSON, err := json.Marshal(call.Function.Arguments)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
+	}
+	out, err := d.invoke(ctx, argsJSON)
+	if err != nil {
+		if d.policy() == ToolPolicyInformOnError {
+			return toolResult{
+				name:     call.Function.Name,
+				response: map[string]any{"error": err.Error()},
+			}, nil
 		}
-		d, isD := def.(dispatchable)
-		if !isD {
-			results = append(results, toolResult{
-				name: call.Function.Name,
-				response: map[string]any{
-					"error": fmt.Sprintf("tool %q is not auto-dispatchable in a streaming turn", call.Function.Name),
-				},
-			})
-			continue
+		return toolResult{}, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
+	}
+	return toolResult{name: call.Function.Name, response: out}, nil
+}
+
+// dispatchOrInform is the per-call entry for invokeOrInform. Unknown
+// tools and non-dispatchable tools (RawTool) return a synthesized
+// inform-back result rather than failing the batch.
+func (ch *Chat) dispatchOrInform(ctx context.Context, call ToolCall) (toolResult, error) {
+	def, ok := ch.tools[call.Function.Name]
+	if !ok {
+		return toolResult{
+			name: call.Function.Name,
+			response: map[string]any{
+				"error":           fmt.Sprintf("tool %q is not registered", call.Function.Name),
+				"available_tools": ch.dispatchableToolNames(),
+			},
+		}, nil
+	}
+	d, isD := def.(dispatchable)
+	if !isD {
+		return toolResult{
+			name: call.Function.Name,
+			response: map[string]any{
+				"error": fmt.Sprintf("tool %q is not auto-dispatchable in a streaming turn", call.Function.Name),
+			},
+		}, nil
+	}
+	argsJSON, err := json.Marshal(call.Function.Arguments)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
+	}
+	out, err := d.invoke(ctx, argsJSON)
+	if err != nil {
+		if d.policy() == ToolPolicyInformOnError {
+			return toolResult{
+				name:     call.Function.Name,
+				response: map[string]any{"error": err.Error()},
+			}, nil
 		}
-		argsJSON, err := json.Marshal(call.Function.Arguments)
-		if err != nil {
-			return nil, fmt.Errorf("litertlm: tool %q: marshal args: %w", call.Function.Name, err)
-		}
-		out, err := d.invoke(ctx, argsJSON)
-		if err != nil {
-			switch d.policy() {
-			case ToolPolicyInformOnError:
-				results = append(results, toolResult{
-					name:     call.Function.Name,
-					response: map[string]any{"error": err.Error()},
-				})
-				continue
-			default: // ToolPolicyReturnOnError
-				return nil, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
+		return toolResult{}, fmt.Errorf("litertlm: tool %q: %w", call.Function.Name, err)
+	}
+	return toolResult{name: call.Function.Name, response: out}, nil
+}
+
+// runDispatch invokes perCall for every call, sequentially when
+// maxConcurrent <= 1 and in parallel capped at maxConcurrent otherwise.
+// Results preserve call-order regardless of completion order. The first
+// handler to fail (in real time) wins; sibling handlers see ctx
+// cancellation and may bail. Outer-ctx cancellation propagates as
+// ctx.Err.
+func runDispatch(ctx context.Context, calls []ToolCall, maxConcurrent int, perCall func(context.Context, ToolCall) (toolResult, error)) ([]toolResult, error) {
+	if maxConcurrent <= 1 || len(calls) <= 1 {
+		results := make([]toolResult, len(calls))
+		for i, call := range calls {
+			r, err := perCall(ctx, call)
+			if err != nil {
+				return nil, err
 			}
+			results[i] = r
 		}
-		results = append(results, toolResult{name: call.Function.Name, response: out})
+		return results, nil
+	}
+
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make([]toolResult, len(calls))
+	var (
+		wg       sync.WaitGroup
+		errOnce  sync.Once
+		firstErr error
+	)
+	sem := make(chan struct{}, maxConcurrent)
+	for i, call := range calls {
+		wg.Add(1)
+		go func(i int, call ToolCall) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-subCtx.Done():
+				return
+			}
+			r, err := perCall(subCtx, call)
+			if err != nil {
+				errOnce.Do(func() {
+					firstErr = err
+					cancel()
+				})
+				return
+			}
+			results[i] = r
+		}(i, call)
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	if outerErr := ctx.Err(); outerErr != nil {
+		return nil, outerErr
 	}
 	return results, nil
 }

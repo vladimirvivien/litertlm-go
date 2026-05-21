@@ -210,6 +210,6 @@ func TestStream_ToolCallChunkHasTextToo(t *testing.T) {
 // Chat.SendStream so they can inject a stub transport.
 func streamIter(ch *Chat, transport chatTransport, msgJSON string) func(yield func(Chunk, error) bool) {
 	return func(yield func(Chunk, error) bool) {
-		ch.streamWithDispatch(context.Background(), transport, msgJSON, OptionalArgs(0), yield)
+		ch.streamWithDispatch(context.Background(), transport, msgJSON, runtimeConfig{}, yield)
 	}
 }

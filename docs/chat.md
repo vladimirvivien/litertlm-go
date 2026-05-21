@@ -146,6 +146,24 @@ for _, call := range reply.ToolCalls() {
 }
 ```
 
+`WithMaxConcurrentTools(n)` runs tool handlers in parallel within a
+single dispatch hop. `n <= 1` keeps the default sequential dispatch;
+`n > 1` caps in-flight handlers at `n`. Result ordering in the
+follow-up tool-role message matches the model's original call order
+regardless of completion order. The first handler to fail (in real
+time) terminates the batch; sibling handlers see ctx cancellation
+and may bail.
+
+```go
+reply, err := chat.Send(ctx, "Compare weather in Paris and Tokyo",
+    litertlm.WithMaxConcurrentTools(4),
+)
+```
+
+Tool handlers must be safe to invoke from multiple goroutines when
+`n > 1`. Shared mutable state in a closure-captured `ManagedTool`
+handler needs its own synchronization.
+
 `WithSampler` and `WithMaxOutputTokens` are not per-call on Chat —
 they apply at `NewChat` time on the Client's session config.
 

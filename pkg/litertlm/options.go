@@ -54,6 +54,12 @@ type runtimeConfig struct {
 	// tool calls is returned to the caller for manual handling.
 	// Ignored by Client.Generate*, SendStream, and SendMultiStream.
 	returnToolRequests bool
+
+	// Chat.Send* only. <=1 dispatches tool calls sequentially (the
+	// default); >1 dispatches in parallel capped at that many
+	// in-flight handlers. Ignored by Client.Generate* and
+	// GenerateData.
+	maxConcurrentTools int
 }
 
 // ---- constructor options ----
@@ -224,4 +230,17 @@ func WithVisualTokenBudget(n int) RuntimeOption {
 // Client.Generate*, GenerateData, SendStream, and SendMultiStream.
 func WithReturnToolRequests(on bool) RuntimeOption {
 	return func(c *runtimeConfig) { c.returnToolRequests = on }
+}
+
+// WithMaxConcurrentTools caps the number of tool handlers Chat dispatch
+// runs concurrently when a single reply contains multiple tool calls.
+// n <= 1 keeps the default sequential dispatch; n > 1 enables parallel
+// dispatch capped at n in-flight handlers. Tool result ordering in the
+// follow-up tool-role message matches the model's original call order
+// regardless of completion order.
+//
+// Handlers must be safe to invoke from multiple goroutines when n > 1.
+// Applies to Chat.Send*. Ignored by Client.Generate* and GenerateData.
+func WithMaxConcurrentTools(n int) RuntimeOption {
+	return func(c *runtimeConfig) { c.maxConcurrentTools = n }
 }
