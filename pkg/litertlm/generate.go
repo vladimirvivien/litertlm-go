@@ -87,7 +87,7 @@ func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cf
 		return "", nil, err
 	}
 
-	raw, err := conv.SendMessage(msgJSON, "")
+	raw, err := conv.SendMessage(msgJSON, "", OptionalArgs(0))
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return "", nil, cerr
@@ -213,7 +213,7 @@ func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part,
 			return
 		}
 
-		for sc := range conv.SendMessageStreamCh(msgJSON, "") {
+		for sc := range conv.SendMessageStreamCh(msgJSON, "", OptionalArgs(0)) {
 			ch := Chunk{Text: extractStreamChunkText(sc.Text), Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return

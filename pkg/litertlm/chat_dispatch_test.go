@@ -21,7 +21,7 @@ type fakeTransport struct {
 	cancelCalls   int
 }
 
-func (f *fakeTransport) SendMessage(messageJSON, _ string) (string, error) {
+func (f *fakeTransport) SendMessage(messageJSON, _ string, _ OptionalArgs) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sentMsgs = append(f.sentMsgs, messageJSON)
@@ -33,7 +33,7 @@ func (f *fakeTransport) SendMessage(messageJSON, _ string) (string, error) {
 	return r, nil
 }
 
-func (f *fakeTransport) SendMessageStreamCh(messageJSON, _ string) <-chan StreamChunk {
+func (f *fakeTransport) SendMessageStreamCh(messageJSON, _ string, _ OptionalArgs) <-chan StreamChunk {
 	f.mu.Lock()
 	f.sentMsgs = append(f.sentMsgs, messageJSON)
 	var chunks []StreamChunk
@@ -131,7 +131,7 @@ func TestDispatch_SingleCallThenText(t *testing.T) {
 			textReply("The sum is 42."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"add 17 and 25"}`, OptionalArgs(0))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestDispatch_MultiCallsInOneReply(t *testing.T) {
 			textReply("done"),
 		},
 	}
-	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`); err != nil {
+	if _, err := ch.send(context.Background(), transport, `{"role":"user","content":"go"}`, OptionalArgs(0)); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	// Second message should bundle both results in one tool-role envelope.
@@ -199,7 +199,7 @@ func TestDispatch_BailsOnUnknownTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("nonexistent", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestDispatch_BailsOnRawTool(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("manual", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestDispatch_NoManagedToolsRegistered(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("anything", map[string]any{})},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestDispatch_ToolPolicyReturnOnError(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{toolCallReply("bad", map[string]any{"a": 1, "b": 2})},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err == nil {
 		t.Fatal("expected dispatcher to propagate handler error")
 	}
@@ -275,7 +275,7 @@ func TestDispatch_ToolPolicyInformOnError(t *testing.T) {
 			textReply("Sorry, please retry later."),
 		},
 	}
-	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	reply, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestDispatch_HopsExceeded(t *testing.T) {
 			toolCallReply("add", map[string]any{"a": 3, "b": 3}),
 		},
 	}
-	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`)
+	_, err := ch.send(context.Background(), transport, `{"role":"user","content":"x"}`, OptionalArgs(0))
 	if err == nil {
 		t.Fatal("expected ErrToolHopsExceeded")
 	}

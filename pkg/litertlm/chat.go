@@ -129,8 +129,8 @@ const defaultMaxToolHops = 5
 // Chat.streamWithDispatch, and the auto-dispatch loop. The real
 // Conversation handle satisfies it; tests inject a stub.
 type chatTransport interface {
-	SendMessage(messageJSON, extraContext string) (string, error)
-	SendMessageStreamCh(messageJSON, extraContext string) <-chan StreamChunk
+	SendMessage(messageJSON, extraContext string, opts OptionalArgs) (string, error)
+	SendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs) <-chan StreamChunk
 	Cancel()
 }
 
@@ -346,8 +346,12 @@ func (ch *Chat) Clone() (*Chat, error) {
 // RawTool or an unknown name) are returned as-is for manual handling
 // with Reply.ToolCalls() + Chat.SendToolResult.
 //
+// Per-call opts apply to this turn (and every dispatch hop it
+// triggers). Text-only turns ignore multimodal knobs such as
+// WithVisualTokenBudget.
+//
 // Cancelling ctx aborts the in-flight call via Conversation.Cancel.
-func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
+func (ch *Chat) Send(ctx context.Context, message string, opts ...RuntimeOption) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
 		return nil, err
 	}
@@ -355,7 +359,12 @@ func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: marshal: %w", err)
 	}
-	return ch.send(ctx, ch.conv, string(msgJSON))
+	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: Send: %w", err)
+	}
+	defer optArgs.Delete()
+	return ch.send(ctx, ch.conv, string(msgJSON), optArgs)
 }
 
 // SendStream issues a user-role message and returns an iterator over
@@ -372,7 +381,11 @@ func (ch *Chat) Send(ctx context.Context, message string) (*Reply, error) {
 // from post-dispatch turns. Replies containing any
 // non-dispatchable tool call (a RawTool or an unknown name) end
 // the stream with an error.
-func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk, error] {
+//
+// Per-call opts apply to this turn (and every dispatch hop it
+// triggers). Text-only turns ignore multimodal knobs such as
+// WithVisualTokenBudget.
+func (ch *Chat) SendStream(ctx context.Context, message string, opts ...RuntimeOption) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		if err := ch.checkOpen(); err != nil {
 			yield(Chunk{}, err)
@@ -383,7 +396,13 @@ func (ch *Chat) SendStream(ctx context.Context, message string) iter.Seq2[Chunk,
 			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: marshal: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), yield)
+		optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+		if err != nil {
+			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: %w", err))
+			return
+		}
+		defer optArgs.Delete()
+		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), optArgs, yield)
 	}
 }
 
@@ -426,8 +445,12 @@ func extractStreamChunkText(raw string) string {
 // turns, including image and audio embeddings — follow-up text
 // turns can reference earlier multimodal content.
 //
+// Per-call opts apply to this turn (and every dispatch hop it
+// triggers). WithVisualTokenBudget(n) caps the number of vision
+// tokens consumed on this turn.
+//
 // Cancelling ctx aborts the in-flight call via Conversation.Cancel.
-func (ch *Chat) SendMulti(ctx context.Context, parts []Part) (*Reply, error) {
+func (ch *Chat) SendMulti(ctx context.Context, parts []Part, opts ...RuntimeOption) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
 		return nil, err
 	}
@@ -438,7 +461,12 @@ func (ch *Chat) SendMulti(ctx context.Context, parts []Part) (*Reply, error) {
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
 	}
-	return ch.send(ctx, ch.conv, msgJSON)
+	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
+	}
+	defer optArgs.Delete()
+	return ch.send(ctx, ch.conv, msgJSON, optArgs)
 }
 
 // SendMultiStream is the streaming sibling of SendMulti. Chunk.Text
@@ -446,7 +474,11 @@ func (ch *Chat) SendMulti(ctx context.Context, parts []Part) (*Reply, error) {
 // parsed internally. ManagedTool calls emitted by the model during
 // the stream are auto-dispatched the same way SendStream handles
 // them (see SendStream godoc for the dispatch semantics).
-func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part) iter.Seq2[Chunk, error] {
+//
+// Per-call opts apply to this turn (and every dispatch hop it
+// triggers). WithVisualTokenBudget(n) caps the number of vision
+// tokens consumed on this turn.
+func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...RuntimeOption) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		if err := ch.checkOpen(); err != nil {
 			yield(Chunk{}, err)
@@ -461,7 +493,13 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part) iter.Seq2[Chu
 			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, ch.conv, msgJSON, yield)
+		optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+		if err != nil {
+			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
+			return
+		}
+		defer optArgs.Delete()
+		ch.streamWithDispatch(ctx, ch.conv, msgJSON, optArgs, yield)
 	}
 }
 
@@ -474,8 +512,8 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part) iter.Seq2[Chu
 // very end after all dispatch is finished.
 //
 // transport is parameterized so tests inject a stub satisfying
-// chatTransport.
-func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, yield func(Chunk, error) bool) {
+// chatTransport. opts is reused across every dispatch hop.
+func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, yield func(Chunk, error) bool) {
 	cap := ch.maxToolHops
 	if cap <= 0 {
 		cap = defaultMaxToolHops
@@ -483,7 +521,7 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 
 	for hop := 0; ; hop++ {
 		var calls []ToolCall
-		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, &calls, yield)
+		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, opts, &calls, yield)
 		if cancelled || streamErr != nil {
 			if streamErr != nil {
 				yield(Chunk{}, streamErr)
@@ -522,11 +560,11 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 // Tool calls observed in any chunk are appended to *calls. Returns
 // (cancelled, err): cancelled=true when the caller's yield returned
 // false; err is set on a transport-side error.
-func (ch *Chat) streamOne(ctx context.Context, transport chatTransport, msgJSON string, calls *[]ToolCall, yield func(Chunk, error) bool) (bool, error) {
+func (ch *Chat) streamOne(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, calls *[]ToolCall, yield func(Chunk, error) bool) (bool, error) {
 	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
-	for sc := range transport.SendMessageStreamCh(msgJSON, "") {
+	for sc := range transport.SendMessageStreamCh(msgJSON, "", opts) {
 		if sc.Err != nil {
 			return false, sc.Err
 		}
@@ -584,7 +622,10 @@ func extractStreamEnvelope(raw string) (string, []ToolCall) {
 //
 // Like Send, SendToolResult enters the auto-dispatch loop when the
 // model's reply contains tool calls all mapping to ManagedTools.
-func (ch *Chat) SendToolResult(ctx context.Context, name string, result any) (*Reply, error) {
+// Per-call opts apply to this turn (and every dispatch hop it
+// triggers). Tool-result turns carry no images, so
+// WithVisualTokenBudget is a no-op here.
+func (ch *Chat) SendToolResult(ctx context.Context, name string, result any, opts ...RuntimeOption) (*Reply, error) {
 	if err := ch.checkOpen(); err != nil {
 		return nil, err
 	}
@@ -592,7 +633,12 @@ func (ch *Chat) SendToolResult(ctx context.Context, name string, result any) (*R
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
-	return ch.send(ctx, ch.conv, msgJSON)
+	optArgs, err := buildOptionalArgs(resolveRuntimeConfig(opts))
+	if err != nil {
+		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
+	}
+	defer optArgs.Delete()
+	return ch.send(ctx, ch.conv, msgJSON, optArgs)
 }
 
 // toolResult holds one tool's response within a tool-role message.
@@ -619,15 +665,16 @@ func encodeToolResults(results []toolResult) (string, error) {
 }
 
 // send drives the dispatch loop. transport is parameterized so tests
-// can inject a stub satisfying chatTransport.
-func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string) (*Reply, error) {
+// can inject a stub satisfying chatTransport. opts is reused across
+// every dispatch hop.
+func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs) (*Reply, error) {
 	cap := ch.maxToolHops
 	if cap <= 0 {
 		cap = defaultMaxToolHops
 	}
 
 	for hop := 0; ; hop++ {
-		reply, err := sendOne(ctx, transport, msgJSON)
+		reply, err := sendOne(ctx, transport, msgJSON, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -650,11 +697,11 @@ func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON strin
 
 // sendOne posts one message through the transport and parses the
 // reply envelope.
-func sendOne(ctx context.Context, transport chatTransport, msgJSON string) (*Reply, error) {
+func sendOne(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs) (*Reply, error) {
 	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
-	raw, err := transport.SendMessage(msgJSON, "")
+	raw, err := transport.SendMessage(msgJSON, "", opts)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
@@ -662,6 +709,22 @@ func sendOne(ctx context.Context, transport chatTransport, msgJSON string) (*Rep
 		return nil, fmt.Errorf("litertlm: send: %w", err)
 	}
 	return parseReply(raw)
+}
+
+// buildOptionalArgs materializes a Conversation OptionalArgs handle
+// from the resolved per-call cfg. Returns OptionalArgs(0) (the C-side
+// default) when no per-call knob is set. Caller must Delete the
+// returned handle.
+func buildOptionalArgs(cfg runtimeConfig) (OptionalArgs, error) {
+	if cfg.visualTokenBudget == nil {
+		return 0, nil
+	}
+	o, err := NewOptionalArgs()
+	if err != nil {
+		return 0, fmt.Errorf("litertlm: per-call options: %w", err)
+	}
+	o.SetVisualTokenBudget(*cfg.visualTokenBudget)
+	return o, nil
 }
 
 // allCallsDispatchable reports whether every tool call in reply maps

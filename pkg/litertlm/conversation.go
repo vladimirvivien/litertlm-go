@@ -142,8 +142,10 @@ func (c Conversation) Delete() {
 }
 
 // SendMessage runs a blocking multi-turn send and returns the JSON
-// response (copied into Go memory).
-func (c Conversation) SendMessage(messageJSON, extraContext string) (string, error) {
+// response (copied into Go memory). opts carries per-call knobs such
+// as the visual token budget; pass OptionalArgs(0) for C-side
+// defaults.
+func (c Conversation) SendMessage(messageJSON, extraContext string, opts OptionalArgs) (string, error) {
 	if c == 0 {
 		return "", fmt.Errorf("litertlm: send_message: invalid conversation")
 	}
@@ -156,13 +158,12 @@ func (c Conversation) SendMessage(messageJSON, extraContext string) (string, err
 		return "", err
 	}
 
-	var optArgs unsafe.Pointer
 	handle, err := callForHandle[JsonResponse](conversationSendMessageFunc,
 		"conversation_send_message",
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
-		unsafe.Pointer(&optArgs),
+		unsafe.Pointer(&opts),
 	)
 	if err != nil {
 		return "", err

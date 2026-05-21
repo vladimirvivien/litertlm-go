@@ -113,6 +113,25 @@ fresh `Conversation`, run one inference, and discard it. KV state
 does not persist between calls. Use `Chat.SendMulti*` when you
 want successive turns to share the same conversation state.
 
+## Per-call options
+
+All five `Chat.Send*` methods accept variadic `RuntimeOption` values
+applied to a single turn (and to every dispatch hop the turn
+triggers).
+
+`WithVisualTokenBudget(n)` caps the vision tokens consumed by a
+`SendMulti` / `SendMultiStream` turn. Text-only turns ignore it.
+Effective on Gemma 4 vision-enabled models.
+
+```go
+reply, err := chat.SendMulti(ctx, []litertlm.Part{img, litertlm.Text("...")},
+    litertlm.WithVisualTokenBudget(512),
+)
+```
+
+`WithSampler` and `WithMaxOutputTokens` are not per-call on Chat —
+they apply at `NewChat` time on the Client's session config.
+
 ## Tool calling
 
 Two flavors of tool attach to a `Chat` via `WithTool`:

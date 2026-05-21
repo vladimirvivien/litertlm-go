@@ -146,7 +146,7 @@ func main() {
 	fmt.Println(strings.TrimSpace(rendered))
 
 	fmt.Printf("\nuser>      %s\n", *turn1)
-	reply1, err := conv.SendMessage(turn1JSON, "")
+	reply1, err := conv.SendMessage(turn1JSON, "", litertlm.OptionalArgs(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "send turn 1: %v\n", err)
 		os.Exit(1)
@@ -157,7 +157,7 @@ func main() {
 	// Same Conversation handle: the KV cache from turn 1 persists.
 	turn2JSON := encodeUserMessage(*turn2)
 	fmt.Printf("\nuser>      %s\n", *turn2)
-	reply2, err := conv.SendMessage(turn2JSON, "")
+	reply2, err := conv.SendMessage(turn2JSON, "", litertlm.OptionalArgs(0))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "send turn 2: %v\n", err)
 		os.Exit(1)

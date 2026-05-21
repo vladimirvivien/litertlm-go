@@ -31,8 +31,8 @@ Common reasons to drop down:
 | `client.GenerateStream(ctx, prompt)`  | `session.GenerateContentStreamCh(...)` channel                                                                             |
 | `client.GenerateResponse(ctx, prompt)`| `session.GenerateContent(...)` returning `Responses` directly                                                              |
 | `client.NewChat(ctx, opts...)`        | `NewConversationConfig` + `engine.NewConversation`                                                                         |
-| `chat.Send(ctx, msg)`                 | `conv.SendMessage(messageJSON, "")` + parse JSON envelope                                                                  |
-| `chat.SendStream(ctx, msg)`           | `conv.SendMessageStreamCh(...)` channel                                                                                    |
+| `chat.Send(ctx, msg)`                 | `conv.SendMessage(messageJSON, "", OptionalArgs(0))` + parse JSON envelope                                                  |
+| `chat.SendStream(ctx, msg)`           | `conv.SendMessageStreamCh(messageJSON, "", OptionalArgs(0))` channel                                                        |
 | `chat.SendToolResult(name, result)`   | Build `{"role":"tool","content":[{"name":..., "response":...}]}` JSON, then `conv.SendMessage`                              |
 | `chat.Close()`                        | `conv.Delete()` + `convCfg.Delete()`                                                                                       |
 | `litertlm.GenerateData[T]`            | `Generate` + manual prompt augmentation + JSON extraction + `json.Unmarshal`                                               |

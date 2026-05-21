@@ -167,8 +167,9 @@ func (s Session) GenerateContentStreamCh(inputs []InputData) <-chan StreamChunk 
 }
 
 // SendMessageStream is the Conversation-level streaming send. Mirrors
-// Session.GenerateContentStream.
-func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb func(StreamChunk)) error {
+// Session.GenerateContentStream. opts carries per-call knobs such as
+// the visual token budget; pass OptionalArgs(0) for C-side defaults.
+func (c Conversation) SendMessageStream(messageJSON, extraContext string, opts OptionalArgs, cb func(StreamChunk)) error {
 	if c == 0 {
 		return fmt.Errorf("litertlm: send_message_stream: invalid conversation")
 	}
@@ -196,14 +197,13 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 	cbAddr := streamTrampAddr
 	cbData := id
 
-	var optArgs unsafe.Pointer
 	var ret int32
 	conversationSendMessageStreamFunc.Call(
 		unsafe.Pointer(&ret),
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
-		unsafe.Pointer(&optArgs),
+		unsafe.Pointer(&opts),
 		unsafe.Pointer(&cbAddr),
 		unsafe.Pointer(&cbData),
 	)
@@ -234,11 +234,12 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, cb fun
 }
 
 // SendMessageStreamCh is the channel variant of SendMessageStream.
-func (c Conversation) SendMessageStreamCh(messageJSON, extraContext string) <-chan StreamChunk {
+// opts carries per-call knobs; pass OptionalArgs(0) for C-side defaults.
+func (c Conversation) SendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs) <-chan StreamChunk {
 	out := make(chan StreamChunk, 16)
 	go func() {
 		defer close(out)
-		err := c.SendMessageStream(messageJSON, extraContext, func(sc StreamChunk) {
+		err := c.SendMessageStream(messageJSON, extraContext, opts, func(sc StreamChunk) {
 			out <- sc
 		})
 		if err != nil {

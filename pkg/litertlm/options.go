@@ -4,9 +4,8 @@ package litertlm
 type Option func(*clientConfig)
 
 // RuntimeOption tunes a single inference call without rebuilding the
-// Client. Apply via the variadic opts parameter on Client.Generate,
-// Client.GenerateMulti, Client.GenerateStream, Client.GenerateResponse,
-// and GenerateData / GenerateDataMulti.
+// Client. Apply via the variadic opts parameter on Client.Generate*,
+// GenerateData / GenerateDataMulti, and Chat.Send*.
 type RuntimeOption func(*runtimeConfig)
 
 // clientConfig is the resolved configuration produced by composing
@@ -45,6 +44,10 @@ type runtimeConfig struct {
 	// GenerateData-specific. Generate ignores these fields.
 	retries           int
 	schemaInstruction string
+
+	// Chat.Send*-specific. Generate / GenerateData ignore this.
+	// Nil-when-unset preserves the C-side default.
+	visualTokenBudget *int
 }
 
 // ---- constructor options ----
@@ -195,4 +198,12 @@ func WithRetries(n int) RuntimeOption {
 // rendered. Ignored by Generate / GenerateStream.
 func WithSchemaInstruction(s string) RuntimeOption {
 	return func(c *runtimeConfig) { c.schemaInstruction = s }
+}
+
+// WithVisualTokenBudget caps the number of vision tokens consumed by
+// a single Chat.SendMulti / SendMultiStream turn. Effective on Gemma 4
+// vision-enabled models; text-only and audio turns ignore it.
+// Ignored by Client.Generate* and GenerateData.
+func WithVisualTokenBudget(n int) RuntimeOption {
+	return func(c *runtimeConfig) { c.visualTokenBudget = &n }
 }

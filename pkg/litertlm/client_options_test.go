@@ -164,4 +164,20 @@ func TestRuntimeOption_Composition(t *testing.T) {
 	if g.sampler == nil || g.sampler.TopP != 0.9 {
 		t.Errorf("sampler = %v", g.sampler)
 	}
+	WithVisualTokenBudget(512)(&g)
+	if g.visualTokenBudget == nil || *g.visualTokenBudget != 512 {
+		t.Errorf("visualTokenBudget = %v", g.visualTokenBudget)
+	}
+}
+
+// TestBuildOptionalArgs_UnsetReturnsZero verifies that with no Chat-side
+// knobs set, no C handle is materialized.
+func TestBuildOptionalArgs_UnsetReturnsZero(t *testing.T) {
+	opts, err := buildOptionalArgs(runtimeConfig{})
+	if err != nil {
+		t.Fatalf("buildOptionalArgs: %v", err)
+	}
+	if opts != 0 {
+		t.Errorf("opts = %v, want OptionalArgs(0) when no knobs set", opts)
+	}
 }
