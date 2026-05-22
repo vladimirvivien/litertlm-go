@@ -1,5 +1,7 @@
 # litertlm-go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/vladimirvivien/litertlm-go.svg)](https://pkg.go.dev/github.com/vladimirvivien/litertlm-go)
+
 A Go binding for Google's
 [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) for high-performance local on-device LLM inference.
 
@@ -16,7 +18,11 @@ A Go binding for Google's
   Functional options for every engine setting. Context-driven
   cancellation. → [Client guide](client.md)
 - **`Chat`** — multi-turn conversations with system prompts, tool
-  declarations, and structured `tool_calls` parsing.
+  declarations, and structured `tool_calls` parsing. Per-call
+  `RuntimeOption` knobs (`WithVisualTokenBudget`,
+  `WithReturnToolRequests`, `WithMaxConcurrentTools`), parallel tool
+  dispatch, multimodal history seeding via `WithInitialMessages`,
+  and `Chat.TokenCount()` for cumulative usage.
   → [Chat guide](chat.md)
 - **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
   that return `*T` populated from the model's response via a
@@ -79,8 +85,8 @@ Full walkthrough → [docs/getting-started](https://vladimirvivien.github.io/lit
 
 ## Building the C library
 
-Currently, LiteRT-LM doesn't ship a prebuilt C API shared libraries. 
-The followings walk you through how to build them:
+LiteRT-LM does not ship prebuilt C API shared libraries. Build them
+using the platform guide:
 
 - Linux / macOS — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
 - Windows — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
@@ -89,36 +95,7 @@ Minimum supported upstream: **LiteRT-LM v0.12.0**. Earlier builds lack the `opti
 
 ## Examples
 
-| Path                          | What it shows                                                      |
-|-------------------------------|--------------------------------------------------------------------|
-| `examples/hello/`             | Minimal `Generate`                                                 |
-| `examples/stream/`            | `GenerateStream` with range-over-func                              |
-| `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
-| `examples/chat-history/`      | Seed `Chat` with a prior transcript via `WithInitialMessages` + `WithExtraContext` / `WithFilterChannelContentFromKVCache` / `WithMaxToolHops` |
-| `examples/conversation/`      | `Chat` + `NewRawTool` + manual dispatch via `Reply.ToolCalls`      |
-| `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
-| `examples/tool-policy/`       | `WithToolPolicy(ToolPolicyReturnOnError vs ToolPolicyInformOnError)` — handler-error behavior under auto-dispatch |
-| `examples/clone/`             | `Chat.Clone` — branch a prefilled Chat into independent conversations that share KV state |
-| `examples/structured/`        | `GenerateData[T]` (typed JSON output via reflection)               |
-| `examples/vision/`            | `GenerateMulti` (image + text) with self-comparison against a sidecar |
-| `examples/audio/`             | `GenerateMulti` (audio + text) — transcription with optional alignment vs a reference |
-| `examples/extract/`           | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison  |
-| `examples/cancel/`            | Cancelling a streaming generation via `context.WithCancel`         |
-| `examples/prefill-decode/`    | Explicit two-phase generation (low-level)                          |
-| `examples/conversation-lowlevel/` | Low-level twin of Chat: hand-built `SessionConfig` + `ConversationConfig` + `SendMessage` + `RenderMessage` + `BenchmarkInfo` |
-| `examples/score/`             | `ScoreTexts` + `Score` / `TokenLength` (low-level)                 |
-| `examples/token-scores/`      | `ScoreTexts` + `TokenScores` per-token log-probs paired with `Engine.Tokenize` |
-| `examples/raw-multi/`         | `GenerateMulti` / `GenerateMultiStream` / `GenerateMultiResponse` — three call shapes for the same image + text input |
-| `examples/tokenize/`          | `Client.Tokenize` / `Client.TokenLength` + `Engine.Detokenize` / start / stop tokens via `Client.Engine()` |
-| `examples/gpu/`               | GPU-backed generation                                              |
-| `examples/benchmarks/`        | `Response.Benchmark()` (high-level) vs `Session.BenchmarkInfo()` (low-level) side-by-side |
-| `examples/cache-warmup/`      | Cold-vs-warm `WithCacheDir` load — XNNPACK / mldrift artefact reuse        |
-| `examples/activation-dtype/`  | Default-vs-selected `WithActivationDataType` (F32 / F16 / I16 / I8) — empirical per-backend deltas |
-| `examples/prefill-chunk/`     | Default-vs-selected `WithPrefillChunkSize` (CPU-only) — chunked vs unchunked prefill timings |
-| `examples/parallel-load/`     | Parallel vs serial `WithParallelSectionLoading` — `litertlm.New` wall-clock delta |
-| `examples/logging/`           | `SetMinLogLevel` — set the LiteRT-LM log severity floor at startup and toggle mid-program |
-| `examples/per-call-sampler/`  | `WithSampler` per-call override — three sampler shapes (Deterministic / Balanced / Creative) on the same Client |
-| `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
+See [`examples/README.md`](./examples/README.md) for `litertlm-go` API examples.
 
 ## Documentation
 

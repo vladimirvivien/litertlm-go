@@ -37,7 +37,7 @@ Common reasons to drop down:
 | `chat.Close()`                        | `conv.Delete()` + `convCfg.Delete()`                                                                                       |
 | `litertlm.GenerateData[T]`            | `Generate` + manual prompt augmentation + JSON extraction + `json.Unmarshal`                                               |
 
-## Resource lifetimte management
+## Resource lifetime management
 
 The low-level API surfaces every C handle as a `uintptr` value type
 (`Engine`, `Session`, `EngineSettings`, `Conversation`, `Responses`,

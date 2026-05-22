@@ -24,8 +24,7 @@ Install the `litertlm-go` package:
 go get github.com/vladimirvivien/litertlm-go@latest
 ```
 
-Use `litertlm-go` to instantiate a LitRT-LM engine client as
-shown in the snippet below:
+Instantiate a LiteRT-LM engine client:
 
 ```go
 package main

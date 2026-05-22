@@ -1,7 +1,8 @@
 # Client
 
-The `Client` type provides a high-level abstraction and access 
-to the LiteLT-LM functionalities.
+The `Client` type is the high-level entry point to the LiteRT-LM
+runtime. Always pair `New` with `defer client.Close()` to release
+the underlying engine handles.
 
 ```go
 client, err := litertlm.New(ctx,
@@ -13,12 +14,11 @@ client, err := litertlm.New(ctx,
 defer client.Close()
 ```
 
-Notice the call to `Close` to properly release internal resources.
-
 ## Creating `New(ctx, opts...)` clients
 
-Use `litertlm.New()` constructor function to create a new `Client` instance.
-Internally, it aggregates the C-API `Engine` and `EngineSettings` to manage inference.
+`litertlm.New` aggregates the C-API `Engine` and `EngineSettings`
+into a single Client value. The Client owns both; `Close` releases
+them in the correct order.
 
 ## Construction options
 
@@ -64,7 +64,8 @@ Use functional options to specify environment and inference engine settings.
 
 Synchronous one-shot inference. Returns the first candidate's text.
 
-Per-call options:
+Per-call options are `RuntimeOption` values, shared with `GenerateData`
+and `Chat.Send*`:
 
 | Option                          | Effect                                                |
 |---------------------------------|-------------------------------------------------------|

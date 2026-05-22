@@ -147,6 +147,25 @@ manually.
 a tool result might trigger more calls, which the framework dispatches
 the same way.
 
+### Per-call dispatch knobs
+
+Three `RuntimeOption` values control dispatch on a per-`Send*` basis
+(see [Chat → Per-call options](chat.md#per-call-options) for the full
+list):
+
+- `WithMaxConcurrentTools(n)` — when a reply contains multiple tool
+  calls, dispatch handlers concurrently capped at `n` in-flight.
+  `n <= 1` (the default) is sequential. Result ordering in the
+  follow-up tool-role message matches the model's call order
+  regardless of completion order. Handlers must be safe to invoke
+  from multiple goroutines when `n > 1`.
+- `WithReturnToolRequests(true)` — bypass dispatch entirely for the
+  current `Send` / `SendMulti` / `SendToolResult`. The first reply
+  carrying tool calls is returned via `Reply.ToolCalls()` for manual
+  handling. Streaming methods ignore the flag.
+- `WithMaxToolHops(n)` — see below; applies at `NewChat` time, not
+  per call.
+
 ### `WithMaxToolHops(n)` — cap iterations
 
 Each iteration is one model→tool→model round-trip. The default cap is
@@ -213,10 +232,16 @@ errors, ambiguous queries the model might rephrase).
 
 ## Streaming
 
-`SendStream` does not wrap the dispatch loop. It returns the raw
-streaming chunks of the model's first reply. For typed-tool flows
-that need streaming, call `Send` and stream the post-dispatch reply
-yourself.
+`SendStream` and `SendMultiStream` run the same dispatch loop as
+`Send` / `SendMulti`. Text chunks from each turn are yielded
+immediately; intermediate `Final` markers from inner turns are
+suppressed. The iterator emits one trailing synthetic `Final` chunk
+after the loop terminates. Replies whose tool calls include any
+non-dispatchable entry (a `RawTool` or an unknown name) end the
+stream with an error.
+
+Streaming methods ignore `WithReturnToolRequests` — manual handling
+of tool calls requires a `*Reply`, so use `Send` for that flow.
 
 ## See also
 

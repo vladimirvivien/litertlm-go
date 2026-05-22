@@ -16,7 +16,11 @@ A Go binding for Google's
   Functional options for every engine setting. Context-driven
   cancellation. → [Client guide](client.md)
 - **`Chat`** — multi-turn conversations with system prompts, tool
-  declarations, and structured `tool_calls` parsing.
+  declarations, and structured `tool_calls` parsing. Per-call
+  `RuntimeOption` knobs (`WithVisualTokenBudget`,
+  `WithReturnToolRequests`, `WithMaxConcurrentTools`), parallel tool
+  dispatch, multimodal history seeding via `WithInitialMessages`,
+  and `Chat.TokenCount()` for cumulative usage.
   → [Chat guide](chat.md)
 - **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
   that return `*T` populated from the model's response via a
@@ -78,32 +82,21 @@ Full walkthrough: [Getting started](getting-started.md).
 
 ## Building the C library
 
-Currently, LiteRT-LM doesn't ship a prebuilt C API shared libraries. 
-The followings walk you through how to build them:
-
+LiteRT-LM does not ship prebuilt C API shared libraries. Build them
+using the platform guide:
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
 (Linux/macOS) or
 [`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md).
 
+Minimum supported upstream: **LiteRT-LM v0.12.0**.
+
 ## Examples
 
-| Example                    | What it shows                                                  |
-|----------------------------|----------------------------------------------------------------|
-| `examples/hello/`          | Minimal `Generate`                                             |
-| `examples/stream/`         | `GenerateStream` with range-over-func                          |
-| `examples/chat/`           | Multi-turn `Chat` with a system prompt                         |
-| `examples/conversation/`   | `Chat` + `NewRawTool` + manual dispatch                        |
-| `examples/autotool/`       | `Chat` + `RegisterTool` + auto-dispatch                        |
-| `examples/structured/`     | `GenerateData[Recipe]` with retries                            |
-| `examples/vision/`         | `GenerateMulti` (image + text) with self-comparison            |
-| `examples/extract/`        | `GenerateDataMulti[T]` (image-to-typed-JSON) with self-comparison |
-| `examples/cancel/`         | Mid-stream cancel via `context.WithCancel`                     |
-| `examples/prefill-decode/` | Explicit two-phase generation (low-level)                      |
-| `examples/score/`          | `Session.ScoreTexts` + `Score` / `TokenLength` (low-level)     |
-| `examples/tokenize/`       | `Engine.Tokenize` / `Detokenize` + start/stop tokens (low-level) |
-| `examples/gpu/`            | GPU backend                                                    |
-| `examples/benchmarks/`     | Per-generation benchmark capture (`Response.Benchmark()`)      |
-| `examples/speculative/`    | Throughput comparison with / without speculative decoding      |
+Self-contained programs covering every public API surface live under
+[`examples/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples).
+See the
+[examples index](https://github.com/vladimirvivien/litertlm-go/blob/main/examples/README.md)
+for the full list.
 
 ## License
 

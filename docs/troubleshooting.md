@@ -216,6 +216,33 @@ n := int(reply.ToolCalls()[0].Function.Arguments["count"].(float64))
 
 ---
 
+## `conversation_send_message failed` on Qwen3 multi-turn
+
+**Symptom.** `Chat.Send` (or low-level `Conversation.SendMessage`)
+returns `litertlm: send: litertlm: conversation_send_message failed`
+on the second turn of a Qwen3 conversation. `RenderMessage` on the
+same turn returns `C side returned NULL`.
+
+**Cause.** Qwen3's Jinja chat template calls
+`reasoning_content.strip('\n')` when rendering the prior assistant
+turn's `<think>...</think>` block. LiteRT-LM's embedded Jinja
+implementation does not provide a `string.strip(chars)` method, so
+the template aborts before any decode runs. Reproducible against the
+upstream `litert_lm_advanced_main.exe --multi_turns=true` binary, so
+the bug is wholly in upstream LiteRT-LM.
+
+**Fix.** None available in `litertlm-go`. Single-turn flows
+(`Client.Generate`, `Client.GenerateStream`, `GenerateData[T]`) work
+on Qwen3. Track upstream LiteRT-LM for a Jinja `strip(chars)`
+implementation or a patched Qwen3 chat template.
+
+Smaller Qwen3 variants (e.g. 0.6B) may render turn 2 without hitting
+the failing template branch but can still emit `<|endoftext|>` and
+`Human:` continuation patterns past their stop tokens on long
+outputs.
+
+---
+
 ## Markers `<|"|>` in tool-call argument values
 
 **Symptom.** A tool-call argument has the literal text

@@ -1,10 +1,9 @@
 # Chat
 
-The `Chat` API provides support for multi-turn conversations with 
-with optional system prompt and tool calling. 
-The API wraps the C-side `Conversation` API, which applies the
-model's chat template (e.g. Gemma's `<|turn>user … <turn|>`) 
-appropriately for proper multi-turn conversations.
+The `Chat` API runs multi-turn conversations with optional system
+prompt and tool calling. It wraps the C-side `Conversation` API,
+which applies the model's chat template (e.g. Gemma's
+`<|turn>user … <turn|>`) on every turn.
 
 ```go
 chat, err := client.NewChat(ctx,
@@ -40,8 +39,7 @@ Chat configuration:
 
 ## `Send(ctx, message)` and `Reply`
 
-Use the `Send` method to synchronously send user-role messages. Each send returns a `*Reply`
-which gives you access to chat session resources.
+`Send` issues a synchronous user-role message and returns a `*Reply`.
 
 ```go
 type Reply struct{ /* unexported */ }
@@ -53,8 +51,9 @@ func (r *Reply) Raw() string          // original C-side JSON, for debugging
 
 ## `SendStream(ctx, message)`
 
-`SendStream` is the Streaming variant of `Send`. It returns an iterator of type `iter.Seq2[Chunk, error]`.
-This allows programs to easily accessing streamed replies from the engine.
+`SendStream` is the streaming variant of `Send`. It returns an
+`iter.Seq2[Chunk, error]` over the model's response chunks as they
+arrive.
 
 ```go
 for chunk, err := range chat.SendStream(ctx, message) {
