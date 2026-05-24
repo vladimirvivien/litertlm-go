@@ -18,6 +18,7 @@ go run ./examples/<name> -model /abs/path/to/<model>.litertlm [-backend cpu|gpu]
 | `examples/stream/`            | `GenerateStream` with range-over-func                              |
 | `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
 | `examples/chat-history/`      | Seed `Chat` with a prior transcript via `WithInitialMessages` + `WithExtraContext` / `WithFilterChannelContentFromKVCache` / `WithMaxToolHops` |
+| `examples/bot/`               | Persistent multimodal chatbot — slash commands, `MEM.log` history, image / audio attachments via `-attach`, replay through `WithInitialMessages` on restart |
 | `examples/conversation/`      | `Chat` + `NewRawTool` + manual dispatch via `Reply.ToolCalls`      |
 | `examples/autotool/`          | `Chat` + `RegisterTool` + auto-dispatch                            |
 | `examples/tool-policy/`       | `WithToolPolicy(ToolPolicyReturnOnError vs ToolPolicyInformOnError)` — handler-error behavior under auto-dispatch |

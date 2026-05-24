@@ -63,4 +63,5 @@ nav:
       - Tools: tools.md
       - Structured output: structured-output.md
   - Low-level API: low-level.md
+  - Supported models: models.md
   - Troubleshooting: troubleshooting.md

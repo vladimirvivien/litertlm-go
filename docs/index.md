@@ -31,6 +31,9 @@ A Go binding for Google's
   Useful when you need explicit prefill→decode, scoring, token
   introspection, or deterministic resource lifetimes.
   → [Low-level guide](low-level.md)
+- **Supported models** — Gemma 4 / 3 / 3n, FunctionGemma, Qwen 3 / 2.5,
+  Phi-4, and other LiteRT-LM families, with the processor mapping and
+  per-family caveats. → [Supported models](models.md)
 
 ## Install
 
