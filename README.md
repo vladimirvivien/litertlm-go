@@ -10,7 +10,7 @@ A Go binding for Google's
 📖 **Full documentation:**
 [vladimirvivien.github.io/litertlm-go](https://vladimirvivien.github.io/litertlm-go/)
 
-## Features
+## 🔥 Features
 
 - **`Client`** — single-call `Generate`, range-over-func `GenerateStream`,
   rich `GenerateResponse`, plus the `*Multi` variants for image and
@@ -35,13 +35,13 @@ A Go binding for Google's
   → [Low-level guide](low-level.md)
 
 
-## Install
+## ⚙️ Install
 
 ```bash
 go get github.com/vladimirvivien/litertlm-go@latest
 ```
 
-## Quickstart
+## 🚀 Quickstart
 
 ```go
 package main
@@ -83,7 +83,7 @@ LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
 
 Full walkthrough → [docs/getting-started](https://vladimirvivien.github.io/litertlm-go/getting-started/).
 
-## Building the C library
+## 🏗️ Building the C library
 
 LiteRT-LM does not ship prebuilt C API shared libraries. Build them
 using the platform guide:
@@ -93,9 +93,13 @@ using the platform guide:
 
 Minimum supported upstream: **LiteRT-LM v0.12.0**. Earlier builds lack the `optional_args` parameter on `litert_lm_conversation_send_message` / `_stream`.
 
-## Examples
+## 🤖 Examples
+This is [./examples/bot](./examples/bot) using `litertlm-go` to showcase Gemma 4 OCR capabilities to 
+extract information from (in this case) an image of a form.
 
-See [`examples/README.md`](./examples/README.md) for `litertlm-go` API examples.
+![OCR example](./docs/litertlm-ocr-2-short.gif)
+
+See [`examples/README.md`](./examples/README.md) for all `litertlm-go` examples.
 
 ## Documentation
 
