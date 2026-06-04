@@ -20,7 +20,7 @@ A Go binding for Google's
   `RuntimeOption` knobs (`WithVisualTokenBudget`,
   `WithReturnToolRequests`, `WithMaxConcurrentTools`), parallel tool
   dispatch, multimodal history seeding via `WithInitialMessages`,
-  and `Chat.TokenCount()` for cumulative usage.
+  and `Chat.TokenCount()` for the cumulative KV-cache token count.
   → [Chat guide](chat.md)
 - **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
   that return `*T` populated from the model's response via a
@@ -91,7 +91,7 @@ using the platform guide:
 (Linux/macOS) or
 [`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md).
 
-Minimum supported upstream: **LiteRT-LM v0.12.0**.
+Minimum supported upstream: **LiteRT-LM v0.13.1**.
 
 ## Examples
 

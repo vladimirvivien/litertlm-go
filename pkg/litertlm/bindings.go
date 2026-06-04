@@ -301,6 +301,9 @@ var (
 	conversationGetBenchmarkInfoFunc = newLazyFun(
 		"litert_lm_conversation_get_benchmark_info",
 		&ffi.TypePointer, &ffi.TypePointer)
+	conversationGetTokenCountFunc = newLazyFun(
+		"litert_lm_conversation_get_token_count",
+		&ffi.TypeSint32, &ffi.TypePointer)
 
 	// ---- JSON response ----
 	jsonResponseDeleteFunc = newLazyFun(

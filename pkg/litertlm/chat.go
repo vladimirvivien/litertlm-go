@@ -343,46 +343,29 @@ func (ch *Chat) Clone() (*Chat, error) {
 	}, nil
 }
 
-// TokenUsage carries the cumulative token counts a Chat has processed
-// across all turns.
-type TokenUsage struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
-}
-
-// TokenCount returns the cumulative tokens this Chat's underlying
-// Conversation has processed. PromptTokens sums prefill counts across
-// turns; CompletionTokens sums decode counts. Tool-dispatch hops
-// within a single Send count as additional turns.
+// TokenCount returns the number of tokens currently held in this Chat's
+// underlying conversation KV cache (prefill + decode, accumulated across
+// every turn including tool-dispatch hops). Use it to project a chat's
+// size against the engine's max-token budget.
 //
-// Requires litertlm.WithBenchmarkEnabled on the Client at New time.
-// Without it, the C side reports zero turns and TokenCount returns
-// a zero TokenUsage with no error.
-func (ch *Chat) TokenCount() (TokenUsage, error) {
+// It does not require WithBenchmarkEnabled. For a per-turn prefill /
+// decode breakdown, read Conversation.BenchmarkInfo() instead (which
+// does require benchmark collection).
+//
+// Requires LiteRT-LM v0.13.1 or newer.
+func (ch *Chat) TokenCount() (int, error) {
 	ch.mu.Lock()
 	closed := ch.closed
 	conv := ch.conv
 	ch.mu.Unlock()
 	if closed {
-		return TokenUsage{}, fmt.Errorf("litertlm: Chat is closed")
+		return 0, fmt.Errorf("litertlm: Chat is closed")
 	}
-
-	bi, err := conv.BenchmarkInfo()
+	n, err := conv.TokenCount()
 	if err != nil {
-		return TokenUsage{}, fmt.Errorf("litertlm: Chat.TokenCount: %w", err)
+		return 0, fmt.Errorf("litertlm: Chat.TokenCount: %w", err)
 	}
-	defer bi.Delete()
-
-	var usage TokenUsage
-	for i, n := 0, bi.NumPrefillTurns(); i < n; i++ {
-		usage.PromptTokens += bi.PrefillTokenCount(i)
-	}
-	for i, n := 0, bi.NumDecodeTurns(); i < n; i++ {
-		usage.CompletionTokens += bi.DecodeTokenCount(i)
-	}
-	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-	return usage, nil
+	return n, nil
 }
 
 // Send issues a user-role message and returns the assistant's Reply.

@@ -164,3 +164,41 @@ func TestConversation_RenderMessage_InvalidConversation(t *testing.T) {
 		t.Errorf("error should name the invalid-conversation case; got: %v", err)
 	}
 }
+
+// TokenCount returns a positive KV-cache token count after a turn and
+// grows with conversation length. The integration harness does not
+// enable benchmark collection, so this also confirms TokenCount works
+// without it (unlike the per-turn BenchmarkInfo counts).
+func TestConversation_TokenCount(t *testing.T) {
+	conv := buildIntegrationConversation(t)
+
+	before, err := conv.TokenCount()
+	if err != nil {
+		t.Fatalf("TokenCount before: %v", err)
+	}
+
+	if _, err := conv.SendMessage(userMessageJSON(t, "Say hello in one word."), "", litertlm.OptionalArgs(0)); err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+
+	after, err := conv.TokenCount()
+	if err != nil {
+		t.Fatalf("TokenCount after: %v", err)
+	}
+	t.Logf("KV-cache token count: before=%d after=%d", before, after)
+	if after <= 0 {
+		t.Fatalf("expected a positive token count after a turn, got %d", after)
+	}
+	if after <= before {
+		t.Errorf("token count did not grow after a turn: before=%d after=%d", before, after)
+	}
+}
+
+// A zero-value Conversation reports the invalid-conversation error
+// rather than calling the C side.
+func TestConversation_TokenCount_Invalid(t *testing.T) {
+	var conv litertlm.Conversation
+	if _, err := conv.TokenCount(); err == nil {
+		t.Fatal("expected error from zero-value Conversation")
+	}
+}

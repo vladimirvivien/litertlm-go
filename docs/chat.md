@@ -246,27 +246,20 @@ chat.Send(ctx, "What's the dominant color?")  // resumes with image in KV
 
 ## Introspection
 
-`Chat.TokenCount()` returns the cumulative tokens the underlying
-Conversation has processed across all turns. The result decomposes
-into prompt (prefill) and completion (decode) totals.
+`Chat.TokenCount()` returns the number of tokens currently held in the
+underlying conversation's KV cache (prefill + decode), accumulated
+across every turn — including tool-dispatch hops. Use it to project a
+chat against the engine's max-token budget.
 
 ```go
-usage, err := chat.TokenCount()
+n, err := chat.TokenCount() // tokens in the KV cache
 ```
 
-Token counts are collected only when the Client was created with
-`WithBenchmarkEnabled`. Without it, the C side reports zero turns
-and `TokenCount` returns a zero `TokenUsage`.
+It does not require `WithBenchmarkEnabled`. For a per-turn prefill /
+decode breakdown, read `Conversation.BenchmarkInfo()` instead (that
+path does require benchmark collection).
 
-```go
-client, _ := litertlm.New(ctx,
-    litertlm.WithModel(modelPath),
-    litertlm.WithBenchmarkEnabled(),
-)
-```
-
-Tool-dispatch hops within a single `Send` count as additional
-prefill and decode turns and are included in the cumulative totals.
+Requires LiteRT-LM v0.13.1 or newer.
 
 ## See also
 

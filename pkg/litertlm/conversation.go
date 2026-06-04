@@ -215,6 +215,23 @@ func (c Conversation) BenchmarkInfo() (BenchmarkInfo, error) {
 		"conversation_get_benchmark_info", unsafe.Pointer(&c))
 }
 
+// TokenCount returns the number of tokens currently held in the
+// conversation's KV cache (prefill + decode). Unlike the BenchmarkInfo
+// counts, it does not require EnableBenchmark.
+//
+// Requires LiteRT-LM v0.13.1 or newer.
+func (c Conversation) TokenCount() (int, error) {
+	if c == 0 {
+		return 0, fmt.Errorf("litertlm: conversation_get_token_count: invalid conversation")
+	}
+	var v int32
+	conversationGetTokenCountFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&c))
+	if v < 0 {
+		return 0, fmt.Errorf("litertlm: conversation_get_token_count failed (code=%d)", v)
+	}
+	return int(v), nil
+}
+
 // ---- JsonResponse --------------------------------------------------------
 
 // Delete releases a JsonResponse handle.

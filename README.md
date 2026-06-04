@@ -22,7 +22,7 @@ A Go binding for Google's
   `RuntimeOption` knobs (`WithVisualTokenBudget`,
   `WithReturnToolRequests`, `WithMaxConcurrentTools`), parallel tool
   dispatch, multimodal history seeding via `WithInitialMessages`,
-  and `Chat.TokenCount()` for cumulative usage.
+  and `Chat.TokenCount()` for the cumulative KV-cache token count.
   → [Chat guide](chat.md)
 - **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
   that return `*T` populated from the model's response via a
@@ -94,7 +94,7 @@ using the platform guide:
 - Linux / macOS — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
 - Windows — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 
-Minimum supported upstream: **LiteRT-LM v0.12.0**. Earlier builds lack the `optional_args` parameter on `litert_lm_conversation_send_message` / `_stream`.
+Minimum supported upstream: **LiteRT-LM v0.13.1**. `Chat.TokenCount()` binds `litert_lm_conversation_get_token_count`, which was added in v0.13.1.
 
 ## 🤖 Examples
 This is [./examples/bot](./examples/bot) using `litertlm-go` to showcase Gemma 4 OCR capabilities to 

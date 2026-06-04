@@ -34,6 +34,7 @@ go run ./examples/<name> -model /abs/path/to/<model>.litertlm [-backend cpu|gpu]
 | `examples/token-scores/`      | `ScoreTexts` + `TokenScores` per-token log-probs paired with `Engine.Tokenize` |
 | `examples/raw-multi/`         | `GenerateMulti` / `GenerateMultiStream` / `GenerateMultiResponse` — three call shapes for the same image + text input |
 | `examples/tokenize/`          | `Client.Tokenize` / `Client.TokenLength` + `Engine.Detokenize` / start / stop tokens via `Client.Engine()` |
+| `examples/token-count/`       | `Chat.TokenCount` — running KV-cache token count per turn (benchmark-free), projected against `WithMaxTokens` |
 | `examples/gpu/`               | GPU-backed generation                                              |
 | `examples/benchmarks/`        | `Response.Benchmark()` (high-level) vs `Session.BenchmarkInfo()` (low-level) side-by-side |
 | `examples/cache-warmup/`      | Cold-vs-warm `WithCacheDir` load — XNNPACK / mldrift artefact reuse        |
