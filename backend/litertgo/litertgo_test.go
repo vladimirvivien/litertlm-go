@@ -2,37 +2,45 @@ package litertgo
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/vladimirvivien/litert-go/lm"
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-func TestMessageText(t *testing.T) {
+func TestDecodeMessage(t *testing.T) {
 	tests := []struct {
 		name    string
 		json    string
-		want    string
+		want    message
 		wantErr bool
 	}{
 		{
 			name: "string content",
 			json: `{"role":"user","content":"hello"}`,
-			want: "hello",
+			want: message{Role: "user", Text: "hello"},
 		},
 		{
 			name: "content array",
 			json: `{"role":"user","content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}`,
-			want: "ab",
+			want: message{Role: "user", Text: "ab"},
 		},
 		{
 			name: "missing role defaults to user",
 			json: `{"content":"hi"}`,
-			want: "hi",
+			want: message{Role: "user", Text: "hi"},
 		},
 		{
-			name:    "tool role unsupported",
-			json:    `{"role":"tool","content":[{"name":"f","response":{}}]}`,
+			name: "tool results",
+			json: `{"role":"tool","content":[{"name":"get_weather","response":{"temp_c":21}}]}`,
+			want: message{Role: "tool", Results: []lm.ToolResult{
+				{Name: "get_weather", Response: map[string]any{"temp_c": float64(21)}},
+			}},
+		},
+		{
+			name:    "assistant role unsupported",
+			json:    `{"role":"assistant","content":"hi"}`,
 			wantErr: true,
 		},
 		{
@@ -48,18 +56,18 @@ func TestMessageText(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := messageText(tc.json)
+			got, err := decodeMessage(tc.json)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("messageText(%s): want error, got %q", tc.json, got)
+					t.Fatalf("decodeMessage(%s): want error, got %+v", tc.json, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("messageText(%s): %v", tc.json, err)
+				t.Fatalf("decodeMessage(%s): %v", tc.json, err)
 			}
-			if got != tc.want {
-				t.Errorf("messageText(%s) = %q, want %q", tc.json, got, tc.want)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("decodeMessage(%s) = %+v, want %+v", tc.json, got, tc.want)
 			}
 		})
 	}
@@ -77,17 +85,21 @@ func TestSystemText(t *testing.T) {
 	}
 }
 
-func TestAssistantEnvelope_RoundTripsText(t *testing.T) {
-	env, err := assistantEnvelope(`reply with "quotes" and
-newline`)
+func TestReplyEnvelope(t *testing.T) {
+	env, err := replyEnvelope("It is sunny.", nil)
 	if err != nil {
-		t.Fatalf("assistantEnvelope: %v", err)
+		t.Fatalf("replyEnvelope: %v", err)
 	}
-	// The envelope must parse back through the adapter's own message
-	// reader shape (same content-array schema the Chat parser uses).
-	got, err := messageText(env)
-	if err == nil {
-		t.Fatalf("messageText on assistant envelope: want role error, got %q", got)
+	if want := `{"content":[{"text":"It is sunny.","type":"text"}],"role":"assistant"}`; env != want {
+		t.Errorf("text envelope = %s, want %s", env, want)
+	}
+
+	env, err = replyEnvelope("", []lm.ToolCall{{Name: "get_weather", Args: map[string]any{"city": "Paris"}}})
+	if err != nil {
+		t.Fatalf("replyEnvelope(calls): %v", err)
+	}
+	if want := `{"role":"assistant","tool_calls":[{"function":{"arguments":{"city":"Paris"},"name":"get_weather"},"type":"function"}]}`; env != want {
+		t.Errorf("call envelope = %s, want %s", env, want)
 	}
 }
 
@@ -143,7 +155,6 @@ func TestNewChatTransport_UnsupportedSetups(t *testing.T) {
 		name  string
 		setup litertlm.ConversationSetup
 	}{
-		{"tools", litertlm.ConversationSetup{ToolsJSON: `[{"type":"function"}]`}},
 		{"initial messages", litertlm.ConversationSetup{MessagesJSON: `[]`}},
 		{"constrained decoding", litertlm.ConversationSetup{ConstrainedDecoding: true}},
 		{"extra context", litertlm.ConversationSetup{ExtraContextJSON: `{"k":"v"}`}},

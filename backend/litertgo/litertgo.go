@@ -5,11 +5,11 @@
 // Generate / Chat API without loading the C++ LiteRT-LM library.
 //
 // Supported surface: text generation (sync and streaming), multi-turn
-// chat with a system prompt, sampler and max-output-token controls,
-// and Tokenize. Tools, constrained decoding, extra context, initial
-// messages, multimodal parts, scoring, cloning, rendering, token
-// counting, and benchmarks are not yet implemented and return
-// ErrUnsupported.
+// chat with a system prompt, function calling on tool-capable
+// families (Gemma 4), sampler and max-output-token controls, and
+// Tokenize. Constrained decoding, extra context, initial messages,
+// multimodal parts, scoring, cloning, rendering, token counting, and
+// benchmarks are not yet implemented and return ErrUnsupported.
 package litertgo
 
 import (
@@ -68,9 +68,6 @@ func (b *Backend) NewSessionBackend(s litertlm.SessionSetup) (litertlm.SessionBa
 }
 
 func (b *Backend) NewChatTransport(s litertlm.ConversationSetup) (litertlm.ChatTransport, error) {
-	if s.ToolsJSON != "" {
-		return nil, fmt.Errorf("%w: tools", ErrUnsupported)
-	}
 	if s.MessagesJSON != "" {
 		return nil, fmt.Errorf("%w: initial messages", ErrUnsupported)
 	}
@@ -88,12 +85,14 @@ func (b *Backend) NewChatTransport(s litertlm.ConversationSetup) (litertlm.ChatT
 	if err != nil {
 		return nil, err
 	}
-	conv, err := b.engine.NewConversation(genOptions(s.MaxOutputTokens, s.Sampler, system))
+	opts := genOptions(s.MaxOutputTokens, s.Sampler, system)
+	opts.ToolsJSON = s.ToolsJSON
+	conv, err := b.engine.NewConversation(opts)
 	if err != nil {
 		return nil, fmt.Errorf("litertgo: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &transport{conv: conv, ctx: ctx, cancel: cancel}, nil
+	return &transport{conv: conv, engine: b.engine, hasTools: s.ToolsJSON != "", ctx: ctx, cancel: cancel}, nil
 }
 
 func (b *Backend) Close() {
@@ -191,9 +190,11 @@ func (s *session) Close() { s.cancel() }
 // (KV-cache-reusing for token-input models, embedding session for
 // embedding-input models).
 type transport struct {
-	conv   lm.Conversation
-	ctx    context.Context
-	cancel context.CancelFunc
+	conv     lm.Conversation
+	engine   *lm.Engine
+	hasTools bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 func (t *transport) SendMessage(messageJSON, extraContext string, args litertlm.RuntimeArgs) (string, error) {
@@ -203,18 +204,51 @@ func (t *transport) SendMessage(messageJSON, extraContext string, args litertlm.
 	if args.VisualTokenBudget > 0 {
 		return "", fmt.Errorf("%w: visual token budget", ErrUnsupported)
 	}
-	text, err := messageText(messageJSON)
+	msg, err := decodeMessage(messageJSON)
 	if err != nil {
 		return "", err
 	}
-	reply, err := t.conv.Send(t.ctx, text)
+
+	var reply string
+	if msg.Role == "tool" {
+		sender, ok := t.conv.(lm.ToolSender)
+		if !ok {
+			return "", fmt.Errorf("%w: tool results on %T", ErrUnsupported, t.conv)
+		}
+		reply, err = sender.SendToolResults(t.ctx, msg.Results)
+	} else {
+		reply, err = t.conv.Send(t.ctx, msg.Text)
+	}
 	if err != nil {
 		return "", err
 	}
-	return assistantEnvelope(reply)
+
+	text, calls, err := t.engine.ExtractToolCalls(reply)
+	if err != nil {
+		return "", err
+	}
+	return replyEnvelope(text, calls)
 }
 
 func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args litertlm.RuntimeArgs) <-chan litertlm.StreamChunk {
+	// With tools configured the reply may be a tool call, which must
+	// arrive as one parsed envelope (mirroring the C++ stream, whose
+	// chunks are envelopes); buffer the turn and emit it whole.
+	if t.hasTools {
+		out := make(chan litertlm.StreamChunk, 2)
+		go func() {
+			defer close(out)
+			env, err := t.SendMessage(messageJSON, extraContext, args)
+			if err != nil {
+				t.emit(out, litertlm.StreamChunk{Err: err, Final: true})
+				return
+			}
+			t.emit(out, litertlm.StreamChunk{Text: env})
+			t.emit(out, litertlm.StreamChunk{Final: true})
+		}()
+		return out
+	}
+
 	out := make(chan litertlm.StreamChunk)
 	go func() {
 		defer close(out)
@@ -226,14 +260,18 @@ func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args l
 			t.emit(out, litertlm.StreamChunk{Err: fmt.Errorf("%w: visual token budget", ErrUnsupported), Final: true})
 			return
 		}
-		text, err := messageText(messageJSON)
+		msg, err := decodeMessage(messageJSON)
 		if err != nil {
 			t.emit(out, litertlm.StreamChunk{Err: err, Final: true})
 			return
 		}
+		if msg.Role == "tool" {
+			t.emit(out, litertlm.StreamChunk{Err: fmt.Errorf("%w: tool results without tools configured", ErrUnsupported), Final: true})
+			return
+		}
 		// Pieces are emitted as plain text: the Chat dispatch loop's
 		// envelope extraction passes non-JSON chunks through as text.
-		_, err = t.conv.SendStream(t.ctx, text, func(piece string) {
+		_, err = t.conv.SendStream(t.ctx, msg.Text, func(piece string) {
 			t.emit(out, litertlm.StreamChunk{Text: piece})
 		})
 		if err != nil {
@@ -299,50 +337,92 @@ func systemText(systemJSON string) (string, error) {
 	return s, nil
 }
 
-// messageText extracts the user text from one litertlm message
-// envelope: {"role":"user","content":"..."} or the content-array
-// form with text-typed items.
-func messageText(messageJSON string) (string, error) {
+// message is one decoded litertlm message envelope: user text, or
+// tool results for role "tool".
+type message struct {
+	Role    string
+	Text    string
+	Results []lm.ToolResult
+}
+
+// decodeMessage parses a litertlm message envelope:
+// {"role":"user","content":"..."} (or the content-array form with
+// text-typed items), or the tool-result form
+// {"role":"tool","content":[{"name":...,"response":...}]}.
+func decodeMessage(messageJSON string) (message, error) {
 	var msg struct {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(messageJSON), &msg); err != nil {
-		return "", fmt.Errorf("litertgo: parse message: %w", err)
-	}
-	if msg.Role != "" && msg.Role != "user" {
-		return "", fmt.Errorf("%w: %q messages", ErrUnsupported, msg.Role)
+		return message{}, fmt.Errorf("litertgo: parse message: %w", err)
 	}
 
-	var s string
-	if err := json.Unmarshal(msg.Content, &s); err == nil {
-		return s, nil
-	}
-	var items []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal(msg.Content, &items); err == nil {
-		var b strings.Builder
-		for _, it := range items {
-			if it.Type != "text" {
-				return "", fmt.Errorf("%w: %q content parts", ErrUnsupported, it.Type)
-			}
-			b.WriteString(it.Text)
+	switch msg.Role {
+	case "tool":
+		var items []struct {
+			Name     string          `json:"name"`
+			Response json.RawMessage `json:"response"`
 		}
-		return b.String(), nil
+		if err := json.Unmarshal(msg.Content, &items); err != nil {
+			return message{}, fmt.Errorf("litertgo: parse tool results: %w", err)
+		}
+		results := make([]lm.ToolResult, len(items))
+		for i, it := range items {
+			var resp any
+			if err := json.Unmarshal(it.Response, &resp); err != nil {
+				return message{}, fmt.Errorf("litertgo: parse tool response %q: %w", it.Name, err)
+			}
+			results[i] = lm.ToolResult{Name: it.Name, Response: resp}
+		}
+		return message{Role: "tool", Results: results}, nil
+
+	case "", "user":
+		var s string
+		if err := json.Unmarshal(msg.Content, &s); err == nil {
+			return message{Role: "user", Text: s}, nil
+		}
+		var items []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(msg.Content, &items); err == nil {
+			var b strings.Builder
+			for _, it := range items {
+				if it.Type != "text" {
+					return message{}, fmt.Errorf("%w: %q content parts", ErrUnsupported, it.Type)
+				}
+				b.WriteString(it.Text)
+			}
+			return message{Role: "user", Text: b.String()}, nil
+		}
+		return message{}, fmt.Errorf("litertgo: unrecognized message content: %s", msg.Content)
+
+	default:
+		return message{}, fmt.Errorf("%w: %q messages", ErrUnsupported, msg.Role)
 	}
-	return "", fmt.Errorf("litertgo: unrecognized message content: %s", msg.Content)
 }
 
-// assistantEnvelope wraps reply text in the assistant envelope the
-// litertlm reply parser expects:
-// {"role":"assistant","content":[{"type":"text","text":"..."}]}.
-func assistantEnvelope(text string) (string, error) {
-	b, err := json.Marshal(map[string]any{
-		"role":    "assistant",
-		"content": []map[string]string{{"type": "text", "text": text}},
-	})
+// replyEnvelope wraps a turn's text and tool calls in the assistant
+// envelope the litertlm reply parser expects: content as a text-part
+// array, tool calls as
+// {"type":"function","function":{"name":...,"arguments":{...}}}.
+func replyEnvelope(text string, calls []lm.ToolCall) (string, error) {
+	msg := map[string]any{"role": "assistant"}
+	if text != "" || len(calls) == 0 {
+		msg["content"] = []map[string]string{{"type": "text", "text": text}}
+	}
+	if len(calls) > 0 {
+		tcs := make([]map[string]any, len(calls))
+		for i, c := range calls {
+			tcs[i] = map[string]any{
+				"type":     "function",
+				"function": map[string]any{"name": c.Name, "arguments": c.Args},
+			}
+		}
+		msg["tool_calls"] = tcs
+	}
+	b, err := json.Marshal(msg)
 	if err != nil {
 		return "", fmt.Errorf("litertgo: marshal reply envelope: %w", err)
 	}
