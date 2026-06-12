@@ -6,19 +6,24 @@
 //
 // Supported surface: text generation (sync and streaming), multi-turn
 // chat with a system prompt, function calling on tool-capable
-// families (Gemma 4), sampler and max-output-token controls, and
-// Tokenize. Constrained decoding, extra context, initial messages,
-// multimodal parts, scoring, cloning, rendering, token counting, and
-// benchmarks are not yet implemented and return ErrUnsupported.
+// families (Gemma 4), single-image and single-audio first-turn
+// messages (the litertlm multimodal Generate path; audio as 16 kHz
+// mono WAV), sampler and max-output-token controls, and Tokenize.
+// Constrained decoding, extra context, initial messages, multimodal
+// parts mid-conversation, scoring, cloning, rendering, token
+// counting, and benchmarks are not yet implemented and return
+// ErrUnsupported.
 package litertgo
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/vladimirvivien/litert-go/audio"
 	"github.com/vladimirvivien/litert-go/lm"
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
@@ -92,7 +97,7 @@ func (b *Backend) NewChatTransport(s litertlm.ConversationSetup) (litertlm.ChatT
 		return nil, fmt.Errorf("litertgo: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &transport{conv: conv, engine: b.engine, hasTools: s.ToolsJSON != "", ctx: ctx, cancel: cancel}, nil
+	return &transport{conv: conv, engine: b.engine, opts: opts, hasTools: s.ToolsJSON != "", ctx: ctx, cancel: cancel}, nil
 }
 
 func (b *Backend) Close() {
@@ -188,11 +193,18 @@ func (s *session) Close() { s.cancel() }
 
 // transport implements litertlm.ChatTransport over an lm.Conversation
 // (KV-cache-reusing for token-input models, embedding session for
-// embedding-input models).
+// embedding-input models). A first-turn image or audio message runs
+// as an engine one-shot instead — lm's multimodal path is one-shot —
+// which consumes the transport for further sends. That mirrors how
+// the litertlm multimodal Generate path uses a transport: one fresh
+// transport, one send, Close.
 type transport struct {
 	conv     lm.Conversation
 	engine   *lm.Engine
+	opts     lm.GenOptions
 	hasTools bool
+	turns    int
+	consumed bool
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
@@ -201,8 +213,8 @@ func (t *transport) SendMessage(messageJSON, extraContext string, args litertlm.
 	if extraContext != "" {
 		return "", fmt.Errorf("%w: extra context", ErrUnsupported)
 	}
-	if args.VisualTokenBudget > 0 {
-		return "", fmt.Errorf("%w: visual token budget", ErrUnsupported)
+	if t.consumed {
+		return "", fmt.Errorf("%w: send after a one-shot multimodal turn", ErrUnsupported)
 	}
 	msg, err := decodeMessage(messageJSON)
 	if err != nil {
@@ -210,18 +222,22 @@ func (t *transport) SendMessage(messageJSON, extraContext string, args litertlm.
 	}
 
 	var reply string
-	if msg.Role == "tool" {
+	switch {
+	case msg.Role == "tool":
 		sender, ok := t.conv.(lm.ToolSender)
 		if !ok {
 			return "", fmt.Errorf("%w: tool results on %T", ErrUnsupported, t.conv)
 		}
 		reply, err = sender.SendToolResults(t.ctx, msg.Results)
-	} else {
-		reply, err = t.conv.Send(t.ctx, msg.Text)
+	case len(msg.binary()) > 0:
+		reply, err = t.sendModal(msg, args)
+	default:
+		reply, err = t.conv.Send(t.ctx, msg.text())
 	}
 	if err != nil {
 		return "", err
 	}
+	t.turns++
 
 	text, calls, err := t.engine.ExtractToolCalls(reply)
 	if err != nil {
@@ -230,11 +246,59 @@ func (t *transport) SendMessage(messageJSON, extraContext string, args litertlm.
 	return replyEnvelope(text, calls)
 }
 
-func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args litertlm.RuntimeArgs) <-chan litertlm.StreamChunk {
-	// With tools configured the reply may be a tool call, which must
-	// arrive as one parsed envelope (mirroring the C++ stream, whose
-	// chunks are envelopes); buffer the turn and emit it whole.
+// sendModal runs a first-turn image or audio message as an engine
+// one-shot: the content items become a prompt with the modality
+// marker at the binary item's position.
+func (t *transport) sendModal(msg message, args litertlm.RuntimeArgs) (string, error) {
+	if t.turns > 0 {
+		return "", fmt.Errorf("%w: image/audio parts after the first turn", ErrUnsupported)
+	}
 	if t.hasTools {
+		return "", fmt.Errorf("%w: tools with image/audio parts", ErrUnsupported)
+	}
+	binary := msg.binary()
+	if len(binary) != 1 {
+		return "", fmt.Errorf("%w: %d image/audio parts in one message (max 1)", ErrUnsupported, len(binary))
+	}
+
+	var prompt strings.Builder
+	for _, it := range msg.Items {
+		switch it.kind {
+		case "text":
+			prompt.WriteString(it.text)
+		case "image":
+			prompt.WriteString("<start_of_image>")
+		case "audio":
+			prompt.WriteString("<start_of_audio>")
+		}
+	}
+	t.consumed = true
+
+	switch binary[0].kind {
+	case "image":
+		return t.engine.GenerateFromImage(t.ctx, prompt.String(), binary[0].data, args.VisualTokenBudget, t.opts)
+	default:
+		pcm, err := audio.DecodeWAV(binary[0].data)
+		if err != nil {
+			return "", fmt.Errorf("litertgo: %w", err)
+		}
+		return t.engine.GenerateFromAudio(t.ctx, prompt.String(), pcm, t.opts)
+	}
+}
+
+func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args litertlm.RuntimeArgs) <-chan litertlm.StreamChunk {
+	msg, err := decodeMessage(messageJSON)
+	if err != nil {
+		out := make(chan litertlm.StreamChunk, 1)
+		out <- litertlm.StreamChunk{Err: err, Final: true}
+		close(out)
+		return out
+	}
+
+	// Tool turns and multimodal turns must arrive as one parsed
+	// envelope (mirroring the C++ stream, whose chunks are
+	// envelopes); buffer the turn and emit it whole.
+	if t.hasTools || len(msg.binary()) > 0 {
 		out := make(chan litertlm.StreamChunk, 2)
 		go func() {
 			defer close(out)
@@ -256,13 +320,8 @@ func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args l
 			t.emit(out, litertlm.StreamChunk{Err: fmt.Errorf("%w: extra context", ErrUnsupported), Final: true})
 			return
 		}
-		if args.VisualTokenBudget > 0 {
-			t.emit(out, litertlm.StreamChunk{Err: fmt.Errorf("%w: visual token budget", ErrUnsupported), Final: true})
-			return
-		}
-		msg, err := decodeMessage(messageJSON)
-		if err != nil {
-			t.emit(out, litertlm.StreamChunk{Err: err, Final: true})
+		if t.consumed {
+			t.emit(out, litertlm.StreamChunk{Err: fmt.Errorf("%w: send after a one-shot multimodal turn", ErrUnsupported), Final: true})
 			return
 		}
 		if msg.Role == "tool" {
@@ -271,13 +330,14 @@ func (t *transport) SendMessageStreamCh(messageJSON, extraContext string, args l
 		}
 		// Pieces are emitted as plain text: the Chat dispatch loop's
 		// envelope extraction passes non-JSON chunks through as text.
-		_, err = t.conv.SendStream(t.ctx, msg.Text, func(piece string) {
+		_, err = t.conv.SendStream(t.ctx, msg.text(), func(piece string) {
 			t.emit(out, litertlm.StreamChunk{Text: piece})
 		})
 		if err != nil {
 			t.emit(out, litertlm.StreamChunk{Err: err, Final: true})
 			return
 		}
+		t.turns++
 		t.emit(out, litertlm.StreamChunk{Final: true})
 	}()
 	return out
@@ -337,18 +397,48 @@ func systemText(systemJSON string) (string, error) {
 	return s, nil
 }
 
-// message is one decoded litertlm message envelope: user text, or
-// tool results for role "tool".
+// contentItem is one entry of a user message's content array, in
+// message order.
+type contentItem struct {
+	kind string // "text", "image", "audio"
+	text string
+	data []byte
+}
+
+// message is one decoded litertlm message envelope: user content
+// items, or tool results for role "tool".
 type message struct {
 	Role    string
-	Text    string
+	Items   []contentItem
 	Results []lm.ToolResult
+}
+
+// text concatenates the message's text items.
+func (m message) text() string {
+	var b strings.Builder
+	for _, it := range m.Items {
+		if it.kind == "text" {
+			b.WriteString(it.text)
+		}
+	}
+	return b.String()
+}
+
+// binary returns the message's image/audio items.
+func (m message) binary() []contentItem {
+	var out []contentItem
+	for _, it := range m.Items {
+		if it.kind != "text" {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // decodeMessage parses a litertlm message envelope:
 // {"role":"user","content":"..."} (or the content-array form with
-// text-typed items), or the tool-result form
-// {"role":"tool","content":[{"name":...,"response":...}]}.
+// text / base64-blob image / base64-blob audio items), or the
+// tool-result form {"role":"tool","content":[{"name":...,"response":...}]}.
 func decodeMessage(messageJSON string) (message, error) {
 	var msg struct {
 		Role    string          `json:"role"`
@@ -380,23 +470,32 @@ func decodeMessage(messageJSON string) (message, error) {
 	case "", "user":
 		var s string
 		if err := json.Unmarshal(msg.Content, &s); err == nil {
-			return message{Role: "user", Text: s}, nil
+			return message{Role: "user", Items: []contentItem{{kind: "text", text: s}}}, nil
 		}
 		var items []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
+			Blob string `json:"blob"`
 		}
-		if err := json.Unmarshal(msg.Content, &items); err == nil {
-			var b strings.Builder
-			for _, it := range items {
-				if it.Type != "text" {
-					return message{}, fmt.Errorf("%w: %q content parts", ErrUnsupported, it.Type)
+		if err := json.Unmarshal(msg.Content, &items); err != nil {
+			return message{}, fmt.Errorf("litertgo: unrecognized message content: %s", msg.Content)
+		}
+		out := message{Role: "user", Items: make([]contentItem, 0, len(items))}
+		for _, it := range items {
+			switch it.Type {
+			case "text":
+				out.Items = append(out.Items, contentItem{kind: "text", text: it.Text})
+			case "image", "audio":
+				data, err := base64.StdEncoding.DecodeString(it.Blob)
+				if err != nil {
+					return message{}, fmt.Errorf("litertgo: decode %s blob: %w", it.Type, err)
 				}
-				b.WriteString(it.Text)
+				out.Items = append(out.Items, contentItem{kind: it.Type, data: data})
+			default:
+				return message{}, fmt.Errorf("%w: %q content parts", ErrUnsupported, it.Type)
 			}
-			return message{Role: "user", Text: b.String()}, nil
 		}
-		return message{}, fmt.Errorf("litertgo: unrecognized message content: %s", msg.Content)
+		return out, nil
 
 	default:
 		return message{}, fmt.Errorf("%w: %q messages", ErrUnsupported, msg.Role)

@@ -19,17 +19,33 @@ func TestDecodeMessage(t *testing.T) {
 		{
 			name: "string content",
 			json: `{"role":"user","content":"hello"}`,
-			want: message{Role: "user", Text: "hello"},
+			want: message{Role: "user", Items: []contentItem{{kind: "text", text: "hello"}}},
 		},
 		{
 			name: "content array",
 			json: `{"role":"user","content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}`,
-			want: message{Role: "user", Text: "ab"},
+			want: message{Role: "user", Items: []contentItem{
+				{kind: "text", text: "a"}, {kind: "text", text: "b"},
+			}},
 		},
 		{
 			name: "missing role defaults to user",
 			json: `{"content":"hi"}`,
-			want: message{Role: "user", Text: "hi"},
+			want: message{Role: "user", Items: []contentItem{{kind: "text", text: "hi"}}},
+		},
+		{
+			name: "image and text items",
+			json: `{"role":"user","content":[{"type":"image","blob":"aW1n"},{"type":"text","text":"describe"}]}`,
+			want: message{Role: "user", Items: []contentItem{
+				{kind: "image", data: []byte("img")}, {kind: "text", text: "describe"},
+			}},
+		},
+		{
+			name: "audio item",
+			json: `{"role":"user","content":[{"type":"audio","blob":"d2F2"}]}`,
+			want: message{Role: "user", Items: []contentItem{
+				{kind: "audio", data: []byte("wav")},
+			}},
 		},
 		{
 			name: "tool results",
@@ -44,8 +60,13 @@ func TestDecodeMessage(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "image part unsupported",
-			json:    `{"role":"user","content":[{"type":"image","blob":"..."}]}`,
+			name:    "video part unsupported",
+			json:    `{"role":"user","content":[{"type":"video","blob":"..."}]}`,
+			wantErr: true,
+		},
+		{
+			name:    "bad base64 blob",
+			json:    `{"role":"user","content":[{"type":"image","blob":"!!!"}]}`,
 			wantErr: true,
 		},
 		{

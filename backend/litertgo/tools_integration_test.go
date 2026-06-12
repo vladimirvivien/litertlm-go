@@ -11,31 +11,6 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-// Tool tests need a tool-capable (Gemma 4 family) model:
-// LITERT_LIB + LITERTLM_TEST_TOOL_MODEL. Skips otherwise.
-func newToolClient(t *testing.T) *litertlm.Client {
-	t.Helper()
-	if testing.Short() {
-		t.Skip("short mode")
-	}
-	libDir := os.Getenv("LITERT_LIB")
-	modelPath := os.Getenv("LITERTLM_TEST_TOOL_MODEL")
-	if libDir == "" || modelPath == "" {
-		t.Skip("LITERT_LIB / LITERTLM_TEST_TOOL_MODEL not set")
-	}
-	b, err := litertgo.Open(context.Background(), modelPath, lm.WithLibDir(libDir))
-	if err != nil {
-		t.Fatalf("litertgo.Open: %v", err)
-	}
-	c, err := litertlm.New(context.Background(), litertlm.WithEngineBackend(b))
-	if err != nil {
-		b.Close()
-		t.Fatalf("litertlm.New: %v", err)
-	}
-	t.Cleanup(func() { _ = c.Close() })
-	return c
-}
-
 var weatherSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
@@ -48,7 +23,7 @@ var weatherSchema = map[string]any{
 // manual SendToolResult. The final reply is pinned to the C++
 // engine's greedy output for this exact round on gemma-4-E2B-it.
 func TestGoBackend_RawToolRound(t *testing.T) {
-	c := newToolClient(t)
+	c := newGemma4Client(t)
 
 	weather := litertlm.NewRawTool("get_weather", "Get current weather for a city.", weatherSchema)
 	chat, err := c.NewChat(context.Background(),
@@ -85,7 +60,7 @@ func TestGoBackend_RawToolRound(t *testing.T) {
 // TestGoBackend_ManagedToolDispatch exercises the auto-dispatch loop:
 // a typed ManagedTool invoked by the framework inside one Chat.Send.
 func TestGoBackend_ManagedToolDispatch(t *testing.T) {
-	c := newToolClient(t)
+	c := newGemma4Client(t)
 
 	type weatherIn struct {
 		City string `json:"city" description:"City name."`
