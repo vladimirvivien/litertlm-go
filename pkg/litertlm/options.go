@@ -34,6 +34,8 @@ type clientConfig struct {
 	maxImages *int
 
 	defaultSampler *SamplerParams
+
+	engineBackend Backend
 }
 
 // runtimeConfig is the resolved per-call configuration.
@@ -84,6 +86,16 @@ func WithModel(path string) Option { return func(c *clientConfig) { c.modelPath 
 // WithBackend selects the inference backend ("cpu" or "gpu"). Default
 // is "cpu" when unset.
 func WithBackend(b string) Option { return func(c *clientConfig) { c.backend = b } }
+
+// WithEngineBackend supplies a pre-constructed inference Backend,
+// replacing the C++ LiteRT-LM engine entirely: New performs no shared
+// library load and no C engine construction, and every other
+// constructor Option except WithDefaultSampler is ignored. The Client
+// owns the backend and releases it on Close. Engine() and Settings()
+// return zero handles for a Client built this way.
+func WithEngineBackend(b Backend) Option {
+	return func(c *clientConfig) { c.engineBackend = b }
+}
 
 // WithVisionBackend selects an optional vision backend. Pass an empty
 // string to leave unset.

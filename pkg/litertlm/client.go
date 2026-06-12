@@ -74,7 +74,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		opt(&cfg)
 	}
 
-	if cfg.modelPath == "" {
+	if cfg.modelPath == "" && cfg.engineBackend == nil {
 		return nil, fmt.Errorf("litertlm: New: model path required (WithModel or %s env)", envModel)
 	}
 
@@ -84,9 +84,14 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 	)
 }
 
-// buildClient performs the synchronous C-side work of constructing a
-// Client. Split out so New can run it under runCancellable.
+// buildClient performs the synchronous engine-side work of
+// constructing a Client. Split out so New can run it under
+// runCancellable.
 func buildClient(cfg clientConfig) (*Client, error) {
+	if cfg.engineBackend != nil {
+		return &Client{cfg: cfg, backend: cfg.engineBackend}, nil
+	}
+
 	if err := Load(cfg.libPath, cfg.backend, cfg.libName); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
