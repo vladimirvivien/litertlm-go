@@ -46,24 +46,22 @@ func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg runtimeCon
 	if err != nil {
 		return "", err
 	}
-	defer sess.Delete()
+	defer sess.Close()
 
 	stop := wireCancel(ctx, sess.Cancel)
 	defer stop()
 
-	resp, err := sess.GenerateContent(partsToInputs(parts))
+	cands, err := sess.Generate(parts)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return "", cerr
 		}
 		return "", err
 	}
-	defer resp.Delete()
-
-	if resp.NumCandidates() == 0 {
+	if len(cands) == 0 {
 		return "", fmt.Errorf("litertlm: Generate: no candidates returned")
 	}
-	return resp.Text(0), nil
+	return cands[0].Text, nil
 }
 
 // runMultimodalConversation builds a Conversation, sends the
@@ -72,14 +70,13 @@ func (c *Client) generateMulti(ctx context.Context, parts []Part, cfg runtimeCon
 // constructed with WithBenchmarkEnabled. Used when parts contains
 // image or audio Parts.
 func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cfg runtimeConfig) (string, *Benchmark, error) {
-	conv, convCfg, err := c.openMultimodalConversation(cfg)
+	transport, err := c.openMultimodalTransport(cfg)
 	if err != nil {
 		return "", nil, err
 	}
-	defer conv.Delete()
-	defer convCfg.Delete()
+	defer transport.Close()
 
-	stop := wireCancel(ctx, conv.Cancel)
+	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
 	msgJSON, err := partsToConversationMessage(parts)
@@ -87,7 +84,7 @@ func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cf
 		return "", nil, err
 	}
 
-	raw, err := conv.SendMessage(msgJSON, "", OptionalArgs(0))
+	raw, err := transport.SendMessage(msgJSON, "", RuntimeArgs{})
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return "", nil, cerr
@@ -98,53 +95,27 @@ func (c *Client) runMultimodalConversation(ctx context.Context, parts []Part, cf
 	if err != nil {
 		return "", nil, err
 	}
-	return text, captureConversationBenchmark(c, conv), nil
+	return text, transport.Benchmark(), nil
 }
 
-// openMultimodalConversation creates a fresh ConversationConfig +
-// Conversation pair with cfg's per-call SessionConfig (sampler,
-// max-output-tokens) attached. Caller must Delete both handles.
-func (c *Client) openMultimodalConversation(cfg runtimeConfig) (Conversation, ConversationConfig, error) {
+// openMultimodalTransport opens a bare ChatTransport carrying cfg's
+// per-call session knobs (sampler, max-output-tokens). Caller must
+// Close the transport.
+func (c *Client) openMultimodalTransport(cfg runtimeConfig) (ChatTransport, error) {
 	sampler := cfg.sampler
 	if sampler == nil {
 		sampler = c.cfg.defaultSampler
 	}
 
-	var sessCfg SessionConfig
-	if cfg.maxOutputTokens > 0 || sampler != nil {
-		var err error
-		sessCfg, err = NewSessionConfig()
-		if err != nil {
-			return 0, 0, err
-		}
-		if cfg.maxOutputTokens > 0 {
-			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
-		}
-		if sampler != nil {
-			sessCfg.SetSamplerParams(*sampler)
-		}
-	}
-
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed {
-		c.mu.Unlock()
-		sessCfg.Delete()
-		return 0, 0, fmt.Errorf("litertlm: Client is closed")
+		return nil, fmt.Errorf("litertlm: Client is closed")
 	}
-	convCfg, err := NewConversationConfig(c.engine, sessCfg, "", "", "", false)
-	c.mu.Unlock()
-	// ConversationConfig copies sessCfg's relevant fields; safe to delete now.
-	sessCfg.Delete()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	conv, err := c.engine.NewConversation(convCfg)
-	if err != nil {
-		convCfg.Delete()
-		return 0, 0, err
-	}
-	return conv, convCfg, nil
+	return c.backend.NewChatTransport(ConversationSetup{
+		Sampler:         sampler,
+		MaxOutputTokens: cfg.maxOutputTokens,
+	})
 }
 
 // GenerateStream returns an iterator over response chunks. Cancelling
@@ -175,12 +146,12 @@ func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg runt
 			yield(Chunk{}, err)
 			return
 		}
-		defer sess.Delete()
+		defer sess.Close()
 
 		stop := wireCancel(ctx, sess.Cancel)
 		defer stop()
 
-		for sc := range sess.GenerateContentStreamCh(partsToInputs(parts)) {
+		for sc := range sess.GenerateStreamCh(parts) {
 			ch := Chunk{Text: sc.Text, Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return
@@ -196,15 +167,14 @@ func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg runt
 // for multimodal parts. Mirrors the Session-path streamer.
 func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part, cfg runtimeConfig) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
-		conv, convCfg, err := c.openMultimodalConversation(cfg)
+		transport, err := c.openMultimodalTransport(cfg)
 		if err != nil {
 			yield(Chunk{}, err)
 			return
 		}
-		defer conv.Delete()
-		defer convCfg.Delete()
+		defer transport.Close()
 
-		stop := wireCancel(ctx, conv.Cancel)
+		stop := wireCancel(ctx, transport.Cancel)
 		defer stop()
 
 		msgJSON, err := partsToConversationMessage(parts)
@@ -213,7 +183,7 @@ func (c *Client) streamMultimodalConversation(ctx context.Context, parts []Part,
 			return
 		}
 
-		for sc := range conv.SendMessageStreamCh(msgJSON, "", OptionalArgs(0)) {
+		for sc := range transport.SendMessageStreamCh(msgJSON, "", RuntimeArgs{}) {
 			ch := Chunk{Text: extractStreamChunkText(sc.Text), Final: sc.Final}
 			if !yield(ch, sc.Err) {
 				return
@@ -254,54 +224,21 @@ func (c *Client) generateMultiResponse(ctx context.Context, parts []Part, cfg ru
 	if err != nil {
 		return nil, err
 	}
-	defer sess.Delete()
+	defer sess.Close()
 
 	stop := wireCancel(ctx, sess.Cancel)
 	defer stop()
 
-	handle, err := sess.GenerateContent(partsToInputs(parts))
+	cands, err := sess.Generate(parts)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
 		}
 		return nil, err
 	}
-	// Ownership of `handle` transfers to the *Response; do NOT defer
-	// handle.Delete() here. The runtime.AddCleanup registered by
-	// newResponse fires when the Response becomes unreachable.
-	resp := newResponse(handle)
-	resp.bench = captureSessionBenchmark(c, sess)
+	resp := newResponse(cands)
+	resp.bench = sess.Benchmark()
 	return resp, nil
-}
-
-// captureSessionBenchmark snapshots sess's BenchmarkInfo into a
-// *Benchmark when c was constructed with WithBenchmarkEnabled.
-// Returns nil otherwise.
-func captureSessionBenchmark(c *Client, sess Session) *Benchmark {
-	if c.cfg.benchmarkEnabled == nil || !*c.cfg.benchmarkEnabled {
-		return nil
-	}
-	bi, err := sess.BenchmarkInfo()
-	if err != nil {
-		return nil
-	}
-	defer bi.Delete()
-	return snapshotBenchmark(bi)
-}
-
-// captureConversationBenchmark is the Conversation analogue of
-// captureSessionBenchmark, used by the multimodal Generate*
-// path which goes through a Conversation instead of a Session.
-func captureConversationBenchmark(c *Client, conv Conversation) *Benchmark {
-	if c.cfg.benchmarkEnabled == nil || !*c.cfg.benchmarkEnabled {
-		return nil
-	}
-	bi, err := conv.BenchmarkInfo()
-	if err != nil {
-		return nil
-	}
-	defer bi.Delete()
-	return snapshotBenchmark(bi)
 }
 
 // wireCancel arranges for ctx cancellation to call cancelFn (typically

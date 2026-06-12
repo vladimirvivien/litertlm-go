@@ -170,14 +170,11 @@ func TestRuntimeOption_Composition(t *testing.T) {
 	}
 }
 
-// TestBuildOptionalArgs_UnsetReturnsZero verifies that with no Chat-side
-// knobs set, no C handle is materialized.
-func TestBuildOptionalArgs_UnsetReturnsZero(t *testing.T) {
-	opts, err := buildOptionalArgs(runtimeConfig{})
-	if err != nil {
-		t.Fatalf("buildOptionalArgs: %v", err)
-	}
-	if opts != 0 {
-		t.Errorf("opts = %v, want OptionalArgs(0) when no knobs set", opts)
+// TestRuntimeArgsFrom_UnsetReturnsZero verifies that with no Chat-side
+// knobs set, the resolved args are the zero value (engine defaults).
+func TestRuntimeArgsFrom_UnsetReturnsZero(t *testing.T) {
+	args := runtimeArgsFrom(runtimeConfig{})
+	if args != (RuntimeArgs{}) {
+		t.Errorf("args = %+v, want zero RuntimeArgs when no knobs set", args)
 	}
 }

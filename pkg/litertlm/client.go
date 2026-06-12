@@ -27,6 +27,7 @@ type Client struct {
 	cfg      clientConfig
 	settings EngineSettings
 	engine   Engine
+	backend  Backend
 
 	mu     sync.Mutex
 	closed bool
@@ -102,10 +103,12 @@ func buildClient(cfg clientConfig) (*Client, error) {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 
+	benchmarkEnabled := cfg.benchmarkEnabled != nil && *cfg.benchmarkEnabled
 	return &Client{
 		cfg:      cfg,
 		settings: settings,
 		engine:   engine,
+		backend:  newCppBackend(engine, benchmarkEnabled),
 	}, nil
 }
 
@@ -154,7 +157,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 	c.closed = true
-	c.engine.Delete()
+	c.backend.Close()
 	c.settings.Delete()
 	c.engine = 0
 	c.settings = 0
@@ -174,13 +177,16 @@ func (c *Client) Settings() EngineSettings { return c.settings }
 // the given text. Useful for budgeting prompts against the engine's
 // max-token limit.
 func (c *Client) Tokenize(text string) ([]int32, error) {
-	return c.engine.Tokenize(text)
+	if c.backend == nil {
+		return nil, fmt.Errorf("litertlm: invalid engine (Client not constructed by New)")
+	}
+	return c.backend.Tokenize(text)
 }
 
 // TokenLength is a convenience over Tokenize that returns just the
 // token count.
 func (c *Client) TokenLength(text string) (int, error) {
-	tokens, err := c.engine.Tokenize(text)
+	tokens, err := c.Tokenize(text)
 	if err != nil {
 		return 0, err
 	}
@@ -200,45 +206,28 @@ func resolveRuntimeConfig(opts []RuntimeOption) runtimeConfig {
 	return cfg
 }
 
-// openSession creates a fresh single-use Session populated from cfg.
-// Each generation call gets its own session because the C engine
-// restricts session reuse across prefill/decode cycles.
+// openSession opens a fresh single-use SessionBackend populated from
+// cfg. Each generation call gets its own session because engines
+// restrict session reuse across prefill/decode cycles.
 //
-// NewSession is serialised on the Client mutex out of an abundance of
-// caution; the C-side thread-safety contract for engine_create_session
-// is not documented and contention here is negligible (sessions are
-// cheap to construct relative to inference).
-func (c *Client) openSession(cfg runtimeConfig) (Session, error) {
+// Session construction is serialised on the Client mutex out of an
+// abundance of caution; the backend's thread-safety contract for
+// session creation is not documented and contention here is
+// negligible (sessions are cheap to construct relative to inference).
+func (c *Client) openSession(cfg runtimeConfig) (SessionBackend, error) {
 	// Resolve effective sampler: per-call > Client default > none.
 	sampler := cfg.sampler
 	if sampler == nil {
 		sampler = c.cfg.defaultSampler
 	}
 
-	var sessCfg SessionConfig
-	if cfg.maxOutputTokens > 0 || sampler != nil {
-		var err error
-		sessCfg, err = NewSessionConfig()
-		if err != nil {
-			return 0, err
-		}
-		if cfg.maxOutputTokens > 0 {
-			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
-		}
-		if sampler != nil {
-			sessCfg.SetSamplerParams(*sampler)
-		}
-	}
-
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed {
-		c.mu.Unlock()
-		sessCfg.Delete()
-		return 0, fmt.Errorf("litertlm: Client is closed")
+		return nil, fmt.Errorf("litertlm: Client is closed")
 	}
-	sess, err := c.engine.NewSession(sessCfg)
-	c.mu.Unlock()
-	// SessionConfig fields are copied by NewSession; safe to delete now.
-	sessCfg.Delete()
-	return sess, err
+	return c.backend.NewSessionBackend(SessionSetup{
+		MaxOutputTokens: cfg.maxOutputTokens,
+		Sampler:         sampler,
+	})
 }

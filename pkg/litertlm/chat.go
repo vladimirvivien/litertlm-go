@@ -131,18 +131,18 @@ func WithMaxToolHops(n int) ChatOption {
 // WithMaxToolHops isn't supplied.
 const defaultMaxToolHops = 5
 
-// chatTransport is the conversation-side seam used by Chat.send,
-// Chat.streamWithDispatch, and the auto-dispatch loop. The real
-// Conversation handle satisfies it; tests inject a stub.
+// chatTransport is the send surface of ChatTransport used by
+// Chat.send, Chat.streamWithDispatch, and the auto-dispatch loop.
+// Every backend ChatTransport satisfies it; tests inject a stub.
 type chatTransport interface {
-	SendMessage(messageJSON, extraContext string, opts OptionalArgs) (string, error)
-	SendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs) <-chan StreamChunk
+	SendMessage(messageJSON, extraContext string, args RuntimeArgs) (string, error)
+	SendMessageStreamCh(messageJSON, extraContext string, args RuntimeArgs) <-chan StreamChunk
 	Cancel()
 }
 
-// Compile-time check: the real Conversation handle satisfies the
-// transport interface.
-var _ chatTransport = Conversation(0)
+// Compile-time check: the backend transport satisfies the dispatch
+// seam.
+var _ chatTransport = (ChatTransport)(nil)
 
 // ErrToolHopsExceeded matches errors returned when Chat.Send exceeds
 // the dispatch hop cap. Use errors.As to a *ToolHopsError to inspect
@@ -163,13 +163,12 @@ func (e *ToolHopsError) Error() string {
 
 func (e *ToolHopsError) Unwrap() error { return ErrToolHopsExceeded }
 
-// Chat is a multi-turn conversation handle. It wraps a Conversation
-// plus its ConversationConfig and surfaces high-level Send /
-// SendStream / SendToolResult methods that absorb the JSON-marshaling
-// boilerplate the low-level API requires.
+// Chat is a multi-turn conversation handle. It drives a backend
+// ChatTransport and surfaces high-level Send / SendStream /
+// SendToolResult methods that absorb the JSON-marshaling boilerplate
+// the low-level API requires.
 type Chat struct {
-	cfg  ConversationConfig
-	conv Conversation
+	transport ChatTransport
 
 	mu          sync.Mutex
 	closed      bool
@@ -226,51 +225,30 @@ func (c *Client) NewChat(ctx context.Context, opts ...ChatOption) (*Chat, error)
 	)
 }
 
-// buildChat performs the synchronous C-side work of constructing a
-// Chat. Split out so NewChat can run it under runCancellable.
+// buildChat performs the synchronous engine-side work of constructing
+// a Chat. Split out so NewChat can run it under runCancellable.
+//
+// The client's defaultSampler is forwarded so the conversation samples
+// the same way the Generate path does. Without it, the C++ engine
+// falls back to its built-in greedy default, which on small models
+// traps the decoder in self-reinforcing token loops.
 func (c *Client) buildChat(systemMessageJSON, toolsJSON, messagesJSON string,
 	constrainedDecoding bool, registry map[string]ToolDefinition, maxToolHops int,
 	extraContextJSON string, filterChannelContentFromKVCache *bool,
 ) (*Chat, error) {
-	// If the client has a defaultSampler, materialize a SessionConfig
-	// carrying it so the Conversation uses the same sampler the Generate
-	// path does. Without this, the Conversation falls back to the C
-	// engine's built-in greedy default, which on small models traps the
-	// decoder in self-reinforcing token loops. The C set_session_config
-	// copies the underlying struct (c/engine.cc:276), so the local handle
-	// is safe to release immediately after NewConversationConfig returns.
-	var sessionConfig SessionConfig
-	if c.cfg.defaultSampler != nil {
-		sc, err := NewSessionConfig()
-		if err != nil {
-			return nil, fmt.Errorf("litertlm: NewChat: session config: %w", err)
-		}
-		defer sc.Delete()
-		sc.SetSamplerParams(*c.cfg.defaultSampler)
-		sessionConfig = sc
-	}
-
-	convCfg, err := NewConversationConfig(c.engine, sessionConfig,
-		systemMessageJSON, toolsJSON, messagesJSON, constrainedDecoding)
+	transport, err := c.backend.NewChatTransport(ConversationSetup{
+		SystemMessageJSON:               systemMessageJSON,
+		ToolsJSON:                       toolsJSON,
+		MessagesJSON:                    messagesJSON,
+		ConstrainedDecoding:             constrainedDecoding,
+		ExtraContextJSON:                extraContextJSON,
+		FilterChannelContentFromKVCache: filterChannelContentFromKVCache,
+		Sampler:                         c.cfg.defaultSampler,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
-
-	if err = convCfg.SetExtraContext(extraContextJSON); err != nil {
-		convCfg.Delete()
-		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
-	}
-	if filterChannelContentFromKVCache != nil {
-		convCfg.SetFilterChannelContentFromKVCache(*filterChannelContentFromKVCache)
-	}
-
-	conv, err := c.engine.NewConversation(convCfg)
-	if err != nil {
-		convCfg.Delete()
-		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
-	}
-
-	return &Chat{cfg: convCfg, conv: conv, tools: registry, maxToolHops: maxToolHops}, nil
+	return &Chat{transport: transport, tools: registry, maxToolHops: maxToolHops}, nil
 }
 
 // buildToolRegistry walks defs and returns a name → def map for chat
@@ -290,8 +268,8 @@ func buildToolRegistry(defs []ToolDefinition) (map[string]ToolDefinition, error)
 	return registry, nil
 }
 
-// Close releases the underlying Conversation and ConversationConfig.
-// Safe to call multiple times.
+// Close releases the underlying conversation transport. Safe to call
+// multiple times.
 func (ch *Chat) Close() error {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
@@ -299,10 +277,8 @@ func (ch *Chat) Close() error {
 		return nil
 	}
 	ch.closed = true
-	ch.conv.Delete()
-	ch.cfg.Delete()
-	ch.conv = 0
-	ch.cfg = 0
+	ch.transport.Close()
+	ch.transport = nil
 	return nil
 }
 
@@ -313,10 +289,10 @@ func (ch *Chat) Close() error {
 // start from the same conversation history.
 //
 // The cloned Chat shares ch's tool registry and dispatch-hop limit.
-// The ConversationConfig is owned by ch; the clone holds none and
-// only releases its Conversation on Close. ch must outlive every
+// The conversation configuration is owned by ch; the clone only
+// releases its own conversation on Close. ch must outlive every
 // clone derived from it; closing ch invalidates the underlying
-// configuration that backs each clone's Conversation.
+// configuration that backs each clone's conversation.
 //
 // Clone fails when the underlying executor does not implement
 // Session.Clone. As of LiteRT-LM v0.12.0 this is the case for the
@@ -327,17 +303,17 @@ func (ch *Chat) Clone() (*Chat, error) {
 		ch.mu.Unlock()
 		return nil, fmt.Errorf("litertlm: Chat is closed")
 	}
-	conv := ch.conv
+	transport := ch.transport
 	tools := ch.tools
 	hops := ch.maxToolHops
 	ch.mu.Unlock()
 
-	clonedConv, err := conv.Clone()
+	cloned, err := transport.Clone()
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Chat.Clone: %w", err)
 	}
 	return &Chat{
-		conv:        clonedConv,
+		transport:   cloned,
 		tools:       tools,
 		maxToolHops: hops,
 	}, nil
@@ -356,12 +332,12 @@ func (ch *Chat) Clone() (*Chat, error) {
 func (ch *Chat) TokenCount() (int, error) {
 	ch.mu.Lock()
 	closed := ch.closed
-	conv := ch.conv
+	transport := ch.transport
 	ch.mu.Unlock()
 	if closed {
 		return 0, fmt.Errorf("litertlm: Chat is closed")
 	}
-	n, err := conv.TokenCount()
+	n, err := transport.TokenCount()
 	if err != nil {
 		return 0, fmt.Errorf("litertlm: Chat.TokenCount: %w", err)
 	}
@@ -391,7 +367,7 @@ func (ch *Chat) Send(ctx context.Context, message string, opts ...RuntimeOption)
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: Send: marshal: %w", err)
 	}
-	return ch.send(ctx, ch.conv, string(msgJSON), resolveRuntimeConfig(opts))
+	return ch.send(ctx, ch.transport, string(msgJSON), resolveRuntimeConfig(opts))
 }
 
 // SendStream issues a user-role message and returns an iterator over
@@ -423,7 +399,7 @@ func (ch *Chat) SendStream(ctx context.Context, message string, opts ...RuntimeO
 			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: marshal: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, ch.conv, string(msgJSON), resolveRuntimeConfig(opts), yield)
+		ch.streamWithDispatch(ctx, ch.transport, string(msgJSON), resolveRuntimeConfig(opts), yield)
 	}
 }
 
@@ -483,7 +459,7 @@ func (ch *Chat) SendMulti(ctx context.Context, parts []Part, opts ...RuntimeOpti
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendMulti: %w", err)
 	}
-	return ch.send(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts))
+	return ch.send(ctx, ch.transport, msgJSON, resolveRuntimeConfig(opts))
 }
 
 // SendMultiStream is the streaming sibling of SendMulti. Chunk.Text
@@ -510,7 +486,7 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...Runti
 			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts), yield)
+		ch.streamWithDispatch(ctx, ch.transport, msgJSON, resolveRuntimeConfig(opts), yield)
 	}
 }
 
@@ -523,15 +499,10 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...Runti
 // very end after all dispatch is finished.
 //
 // transport is parameterized so tests inject a stub satisfying
-// chatTransport. cfg carries per-call knobs; OptionalArgs are
-// materialized once here and reused across every dispatch hop.
+// chatTransport. cfg carries per-call knobs, resolved once into
+// RuntimeArgs and reused across every dispatch hop.
 func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport, msgJSON string, cfg runtimeConfig, yield func(Chunk, error) bool) {
-	optArgs, err := buildOptionalArgs(cfg)
-	if err != nil {
-		yield(Chunk{}, err)
-		return
-	}
-	defer optArgs.Delete()
+	args := runtimeArgsFrom(cfg)
 
 	cap := ch.maxToolHops
 	if cap <= 0 {
@@ -540,7 +511,7 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 
 	for hop := 0; ; hop++ {
 		var calls []ToolCall
-		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, optArgs, &calls, yield)
+		cancelled, streamErr := ch.streamOne(ctx, transport, msgJSON, args, &calls, yield)
 		if cancelled || streamErr != nil {
 			if streamErr != nil {
 				yield(Chunk{}, streamErr)
@@ -579,11 +550,11 @@ func (ch *Chat) streamWithDispatch(ctx context.Context, transport chatTransport,
 // Tool calls observed in any chunk are appended to *calls. Returns
 // (cancelled, err): cancelled=true when the caller's yield returned
 // false; err is set on a transport-side error.
-func (ch *Chat) streamOne(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs, calls *[]ToolCall, yield func(Chunk, error) bool) (bool, error) {
+func (ch *Chat) streamOne(ctx context.Context, transport chatTransport, msgJSON string, args RuntimeArgs, calls *[]ToolCall, yield func(Chunk, error) bool) (bool, error) {
 	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
-	for sc := range transport.SendMessageStreamCh(msgJSON, "", opts) {
+	for sc := range transport.SendMessageStreamCh(msgJSON, "", args) {
 		if sc.Err != nil {
 			return false, sc.Err
 		}
@@ -653,7 +624,7 @@ func (ch *Chat) SendToolResult(ctx context.Context, name string, result any, opt
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: SendToolResult: %w", err)
 	}
-	return ch.send(ctx, ch.conv, msgJSON, resolveRuntimeConfig(opts))
+	return ch.send(ctx, ch.transport, msgJSON, resolveRuntimeConfig(opts))
 }
 
 // toolResult holds one tool's response within a tool-role message.
@@ -682,14 +653,10 @@ func encodeToolResults(results []toolResult) (string, error) {
 // send drives the dispatch loop. transport is parameterized so tests
 // can inject a stub satisfying chatTransport. cfg carries per-call
 // knobs (visual token budget, return-tool-requests flag, dispatch
-// concurrency); OptionalArgs are materialized once here and reused
-// across every dispatch hop.
+// concurrency), resolved once into RuntimeArgs and reused across
+// every dispatch hop.
 func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON string, cfg runtimeConfig) (*Reply, error) {
-	optArgs, err := buildOptionalArgs(cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer optArgs.Delete()
+	args := runtimeArgsFrom(cfg)
 
 	cap := ch.maxToolHops
 	if cap <= 0 {
@@ -697,7 +664,7 @@ func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON strin
 	}
 
 	for hop := 0; ; hop++ {
-		reply, err := sendOne(ctx, transport, msgJSON, optArgs)
+		reply, err := sendOne(ctx, transport, msgJSON, args)
 		if err != nil {
 			return nil, err
 		}
@@ -720,11 +687,11 @@ func (ch *Chat) send(ctx context.Context, transport chatTransport, msgJSON strin
 
 // sendOne posts one message through the transport and parses the
 // reply envelope.
-func sendOne(ctx context.Context, transport chatTransport, msgJSON string, opts OptionalArgs) (*Reply, error) {
+func sendOne(ctx context.Context, transport chatTransport, msgJSON string, args RuntimeArgs) (*Reply, error) {
 	stop := wireCancel(ctx, transport.Cancel)
 	defer stop()
 
-	raw, err := transport.SendMessage(msgJSON, "", opts)
+	raw, err := transport.SendMessage(msgJSON, "", args)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, cerr
@@ -734,20 +701,14 @@ func sendOne(ctx context.Context, transport chatTransport, msgJSON string, opts 
 	return parseReply(raw)
 }
 
-// buildOptionalArgs materializes a Conversation OptionalArgs handle
-// from the resolved per-call cfg. Returns OptionalArgs(0) (the C-side
-// default) when no per-call knob is set. Caller must Delete the
-// returned handle.
-func buildOptionalArgs(cfg runtimeConfig) (OptionalArgs, error) {
-	if cfg.visualTokenBudget == nil {
-		return 0, nil
+// runtimeArgsFrom resolves the per-call cfg into the backend
+// RuntimeArgs for one send. The zero value means engine defaults.
+func runtimeArgsFrom(cfg runtimeConfig) RuntimeArgs {
+	args := RuntimeArgs{}
+	if cfg.visualTokenBudget != nil {
+		args.VisualTokenBudget = *cfg.visualTokenBudget
 	}
-	o, err := NewOptionalArgs()
-	if err != nil {
-		return 0, fmt.Errorf("litertlm: per-call options: %w", err)
-	}
-	o.SetVisualTokenBudget(*cfg.visualTokenBudget)
-	return o, nil
+	return args
 }
 
 // allCallsDispatchable reports whether every tool call in reply maps

@@ -68,7 +68,7 @@ func TestSendMulti_ImagePlusTextEnvelope(t *testing.T) {
 }
 
 func TestSendMulti_EmptyParts(t *testing.T) {
-	ch := &Chat{conv: Conversation(1)}
+	ch := &Chat{}
 	if _, err := ch.SendMulti(context.Background(), nil); err == nil ||
 		!strings.Contains(err.Error(), "empty parts") {
 		t.Errorf("SendMulti(nil) err = %v, want 'empty parts'", err)
@@ -80,7 +80,7 @@ func TestSendMulti_EmptyParts(t *testing.T) {
 }
 
 func TestSendMultiStream_EmptyParts(t *testing.T) {
-	ch := &Chat{conv: Conversation(1)}
+	ch := &Chat{}
 	var gotErr error
 	for _, err := range ch.SendMultiStream(context.Background(), nil) {
 		gotErr = err
@@ -118,7 +118,7 @@ func TestSendMulti_DispatchLoopMultimodal(t *testing.T) {
 	transport := &fakeTransport{
 		replies: []string{textReply("a wooden table with a lamp")},
 	}
-	ch := &Chat{conv: Conversation(1)} // non-zero so checkOpen passes
+	ch := &Chat{}
 	ctx := context.Background()
 	msgJSON, err := partsToConversationMessage([]Part{
 		Image([]byte{0x89, 'P', 'N', 'G'}),
@@ -149,7 +149,7 @@ func TestSendMulti_DispatchLoopMultimodal(t *testing.T) {
 // the multimodal path.
 func TestSendMulti_TransportError(t *testing.T) {
 	transport := &fakeTransport{} // empty replies → SendMessage returns error
-	ch := &Chat{conv: Conversation(1)}
+	ch := &Chat{}
 	msgJSON, _ := partsToConversationMessage([]Part{Text("hi")})
 	if _, err := ch.send(context.Background(), transport, msgJSON, runtimeConfig{}); err == nil {
 		t.Fatal("expected error, got nil")

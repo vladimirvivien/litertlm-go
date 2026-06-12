@@ -22,7 +22,7 @@ type fakeTransport struct {
 	cancelCalls   int
 }
 
-func (f *fakeTransport) SendMessage(messageJSON, _ string, _ OptionalArgs) (string, error) {
+func (f *fakeTransport) SendMessage(messageJSON, _ string, _ RuntimeArgs) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sentMsgs = append(f.sentMsgs, messageJSON)
@@ -34,7 +34,7 @@ func (f *fakeTransport) SendMessage(messageJSON, _ string, _ OptionalArgs) (stri
 	return r, nil
 }
 
-func (f *fakeTransport) SendMessageStreamCh(messageJSON, _ string, _ OptionalArgs) <-chan StreamChunk {
+func (f *fakeTransport) SendMessageStreamCh(messageJSON, _ string, _ RuntimeArgs) <-chan StreamChunk {
 	f.mu.Lock()
 	f.sentMsgs = append(f.sentMsgs, messageJSON)
 	var chunks []StreamChunk

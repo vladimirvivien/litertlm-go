@@ -24,7 +24,7 @@ func TestStream_TextOnly(t *testing.T) {
 			{Final: true},
 		}},
 	}
-	ch := &Chat{conv: Conversation(1)}
+	ch := &Chat{}
 	var got strings.Builder
 	var sawFinal bool
 	for chunk, err := range streamIter(ch, transport, `{"role":"user","content":"hi"}`) {
@@ -48,7 +48,7 @@ func TestStream_DispatchesManagedTool(t *testing.T) {
 	c := &Client{}
 	add := newAddTool(t, c)
 	registry, _ := buildToolRegistry([]ToolDefinition{add})
-	ch := &Chat{conv: Conversation(1), tools: registry}
+	ch := &Chat{tools: registry}
 
 	transport := &fakeTransport{
 		streamReplies: [][]StreamChunk{
@@ -90,7 +90,7 @@ func TestStream_NonDispatchableToolInforms(t *testing.T) {
 		add,
 		NewRawTool("manual_tool", "desc", nil),
 	})
-	ch := &Chat{conv: Conversation(1), tools: registry}
+	ch := &Chat{tools: registry}
 
 	transport := &fakeTransport{
 		streamReplies: [][]StreamChunk{
@@ -143,7 +143,7 @@ func TestStream_HopCapExceeded(t *testing.T) {
 	c := &Client{}
 	add := newAddTool(t, c)
 	registry, _ := buildToolRegistry([]ToolDefinition{add})
-	ch := &Chat{conv: Conversation(1), tools: registry, maxToolHops: 2}
+	ch := &Chat{tools: registry, maxToolHops: 2}
 
 	loopCall := func() []StreamChunk {
 		return []StreamChunk{
@@ -175,7 +175,7 @@ func TestStream_ToolCallChunkHasTextToo(t *testing.T) {
 	c := &Client{}
 	add := newAddTool(t, c)
 	registry, _ := buildToolRegistry([]ToolDefinition{add})
-	ch := &Chat{conv: Conversation(1), tools: registry}
+	ch := &Chat{tools: registry}
 
 	// Chunk envelope with BOTH content[text] AND tool_calls in the same envelope.
 	mixedChunk := StreamChunk{

@@ -5,11 +5,10 @@ import (
 	"testing"
 )
 
-// Client.Tokenize / TokenLength are thin pass-throughs to Engine.Tokenize,
-// which requires a loaded model — covered end-to-end in examples/bot.
-// The unit-test surface here is the routing: a Client with a zero
-// Engine handle must surface the engine's "invalid engine" error
-// rather than panic.
+// Client.Tokenize / TokenLength are thin pass-throughs to the backend's
+// tokenizer, which requires a loaded model — covered end-to-end in
+// examples/bot. The unit-test surface here is the routing: a zero-value
+// Client must surface an "invalid engine" error rather than panic.
 func TestClientTokenize_ZeroEngine(t *testing.T) {
 	c := &Client{}
 
