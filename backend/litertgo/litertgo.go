@@ -58,6 +58,10 @@ func (b *Backend) NewSessionBackend(s litertlm.SessionSetup) (litertlm.SessionBa
 	return &session{
 		engine: b.engine,
 		opts:   genOptions(s.MaxOutputTokens, s.Sampler, ""),
+		// The C++ session renders prompts through the model's chat
+		// template when one exists; match it, falling back to raw
+		// completion for template-less models.
+		chat:   b.engine.HasChatTemplate(),
 		ctx:    ctx,
 		cancel: cancel,
 	}, nil
@@ -122,11 +126,11 @@ func genOptions(maxOutputTokens int, p *litertlm.SamplerParams, system string) l
 	return o
 }
 
-// session implements litertlm.SessionBackend. Mirroring the C++
-// session, Generate runs the raw prompt — no chat-template wrapping.
+// session implements litertlm.SessionBackend.
 type session struct {
 	engine *lm.Engine
 	opts   lm.GenOptions
+	chat   bool
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -136,7 +140,7 @@ func (s *session) Generate(parts []litertlm.Part) ([]litertlm.Candidate, error) 
 	if err != nil {
 		return nil, err
 	}
-	text, err := s.engine.Generate(s.ctx, prompt, false, s.opts)
+	text, err := s.engine.Generate(s.ctx, prompt, s.chat, s.opts)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +156,7 @@ func (s *session) GenerateStreamCh(parts []litertlm.Part) <-chan litertlm.Stream
 			s.emit(out, litertlm.StreamChunk{Err: err, Final: true})
 			return
 		}
-		_, err = s.engine.GenerateStream(s.ctx, prompt, false, s.opts, func(piece string) {
+		_, err = s.engine.GenerateStream(s.ctx, prompt, s.chat, s.opts, func(piece string) {
 			s.emit(out, litertlm.StreamChunk{Text: piece})
 		})
 		if err != nil {

@@ -21,7 +21,7 @@ import (
 //
 // Both unset (or -short) skips.
 
-func openBackend(t *testing.T) (*litertgo.Backend, string) {
+func openBackend(t testing.TB) (*litertgo.Backend, string) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("short mode")
@@ -38,7 +38,7 @@ func openBackend(t *testing.T) (*litertgo.Backend, string) {
 	return b, modelPath
 }
 
-func newClient(t *testing.T) (*litertlm.Client, string) {
+func newClient(t testing.TB) (*litertlm.Client, string) {
 	t.Helper()
 	b, modelPath := openBackend(t)
 	c, err := litertlm.New(context.Background(), litertlm.WithEngineBackend(b))
@@ -112,11 +112,11 @@ func TestGoBackend_ChatSendStream_MatchesSend(t *testing.T) {
 	}
 }
 
-func TestGoBackend_Generate_RawPrompt(t *testing.T) {
+func TestGoBackend_Generate(t *testing.T) {
 	c, _ := newClient(t)
 
-	out, err := c.Generate(context.Background(), "The capital of France is",
-		litertlm.WithMaxOutputTokens(16))
+	out, err := c.Generate(context.Background(), "What is the capital of France?",
+		litertlm.WithMaxOutputTokens(32))
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -140,6 +140,27 @@ func TestGoBackend_Tokenize(t *testing.T) {
 	if err != nil || n != len(toks) {
 		t.Errorf("TokenLength = %d, %v; want %d, nil", n, err, len(toks))
 	}
+}
+
+func TestGoBackend_GenerateData(t *testing.T) {
+	c, _ := newClient(t)
+
+	// The capture-tool path is unavailable on this backend (tools are
+	// unsupported), so GenerateData exercises the prompt-engineered
+	// fallback: schema-augmented raw generation + tolerant JSON parse.
+	type answer struct {
+		Color string `json:"color"`
+	}
+	got, err := litertlm.GenerateData[answer](context.Background(), c,
+		"Name one primary color.",
+		litertlm.WithMaxOutputTokens(64), litertlm.WithRetries(2))
+	if err != nil {
+		t.Fatalf("GenerateData: %v", err)
+	}
+	if got.Color == "" {
+		t.Fatal("GenerateData returned empty color")
+	}
+	t.Logf("color: %q", got.Color)
 }
 
 func TestGoBackend_ContextCancel(t *testing.T) {

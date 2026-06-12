@@ -1,9 +1,14 @@
 // Command engdiff is the cross-engine differential harness: it runs the same
-// prompt, greedy, on the C++ LiteRT-LM engine (via litertlm-go) and on the
-// pure-Go engine (litert-go), and diffs the replies. Greedy CPU decoding is
-// deterministic in both engines, so byte equality is the expected result;
-// any divergence localizes a templating, tokenization, or numeric difference
-// between the engines.
+// prompt, greedy, on the C++ LiteRT-LM engine and on the pure-Go engine
+// (litert-go), and diffs the replies. Greedy CPU decoding is deterministic
+// in both engines, so byte equality is the expected result; any divergence
+// localizes a templating, tokenization, or numeric difference between the
+// engines.
+//
+// Both workers drive the same litertlm-go Client / Chat code path; they
+// differ only in backend construction (the C++ engine by default, the
+// litert-go engine via WithEngineBackend). A divergence therefore
+// localizes to the engine, not to API-layer differences.
 //
 // Each engine runs in its own subprocess (the harness re-executes itself
 // with -run): the two stacks load different LiteRT runtime libraries that
@@ -26,6 +31,7 @@ import (
 	"strings"
 
 	golm "github.com/vladimirvivien/litert-go/lm"
+	"github.com/vladimirvivien/litertlm-go/backend/litertgo"
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
@@ -37,7 +43,6 @@ const (
 func main() {
 	models := flag.String("models", "", "directory of .litertlm files, or comma-separated paths")
 	prompt := flag.String("prompt", "Name one primary color.", "user prompt (sent as one chat turn)")
-	maxTok := flag.Int("n", 64, "litert-go generated-token cap")
 	cppLib := flag.String("litertlm-lib", os.Getenv("LITERTLM_LIB"), "LiteRT-LM shared-library directory")
 	goLib := flag.String("litert-lib", os.Getenv("LITERT_LIB"), "litert-go runtime-library directory")
 	run := flag.String("run", "", "worker mode: cpp or go (single model, prints reply)")
@@ -45,7 +50,7 @@ func main() {
 	flag.Parse()
 
 	if *run != "" {
-		if err := worker(*run, *model, *prompt, *maxTok, *cppLib, *goLib); err != nil {
+		if err := worker(*run, *model, *prompt, *cppLib, *goLib); err != nil {
 			fmt.Fprintln(os.Stderr, "engdiff worker:", err)
 			os.Exit(1)
 		}
@@ -63,8 +68,8 @@ func main() {
 
 	pass, fail := 0, 0
 	for _, m := range files {
-		cpp, cppErr := capture("cpp", m, *prompt, *maxTok, *cppLib, *goLib)
-		gor, goErr := capture("go", m, *prompt, *maxTok, *cppLib, *goLib)
+		cpp, cppErr := capture("cpp", m, *prompt, *cppLib, *goLib)
+		gor, goErr := capture("go", m, *prompt, *cppLib, *goLib)
 		name := filepath.Base(m)
 		switch {
 		case cppErr != nil || goErr != nil:
@@ -87,13 +92,13 @@ func main() {
 
 // capture re-executes this binary in worker mode and extracts the reply
 // between the markers, keeping engine logs out of the comparison.
-func capture(engine, model, prompt string, n int, cppLib, goLib string) (string, error) {
+func capture(engine, model, prompt string, cppLib, goLib string) (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
 	cmd := exec.Command(exe, "-run", engine, "-model", model, "-prompt", prompt,
-		"-n", fmt.Sprint(n), "-litertlm-lib", cppLib, "-litert-lib", goLib)
+		"-litertlm-lib", cppLib, "-litert-lib", goLib)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("%s worker: %w", engine, err)
@@ -107,41 +112,40 @@ func capture(engine, model, prompt string, n int, cppLib, goLib string) (string,
 	return s[i+len(replyBegin) : j], nil
 }
 
-func worker(engine, model, prompt string, n int, cppLib, goLib string) error {
+func worker(engine, model, prompt string, cppLib, goLib string) error {
 	ctx := context.Background()
-	var reply string
+
+	var opts []litertlm.Option
 	switch engine {
 	case "cpp":
-		client, err := litertlm.New(ctx,
+		opts = []litertlm.Option{
 			litertlm.WithLib(cppLib), litertlm.WithModel(model),
-			litertlm.WithBackend("cpu"))
-		if err != nil {
-			return err
+			litertlm.WithBackend("cpu"),
 		}
-		defer client.Close()
-		chat, err := client.NewChat(ctx)
-		if err != nil {
-			return err
-		}
-		r, err := chat.Send(ctx, prompt)
-		if err != nil {
-			return err
-		}
-		reply = r.Text()
 	case "go":
-		eng, err := golm.Open(ctx, model, golm.WithLibDir(goLib))
+		b, err := litertgo.Open(ctx, model, golm.WithLibDir(goLib))
 		if err != nil {
 			return err
 		}
-		defer eng.Close()
-		reply, err = eng.Generate(ctx, prompt, true, golm.GenOptions{MaxTokens: n})
-		if err != nil {
-			return err
-		}
+		opts = []litertlm.Option{litertlm.WithEngineBackend(b)}
 	default:
 		return fmt.Errorf("unknown engine %q", engine)
 	}
-	fmt.Print(replyBegin, reply, replyEnd)
+
+	client, err := litertlm.New(ctx, opts...)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	chat, err := client.NewChat(ctx)
+	if err != nil {
+		return err
+	}
+	r, err := chat.Send(ctx, prompt)
+	if err != nil {
+		return err
+	}
+	fmt.Print(replyBegin, r.Text(), replyEnd)
 	return nil
 }
 
