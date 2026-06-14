@@ -3,6 +3,7 @@ package litertlm
 import (
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/jupiterrider/ffi"
 )
@@ -52,6 +53,19 @@ func newLazyFun(name string, ret *ffi.Type, args ...*ffi.Type) *lazyFun {
 // forwards to ffi.Fun.Call. If the symbol is absent in the loaded
 // library, every call panics with a clear message including the symbol
 // name. ret/args follow the same any-typed contract as ffi.Fun.Call.
+//
+// libffi widens an integral return value to a full register-width
+// ffi_arg (8 bytes on 64-bit) and writes that many bytes through the
+// return pointer, even when the C type is narrower (an int32, or a bool
+// returned as uint8). A caller return slot smaller than the register
+// would be overrun into the adjacent allocation on every call — silent
+// heap corruption that accumulates with call count. For any
+// sub-register integral return, Call routes the value through a
+// register-width buffer and copies back exactly the C type's width, so
+// call sites keep their natural narrow slots and can never under-size
+// the return. Float, double, pointer, and size_t returns already write
+// their declared size and pass straight through, as do void returns
+// (ret == nil).
 func (l *lazyFun) Call(ret any, args ...any) {
 	l.once.Do(func() {
 		l.fun, l.err = prepSymbol(l.name, l.ret, l.args...)
@@ -61,5 +75,14 @@ func (l *lazyFun) Call(ret any, args ...any) {
 			"(refresh the prebuilt LiteRT-LM libs to a build that exports it): %w",
 			l.name, l.err))
 	}
-	l.fun.Call(ret, args...)
+
+	dst, isPtr := ret.(unsafe.Pointer)
+	if !isPtr || l.ret == nil || l.ret.Size == 0 || l.ret.Size >= 8 {
+		l.fun.Call(ret, args...)
+		return
+	}
+	var wide ffi.Arg
+	l.fun.Call(unsafe.Pointer(&wide), args...)
+	n := int(l.ret.Size)
+	copy(unsafe.Slice((*byte)(dst), n), unsafe.Slice((*byte)(unsafe.Pointer(&wide)), n))
 }
