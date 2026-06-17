@@ -88,9 +88,9 @@ func (b BenchmarkInfo) NumPrefillTurns() int {
 	if b == 0 {
 		return 0
 	}
-	var v int32
+	var v int64
 	benchmarkInfoGetNumPrefillTurnsFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return int(v)
+	return int(int32(v))
 }
 
 // NumDecodeTurns returns the number of recorded decode turns.
@@ -98,9 +98,9 @@ func (b BenchmarkInfo) NumDecodeTurns() int {
 	if b == 0 {
 		return 0
 	}
-	var v int32
+	var v int64
 	benchmarkInfoGetNumDecodeTurnsFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return int(v)
+	return int(int32(v))
 }
 
 // PrefillTokenCount returns the prefill token count at turn i.

@@ -187,10 +187,10 @@ func (e Engine) StopTokenIDs() ([][]int32, error) {
 // tokenUnionToIDs reads the union's discriminator and dispatches to
 // either a direct id-array copy or Tokenize for the string form.
 func (e Engine) tokenUnionToIDs(tu tokenUnion) ([]int32, error) {
-	var typ int32
+	var typ int64
 	tokenUnionGetTypeFunc.Call(unsafe.Pointer(&typ), unsafe.Pointer(&tu))
 
-	switch typ {
+	switch int32(typ) {
 	case tokenUnionTypeIDs:
 		// out_tokens (const int**) and out_num_tokens (size_t*) are
 		// pointer-to-where-C-should-write. The purego FFI layer reads

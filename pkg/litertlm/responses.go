@@ -19,9 +19,9 @@ func (r Responses) NumCandidates() int {
 	if r == 0 {
 		return 0
 	}
-	var n int32
+	var n int64
 	responsesGetNumCandidatesFunc.Call(unsafe.Pointer(&n), unsafe.Pointer(&r))
-	return int(n)
+	return int(int32(n))
 }
 
 // Text returns the response text at index i, copied into Go memory.

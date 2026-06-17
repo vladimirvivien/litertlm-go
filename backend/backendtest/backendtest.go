@@ -138,6 +138,49 @@ func Run(t *testing.T, open func(tb testing.TB) litertlm.Backend) {
 		}
 	})
 
+	t.Run("ChatWithHistory", func(t *testing.T) {
+		b := open(t)
+		defer b.Close()
+
+		hist := []map[string]string{
+			{"role": "user", "content": "My name is Bob. Remember it."},
+			{"role": "assistant", "content": "Hello Bob! I will remember your name."},
+		}
+		histJSON, err := json.Marshal(hist)
+		if err != nil {
+			t.Fatalf("marshal history: %v", err)
+		}
+
+		tr, err := b.NewChatTransport(litertlm.ConversationSetup{
+			MessagesJSON:    string(histJSON),
+			MaxOutputTokens: 128,
+		})
+		if err != nil {
+			t.Fatalf("NewChatTransport with history: %v", err)
+		}
+		defer tr.Close()
+
+		tc, err := tr.TokenCount()
+		if err != nil {
+			t.Fatalf("TokenCount: %v", err)
+		}
+		if tc <= 0 {
+			t.Errorf("TokenCount = %d, want > 0 after history initialization", tc)
+		}
+
+		raw, err := tr.SendMessage(userEnvelope(t, "What is my name?"), "", litertlm.RuntimeArgs{})
+		if err != nil {
+			t.Fatalf("SendMessage: %v", err)
+		}
+		text := assistantText(t, raw)
+		if text == "" {
+			t.Fatalf("reply envelope has no text: %s", raw)
+		}
+		if !strings.Contains(text, "Bob") {
+			t.Logf("note: reply after history did not echo name (model-dependent): %q", text)
+		}
+	})
+
 	t.Run("SessionCancelTerminatesStream", func(t *testing.T) {
 		b := open(t)
 		defer b.Close()

@@ -55,9 +55,9 @@ func TestDecodeMessage(t *testing.T) {
 			}},
 		},
 		{
-			name:    "assistant role unsupported",
-			json:    `{"role":"assistant","content":"hi"}`,
-			wantErr: true,
+			name: "assistant role",
+			json: `{"role":"assistant","content":"hi"}`,
+			want: message{Role: "assistant", Items: []contentItem{{kind: "text", text: "hi"}}},
 		},
 		{
 			name:    "video part unsupported",
@@ -163,7 +163,7 @@ func TestGenOptions(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := genOptions(tc.max, tc.sampler, tc.system)
-			if got != tc.want {
+			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("genOptions = %+v, want %+v", got, tc.want)
 			}
 		})
@@ -176,7 +176,6 @@ func TestNewChatTransport_UnsupportedSetups(t *testing.T) {
 		name  string
 		setup litertlm.ConversationSetup
 	}{
-		{"initial messages", litertlm.ConversationSetup{MessagesJSON: `[]`}},
 		{"constrained decoding", litertlm.ConversationSetup{ConstrainedDecoding: true}},
 		{"extra context", litertlm.ConversationSetup{ExtraContextJSON: `{"k":"v"}`}},
 	}

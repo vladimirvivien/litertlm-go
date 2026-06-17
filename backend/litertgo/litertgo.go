@@ -73,9 +73,6 @@ func (b *Backend) NewSessionBackend(s litertlm.SessionSetup) (litertlm.SessionBa
 }
 
 func (b *Backend) NewChatTransport(s litertlm.ConversationSetup) (litertlm.ChatTransport, error) {
-	if s.MessagesJSON != "" {
-		return nil, fmt.Errorf("%w: initial messages", ErrUnsupported)
-	}
 	if s.ConstrainedDecoding {
 		return nil, fmt.Errorf("%w: constrained decoding", ErrUnsupported)
 	}
@@ -90,8 +87,13 @@ func (b *Backend) NewChatTransport(s litertlm.ConversationSetup) (litertlm.ChatT
 	if err != nil {
 		return nil, err
 	}
+	history, err := decodeHistory(s.MessagesJSON)
+	if err != nil {
+		return nil, err
+	}
 	opts := genOptions(s.MaxOutputTokens, s.Sampler, system)
 	opts.ToolsJSON = s.ToolsJSON
+	opts.History = history
 	conv, err := b.engine.NewConversation(opts)
 	if err != nil {
 		return nil, fmt.Errorf("litertgo: %w", err)
@@ -355,7 +357,7 @@ func (t *transport) Render(messageJSON string) (string, error) {
 }
 
 func (t *transport) TokenCount() (int, error) {
-	return 0, fmt.Errorf("%w: TokenCount", ErrUnsupported)
+	return t.conv.TokenCount(), nil
 }
 
 func (t *transport) Clone() (litertlm.ChatTransport, error) {
@@ -467,10 +469,14 @@ func decodeMessage(messageJSON string) (message, error) {
 		}
 		return message{Role: "tool", Results: results}, nil
 
-	case "", "user":
+	case "", "user", "assistant", "system":
 		var s string
 		if err := json.Unmarshal(msg.Content, &s); err == nil {
-			return message{Role: "user", Items: []contentItem{{kind: "text", text: s}}}, nil
+			role := msg.Role
+			if role == "" {
+				role = "user"
+			}
+			return message{Role: role, Items: []contentItem{{kind: "text", text: s}}}, nil
 		}
 		var items []struct {
 			Type string `json:"type"`
@@ -480,12 +486,15 @@ func decodeMessage(messageJSON string) (message, error) {
 		if err := json.Unmarshal(msg.Content, &items); err != nil {
 			return message{}, fmt.Errorf("litertgo: unrecognized message content: %s", msg.Content)
 		}
-		out := message{Role: "user", Items: make([]contentItem, 0, len(items))}
+		out := message{Role: msg.Role, Items: make([]contentItem, 0, len(items))}
 		for _, it := range items {
 			switch it.Type {
 			case "text":
 				out.Items = append(out.Items, contentItem{kind: "text", text: it.Text})
 			case "image", "audio":
+				if msg.Role == "assistant" || msg.Role == "system" {
+					return message{}, fmt.Errorf("%w: non-user %q content parts", ErrUnsupported, it.Type)
+				}
 				data, err := base64.StdEncoding.DecodeString(it.Blob)
 				if err != nil {
 					return message{}, fmt.Errorf("litertgo: decode %s blob: %w", it.Type, err)
@@ -500,6 +509,31 @@ func decodeMessage(messageJSON string) (message, error) {
 	default:
 		return message{}, fmt.Errorf("%w: %q messages", ErrUnsupported, msg.Role)
 	}
+}
+
+// decodeHistory parses the seam's MessagesJSON (a JSON array of message envelopes)
+// into a slice of lm.Message.
+func decodeHistory(messagesJSON string) ([]lm.Message, error) {
+	if messagesJSON == "" {
+		return nil, nil
+	}
+	var raw []json.RawMessage
+	if err := json.Unmarshal([]byte(messagesJSON), &raw); err != nil {
+		return nil, fmt.Errorf("litertgo: parse messages array: %w", err)
+	}
+	history := make([]lm.Message, len(raw))
+	for i, r := range raw {
+		msg, err := decodeMessage(string(r))
+		if err != nil {
+			return nil, err
+		}
+		role := msg.Role
+		if role == "assistant" {
+			role = "model"
+		}
+		history[i] = lm.Message{Role: role, Text: msg.text()}
+	}
+	return history, nil
 }
 
 // replyEnvelope wraps a turn's text and tool calls in the assistant

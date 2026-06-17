@@ -224,8 +224,9 @@ func (c Conversation) TokenCount() (int, error) {
 	if c == 0 {
 		return 0, fmt.Errorf("litertlm: conversation_get_token_count: invalid conversation")
 	}
-	var v int32
+	var v int64
 	conversationGetTokenCountFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&c))
+	v = int64(int32(v))
 	if v < 0 {
 		return 0, fmt.Errorf("litertlm: conversation_get_token_count failed (code=%d)", v)
 	}
