@@ -177,8 +177,8 @@ func TestConversation_TokenCount(t *testing.T) {
 		t.Fatalf("TokenCount before: %v", err)
 	}
 
-	if _, err := conv.SendMessage(userMessageJSON(t, "Say hello in one word."), "", litertlm.OptionalArgs(0)); err != nil {
-		t.Fatalf("SendMessage: %v", err)
+	if _, sendErr := conv.SendMessage(userMessageJSON(t, "Say hello in one word."), "", litertlm.OptionalArgs(0)); sendErr != nil {
+		t.Fatalf("SendMessage: %v", sendErr)
 	}
 
 	after, err := conv.TokenCount()

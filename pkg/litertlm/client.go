@@ -201,49 +201,6 @@ func resolveRuntimeConfig(opts []RuntimeOption) runtimeConfig {
 	return cfg
 }
 
-// openSession creates a fresh single-use Session populated from cfg.
-// Each generation call gets its own session because the C engine
-// restricts session reuse across prefill/decode cycles.
-//
-// NewSession is serialised on the Client mutex out of an abundance of
-// caution; the C-side thread-safety contract for engine_create_session
-// is not documented and contention here is negligible (sessions are
-// cheap to construct relative to inference).
-func (c *Client) openSession(cfg runtimeConfig) (Session, error) {
-	// Resolve effective sampler: per-call > Client default > none.
-	sampler := cfg.sampler
-	if sampler == nil {
-		sampler = c.cfg.defaultSampler
-	}
-
-	var sessCfg SessionConfig
-	if cfg.maxOutputTokens > 0 || sampler != nil {
-		var err error
-		sessCfg, err = NewSessionConfig()
-		if err != nil {
-			return 0, err
-		}
-		if cfg.maxOutputTokens > 0 {
-			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
-		}
-		if sampler != nil {
-			sessCfg.SetSamplerParams(*sampler)
-		}
-	}
-
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		sessCfg.Delete()
-		return 0, fmt.Errorf("litertlm: Client is closed")
-	}
-	sess, err := c.engine.NewSession(sessCfg)
-	c.mu.Unlock()
-	// SessionConfig fields are copied by NewSession; safe to delete now.
-	sessCfg.Delete()
-	return sess, err
-}
-
 // diagnoseLoadError enriches engine preparation failures with diagnostic advice
 // for GPU memory allocation limits (such as the 2 GB per-allocation limit).
 func diagnoseLoadError(err error, cfg clientConfig) error {

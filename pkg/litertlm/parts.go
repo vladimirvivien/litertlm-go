@@ -129,17 +129,6 @@ func mimeForExt(ext string, table map[string]string) string {
 	return table[strings.ToLower(ext)]
 }
 
-// partsHasBinary reports whether parts contains an image or audio
-// Part.
-func partsHasBinary(parts []Part) bool {
-	for _, p := range parts {
-		if p.kind == partImage || p.kind == partAudio {
-			return true
-		}
-	}
-	return false
-}
-
 // renderPartsContent builds the content array the C side expects for
 // a message: a list of typed entries, one per Part. Image and audio
 // bytes are base64-encoded into a "blob" field; text becomes a "text"

@@ -1,7 +1,5 @@
 package litertlm
 
-import "runtime"
-
 // Response wraps a generation result, exposing per-candidate text
 // plus optional score and token-length accessors.
 //
@@ -24,18 +22,6 @@ type Response struct {
 	// bench is populated when WithBenchmarkEnabled was set at New
 	// time; nil otherwise.
 	bench *Benchmark
-}
-
-// newResponse wraps a freshly-created Responses handle and registers
-// the cleanup. The cleanup captures `h` by value (a uintptr), not the
-// *Response itself — that's what AddCleanup demands so the cleanup
-// arg can't keep the wrapper reachable.
-func newResponse(h Responses) *Response {
-	r := &Response{handle: h}
-	runtime.AddCleanup(r, func(handle Responses) {
-		handle.Delete()
-	}, h)
-	return r
 }
 
 // newTextResponse constructs a Response carrying a single text

@@ -27,6 +27,7 @@
 package litertlm
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -67,6 +68,12 @@ var (
 	loadedOnce      bool
 	libPath         string
 	pendingLogLevel *LogLevel
+	loadAuxLibrary  = loader.LoadAuxLibrary
+	loadMainLibVar  = loadMainLib
+	loadFuncsVar    = loadFuncs
+	prepAuxSymbol   = func(lib ffi.Lib, name string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
+		return lib.Prep(name, ret, args...)
+	}
 )
 
 // LibPath returns the directory from which Load opened the shared
@@ -115,19 +122,24 @@ func Load(path, backend, libName string) error {
 	}
 
 	for _, name := range optionalLibs {
-		_, _ = loader.LoadAuxLibrary(path, name)
+		auxLib, err := loadAuxLibrary(path, name)
+		if err == nil && name == "LiteRtTopKWebGpuSampler" {
+			if _, symErr := prepAuxSymbol(auxLib, "LiteRtTopKWebGpuSampler_UpdateConfig", &ffi.TypeVoid); symErr != nil {
+				fmt.Fprintln(os.Stderr, "litertlm: warning: stale WebGPU sampler library detected (symbol LiteRtTopKWebGpuSampler_UpdateConfig is missing); WebGPU sampler is unavailable, falling back to CPU sampling")
+			}
+		}
 	}
 	for _, name := range auxLibs {
-		if _, err := loader.LoadAuxLibrary(path, name); err != nil {
+		if _, err := loadAuxLibrary(path, name); err != nil {
 			return err
 		}
 	}
 
-	mainLib, err := loadMainLib(path, backend, libName)
+	mainLib, err := loadMainLibVar(path, backend, libName)
 	if err != nil {
 		return err
 	}
-	if err := loadFuncs(mainLib); err != nil {
+	if err := loadFuncsVar(mainLib); err != nil {
 		return err
 	}
 
