@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -99,7 +100,7 @@ func buildClient(cfg clientConfig) (*Client, error) {
 	engine, err := NewEngine(settings)
 	if err != nil {
 		settings.Delete()
-		return nil, fmt.Errorf("litertlm: New: %w", err)
+		return nil, diagnoseLoadError(err, cfg)
 	}
 
 	return &Client{
@@ -241,4 +242,20 @@ func (c *Client) openSession(cfg runtimeConfig) (Session, error) {
 	// SessionConfig fields are copied by NewSession; safe to delete now.
 	sessCfg.Delete()
 	return sess, err
+}
+
+// diagnoseLoadError enriches engine preparation failures with diagnostic advice
+// for GPU memory allocation limits (such as the 2 GB per-allocation limit).
+func diagnoseLoadError(err error, cfg clientConfig) error {
+	if err == nil {
+		return nil
+	}
+	errMsg := err.Error()
+
+	// Intercept engine preparation failures which typically indicate allocation/resource issues
+	if strings.Contains(errMsg, "failed to prepare") {
+		return fmt.Errorf("litertlm: New: %w (this may indicate a GPU memory allocation issue, such as the 2 GB per-allocation limit on the WebGPU/D3D12 delegate, or insufficient VRAM; consider running on CPU or using a smaller model)", err)
+	}
+
+	return fmt.Errorf("litertlm: New: %w", err)
 }

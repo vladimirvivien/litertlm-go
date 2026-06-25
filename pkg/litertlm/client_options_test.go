@@ -1,6 +1,8 @@
 package litertlm
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -179,5 +181,54 @@ func TestBuildOptionalArgs_UnsetReturnsZero(t *testing.T) {
 	}
 	if opts != 0 {
 		t.Errorf("opts = %v, want OptionalArgs(0) when no knobs set", opts)
+	}
+}
+
+// TestDiagnoseLoadError verifies that diagnoseLoadError correctly wraps
+// engine preparation failures but leaves other errors as standard New errors.
+func TestDiagnoseLoadError(t *testing.T) {
+	tests := []struct {
+		name          string
+		err           error
+		backend       string
+		expectContain string
+	}{
+		{
+			name:          "failed to prepare error on GPU",
+			err:           fmt.Errorf("some internal error: failed to prepare model"),
+			backend:       "gpu",
+			expectContain: "GPU memory allocation issue, such as the 2 GB per-allocation limit",
+		},
+		{
+			name:          "failed to prepare error on CPU",
+			err:           fmt.Errorf("some internal error: failed to prepare runner"),
+			backend:       "cpu",
+			expectContain: "GPU memory allocation issue, such as the 2 GB per-allocation limit",
+		},
+		{
+			name:          "generic access denied is unmodified",
+			err:           fmt.Errorf("Access is denied"),
+			backend:       "gpu",
+			expectContain: "litertlm: New: Access is denied",
+		},
+		{
+			name:          "unrelated error",
+			err:           fmt.Errorf("file not found"),
+			backend:       "cpu",
+			expectContain: "litertlm: New: file not found",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := clientConfig{backend: tc.backend}
+			got := diagnoseLoadError(tc.err, cfg)
+			if got == nil {
+				t.Fatal("expected non-nil error")
+			}
+			if !strings.Contains(got.Error(), tc.expectContain) {
+				t.Errorf("diagnoseLoadError(%q) = %q, want it to contain %q", tc.err.Error(), got.Error(), tc.expectContain)
+			}
+		})
 	}
 }
