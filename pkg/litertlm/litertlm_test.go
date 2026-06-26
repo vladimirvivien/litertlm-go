@@ -60,8 +60,12 @@ func TestLoad_WebGpuSamplerStaleWarning(t *testing.T) {
 
 	// Reset loadedOnce so Load runs
 	loadedOnce = false
+	oldPending := pendingLogLevel
+	lvl := LogWarning
+	pendingLogLevel = &lvl
 	defer func() {
 		loadedOnce = true
+		pendingLogLevel = oldPending
 	}()
 
 	// Call Load

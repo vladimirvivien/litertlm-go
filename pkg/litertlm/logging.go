@@ -35,11 +35,11 @@ func SetMinLogLevel(level LogLevel) {
 // applyPendingLogLevel is called from Load after the C entry points
 // are bound. loadMu must be held by the caller.
 func applyPendingLogLevel() {
-	if pendingLogLevel == nil {
-		return
+	level := LogError
+	if pendingLogLevel != nil {
+		level = *pendingLogLevel
+		pendingLogLevel = nil
 	}
-	level := *pendingLogLevel
-	pendingLogLevel = nil
 	applyLogLevelLocked(level)
 }
 

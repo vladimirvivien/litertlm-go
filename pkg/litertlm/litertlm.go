@@ -125,7 +125,13 @@ func Load(path, backend, libName string) error {
 		auxLib, err := loadAuxLibrary(path, name)
 		if err == nil && name == "LiteRtTopKWebGpuSampler" {
 			if _, symErr := prepAuxSymbol(auxLib, "LiteRtTopKWebGpuSampler_UpdateConfig", &ffi.TypeVoid); symErr != nil {
-				fmt.Fprintln(os.Stderr, "litertlm: warning: stale WebGPU sampler library detected (symbol LiteRtTopKWebGpuSampler_UpdateConfig is missing); WebGPU sampler is unavailable, falling back to CPU sampling")
+				activeLevel := LogError
+				if pendingLogLevel != nil {
+					activeLevel = *pendingLogLevel
+				}
+				if activeLevel <= LogWarning {
+					fmt.Fprintln(os.Stderr, "litertlm: warning: stale WebGPU sampler library detected (symbol LiteRtTopKWebGpuSampler_UpdateConfig is missing); WebGPU sampler is unavailable, falling back to CPU sampling")
+				}
 			}
 		}
 	}

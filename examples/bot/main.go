@@ -71,12 +71,20 @@ func main() {
 	topP := flag.Float64("top-p", 0.95, "nucleus sampling cutoff (used when temperature > 0)")
 	topK := flag.Int("top-k", 40, "top-k sampling cutoff (used when temperature > 0)")
 	seed := flag.Int("seed", 0, "sampler RNG seed (0 = nondeterministic)")
+	logLevel := flag.String("loglevel", "quiet", "LiteRT-LM log severity floor: verbose | debug | info | warning | error | fatal | quiet (also accepts the numeric form)")
 	flag.Parse()
 
 	if *model == "" {
 		fmt.Fprintln(os.Stderr, "--model is required")
 		os.Exit(2)
 	}
+
+	level, err := parseLogLevel(*logLevel)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	litertlm.SetMinLogLevel(level)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -118,7 +126,6 @@ func main() {
 	}
 	opts = append(opts, litertlm.WithDefaultSampler(sampler))
 
-	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "new client: %v\n", err)
@@ -1100,4 +1107,24 @@ func (m *multiStringFlag) String() string {
 func (m *multiStringFlag) Set(v string) error {
 	*m = append(*m, v)
 	return nil
+}
+
+func parseLogLevel(s string) (litertlm.LogLevel, error) {
+	switch strings.ToLower(s) {
+	case "verbose", "0":
+		return litertlm.LogVerbose, nil
+	case "debug", "1":
+		return litertlm.LogDebug, nil
+	case "info", "2":
+		return litertlm.LogInfo, nil
+	case "warning", "warn", "3":
+		return litertlm.LogWarning, nil
+	case "error", "4":
+		return litertlm.LogError, nil
+	case "fatal", "5":
+		return litertlm.LogFatal, nil
+	case "quiet", "1000":
+		return litertlm.LogQuiet, nil
+	}
+	return 0, fmt.Errorf("unknown log level %q (use verbose | debug | info | warning | error | fatal | quiet)", s)
 }
