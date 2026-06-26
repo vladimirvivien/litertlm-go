@@ -30,12 +30,12 @@ Chat configuration:
 
 | Option                          | Effect                                                                                          |
 |---------------------------------|-------------------------------------------------------------------------------------------------|
-| `WithSystemPrompt(s)`           | The system message. **Pass just the content** — the C side wraps it in a `{role,content}` envelope itself. |
-| `WithTool(defs ...)`            | One or more `ToolDefinition`s the model may call. Mix `RawTool` (hand-built) and `ManagedTool` (typed handler) freely. |
-| `WithInitialMessages(msgs)`     | Seed history with prior turns. Each `Message{Role, Parts}` carries a `[]Part` body — text-only history uses `[]Part{Text("...")}`, multimodal history may include `Image` / `Audio` parts. |
-| `WithConstrainedDecoding(on)`   | Toggle the engine's constrained-decoding mode (boolean only — schema delivery is upstream-pending). |
-| `WithExtraContext(json)`        | JSON string used as the conversation preface's extra context.                                   |
-| `WithFilterChannelContentFromKVCache(on)` | Exclude the model's reasoning-channel tokens from the KV cache (won't persist across turns). |
+| `WithSystemPrompt(s)`           | The system instructions. Pass just the text — the library handles the message wrapping automatically. |
+| `WithTool(defs ...)`            | Registers one or more tools the model can call. Mix hand-built (`RawTool`) and typed (`ManagedTool`) tools. |
+| `WithInitialMessages(msgs)`     | Pre-seeds the conversation history with prior turns (supports both text and multimodal parts). |
+| `WithConstrainedDecoding(on)`   | Toggles constrained-decoding mode. |
+| `WithExtraContext(json)`        | Adds optional extra context (in JSON format) to the conversation preface. |
+| `WithFilterChannelContentFromKVCache(on)` | Excludes model reasoning-channel tokens from the KV cache to conserve cache space. |
 
 ## `Send(ctx, message)` and `Reply`
 

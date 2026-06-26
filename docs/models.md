@@ -1,9 +1,6 @@
-# Supported models
+# Supported Models
 
-litertlm-go can load any `.litertlm` model that are supported by the underlying LiteRT-LM
-runtime via a model **data processor** (see [`runtime/conversation/model_data_processor/model_data_processor_factory.cc`](https://github.com/google-ai-edge/LiteRT-LM/blob/main/runtime/conversation/model_data_processor/model_data_processor_factory.cc)). 
-
-This document lists models that have been directly tested with `litertlm-go` with minimum version: **LiteRT-LM v0.13.1**.
+`litertlm-go` is compatible with any `.litertlm` model family supported by the underlying LiteRT-LM C-API runtime. This document lists the model families that have been directly tested and verified using our integration test suite.
 
 ## Tested and supported
 

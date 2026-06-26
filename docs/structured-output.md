@@ -46,72 +46,18 @@ below.
 
 ## How it works
 
-Each attempt runs two paths in sequence: the synthesized tool-call
-path first, then the prompt-engineered fallback when the first path
-does not deliver a value.
+To maximize reliability, `GenerateData` uses a two-tier strategy to extract structured data from the model:
 
-### Primary: synthesized tool-call capture
+### 1. Primary Path: Synthesized Tool Calling (Highly Reliable)
+* **Automatic Tool Creation**: The library reflects on your Go struct `T` and automatically registers a temporary "capture tool" representing its schema.
+* **Model Directive**: It instructs the model to populate the fields of this tool to answer your prompt.
+* **Direct Extraction**: When the model calls the tool, the library captures the arguments directly and unmarshals them into your struct `T`. This path is extremely robust because it leverages the model's native function-calling capabilities.
 
-1. **Synthesize a capture tool** keyed on `reflect.TypeFor[T]()`. The
-   tool's JSON-Schema parameters are derived from `T`'s exported
-   fields (same reflection rules as `RegisterTool`). The tool is
-   cached on the Client; subsequent calls of the same type reuse the
-   registration.
-2. **Open a one-hop Chat** with the synthesized tool attached and the
-   prompt augmented with a directive instructing the model to deliver
-   the structured value as the tool's arguments.
-3. **Dispatch.** The model emits a tool call inside the family's
-   tool-call markers (`<|tool_call|>...<|/tool_call|>` for Gemma 4,
-   `<tool_call>...</tool_call>` for Qwen 3; per-family marker syntax
-   lives in upstream `runtime/conversation/model_data_processor/`). The
-   C-side `model_data_processor` extracts the JSON envelope under strict
-   parsing and surfaces `{name, arguments}`. The wrapper unmarshals
-   `arguments` into a fresh `T` and writes it to a per-call slot in
-   `ctx.Value`.
-4. **Return** the captured `*T`.
-
-Markdown fences, prose preambles, and unbalanced braces cannot appear
-in `arguments` — the family markers bracket the model's output and
-the C-side parser is strict.
-
-### Fallback: prompt-engineered + tolerant parse
-
-The fallback runs when the primary path returns nil: `T` is not a
-struct, chat construction failed, the transport errored, or the model
-declined to call the tool.
-
-1. **Schema reflection.** Walk `reflect.TypeFor[T]()` and emit a
-   compact shape hint:
-
-   ```
-   {"title": <string>, "ingredients": [<string>], "steps": [<string>]}
-   ```
-
-   `json` tags including `,omitempty` and `-` are honored. Unsupported
-   kinds (channel, func, non-string-keyed map) fail at call time.
-
-2. **Prompt augmentation.** Prepend a default instruction containing
-   the shape hint to the last text Part:
-
-   ```
-   Respond with valid JSON only — no commentary, no markdown
-   fences. The output must match this shape:
-   {shape}
-   ```
-
-   Override with `WithSchemaInstruction(s)` where `s` is a Printf
-   format string containing one `%s` placeholder for the shape.
-
-3. **Generate.** Routes through `Client.Generate` /
-   `Client.GenerateMulti`; sampler params, `WithMaxOutputTokens`, and
-   `ctx` cancellation apply.
-
-4. **Tolerant extraction.** Strip markdown fences, locate the first
-   balanced `{...}` (or `[...]` for slice `T`), respect string
-   literals so braces inside string values do not confuse the depth
-   counter.
-
-5. **Unmarshal** into `*T` via `encoding/json`.
+### 2. Fallback Path: Prompt Engineering & Tolerant JSON Parsing
+If the model does not support tool calling, or if the tool call fails:
+* **Schema Hinting**: The library generates a compact JSON shape hint from your Go struct.
+* **Prompt Augmentation**: It instructs the model to return valid JSON matching that exact shape, with no markdown formatting or commentary.
+* **Tolerant Parsing**: The library cleans up the model's output (stripping markdown fences, preambles, and conversational prose), extracts the raw JSON block, and unmarshals it into your struct `T`.
 
 ## Retry semantics
 

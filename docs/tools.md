@@ -44,19 +44,14 @@ weather, err := litertlm.RegisterTool(client, "get_weather",
 
 ### Schema reflection rules
 
-For the input struct `I`:
+When you register a Go function as a tool, the library automatically translates the input struct into a JSON Schema. The rules are simple:
 
-- Exported fields only.
-- Field name from `json:"name"` tag, else lowercased Go name.
-  `json:"-"` excludes the field entirely.
-- Description from `description:"..."` tag, optional.
-- Pointer fields are optional; non-pointer fields are required.
-- Supported kinds: `string`, `bool`, every `int*`/`uint*`/`float*`
-  width, slice / array, nested struct, pointer (unwrapped).
-- Recursion capped at depth 32.
+* **Exported Fields**: Only exported fields are included in the schema.
+* **Names & Descriptions**: Field names default to the Go field name (lowercased) or are customized using the `json` tag. You can add descriptions using the `description` tag.
+* **Required vs. Optional**: Non-pointer fields are required; pointer fields are optional.
+* **Supported Types**: Supports strings, booleans, integers, floats, slices, arrays, nested structs, and pointers.
 
-`I` must be a struct or pointer-to-struct. Other kinds return an
-error from `RegisterTool`.
+The input type `I` must be a struct or a pointer-to-struct. Other types will return an error during registration.
 
 ### Generated schema shape
 

@@ -10,30 +10,13 @@ A Go binding for Google's
 
 ## Features
 
-- **`Client`** — single-call `Generate`, range-over-func `GenerateStream`,
-  rich `GenerateResponse`, plus the `*Multi` variants for image and
-  audio inputs (`Text` / `Image` / `ImageFromFile` / `Audio` Parts).
-  Functional options for every engine setting. Context-driven
-  cancellation. → [Client guide](client.md)
-- **`Chat`** — multi-turn conversations with system prompts, tool
-  declarations, and structured `tool_calls` parsing. Per-call
-  `RuntimeOption` knobs (`WithVisualTokenBudget`,
-  `WithReturnToolRequests`, `WithMaxConcurrentTools`), parallel tool
-  dispatch, multimodal history seeding via `WithInitialMessages`,
-  and `Chat.TokenCount()` for the cumulative KV-cache token count.
-  → [Chat guide](chat.md)
-- **`GenerateData[T]` / `GenerateDataMulti[T]`** — generic helpers
-  that return `*T` populated from the model's response via a
-  synthesized tool-call capture (primary path) with a
-  prompt-engineered fallback. The `Multi` variant accepts image and
-  audio Parts. → [Structured output](structured-output.md)
-- **Low-level API** — every C-API symbol exposed as a Go method.
-  Useful when you need explicit prefill→decode, scoring, token
-  introspection, or deterministic resource lifetimes.
-  → [Low-level guide](low-level.md)
-- **Supported models** — Gemma 4 / 3 / 3n, FunctionGemma, Qwen 3 / 2.5,
-  Phi-4, and other LiteRT-LM families, with the processor mapping and
-  per-family caveats. → [Supported models](models.md)
+* 💬 **[Stateful Chat & Conversations](chat.md)** — Multi-turn chat orchestration with system prompts, message history, and token tracking.
+* 🖼️ **[Multimodal Inputs](client.md#multimodal-inputs)** — Process text, images, and audio inputs in any order using a unified, easy-to-use interface.
+* 🛠️ **[Automated Tool Calling](tools.md)** — Register standard Go functions as tools that the model can call automatically and in parallel.
+* 🎯 **[Structured JSON Output](structured-output.md)** — Extract model outputs directly into Go structs with type-safe generic helpers.
+* ⚡ **High Performance & GPU Acceleration** — Run on CPU or GPU (WebGPU/Direct3D 12) with built-in memory safety.
+* 🔍 **[Low-Level Control](low-level.md)** — Access the full LiteRT-LM C-API when you need custom inference loops, scoring, or custom memory management.
+* 🤖 **[Supported Models](models.md)** — Fully compatible with Gemma 4, Gemma 3/3n, Qwen 3/2.5, Phi-4, and other LiteRT-LM families.
 
 ## Install
 

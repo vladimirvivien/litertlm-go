@@ -14,11 +14,14 @@ client, err := litertlm.New(ctx,
 defer client.Close()
 ```
 
-## Creating `New(ctx, opts...)` clients
+## Initializing the Client
 
-`litertlm.New` aggregates the C-API `Engine` and `EngineSettings`
-into a single Client value. The Client owns both; `Close` releases
-them in the correct order.
+Use `litertlm.New` to initialize a new client. The client automatically manages the underlying inference engine and configuration settings for you. Always pair it with a deferred close to ensure resources are properly released when your application exits:
+
+```go
+client, err := litertlm.New(ctx, opts...)
+defer client.Close()
+```
 
 ## Construction options
 
@@ -117,17 +120,15 @@ type Chunk struct {
 
 ### `GenerateResponse(ctx, prompt, opts...)`
 
-`GenerateResponse` returns a rich-output via `*Response` that exposes
-per-candidate text plus score and token-length accessors:
+Use `GenerateResponse` when you need detailed metadata about the generation, such as scoring or token length, rather than just the raw text. It returns a rich `*Response` object:
 
 ```go
 resp, err := client.GenerateResponse(ctx, prompt)
 if err != nil { return err }
 
-fmt.Println(resp.Text())                    // first candidate
-fmt.Println(resp.NumCandidates())           // usually 1 with default sampler
-score, ok := resp.Score(0)                  // (placeholder, always ok=true for non-scoring sources)
-length, ok := resp.TokenLength(0)           // (false unless ScoreTexts populated it)
+fmt.Println(resp.Text())          // Get the generated reply text
+fmt.Println(resp.NumCandidates()) // Number of candidates emitted
+score, ok := resp.Score(0)        // Score of the first candidate
 ```
 
 ## Multimodal inputs
