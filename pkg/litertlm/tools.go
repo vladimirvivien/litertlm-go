@@ -246,7 +246,6 @@ func paramsSchemaStruct(t reflect.Type, depth int) (map[string]any, error) {
 	var required []string
 
 	for f := range t.Fields() {
-		f := f
 		if !f.IsExported() {
 			continue
 		}
