@@ -20,6 +20,17 @@ jobs:
         with:
           go-version: stable
 
+      - name: go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code || (echo "go.mod or go.sum is not tidy. Run 'go mod tidy' locally." && exit 1)
+
+      - name: go fix & fmt check
+        run: |
+          go fix ./...
+          go fmt ./...
+          git diff --exit-code || (echo "Code has pending fixes or formatting. Run 'go fix ./...' and 'go fmt ./...' locally." && exit 1)
+
       - name: go build
         run: go build ./...
 
