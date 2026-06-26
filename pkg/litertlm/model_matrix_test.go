@@ -66,23 +66,24 @@ func requireTestModelsDir(t *testing.T) (libDir string, models []string) {
 	return libDir, models
 }
 
-// newMatrixClient builds a Client for one model on the backend named by
-// LITERTLM_TEST_BACKEND (default "cpu") and registers Close on cleanup
+// newMatrixClient builds a Client for one model and registers Close on cleanup
 // so the next subtest's model loads into freed memory.
 func newMatrixClient(t *testing.T, libDir, modelPath string) *litertlm.Client {
 	t.Helper()
-	backend := os.Getenv("LITERTLM_TEST_BACKEND")
-	if backend == "" {
-		backend = "cpu"
-	}
-	client, err := litertlm.New(context.Background(),
+
+	var opts []litertlm.Option
+	opts = append(opts,
 		litertlm.WithLib(libDir),
 		litertlm.WithModel(modelPath),
-		litertlm.WithBackend(backend),
 		litertlm.WithMaxTokens(1024),
 	)
+	if backend := os.Getenv("LITERTLM_TEST_BACKEND"); backend != "" {
+		opts = append(opts, litertlm.WithBackend(backend))
+	}
+
+	client, err := litertlm.New(context.Background(), opts...)
 	if err != nil {
-		t.Fatalf("New(%s, backend=%s): %v", filepath.Base(modelPath), backend, err)
+		t.Fatalf("New(%s): %v", filepath.Base(modelPath), err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
 	return client

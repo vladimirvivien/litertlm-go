@@ -70,11 +70,11 @@ func stripCodeFences(text string) string {
 	if !strings.HasPrefix(text, "```") {
 		return text
 	}
-	nl := strings.IndexByte(text, '\n')
-	if nl < 0 {
+	_, after, ok := strings.Cut(text, "\n")
+	if !ok {
 		return text
 	}
-	inner := text[nl+1:]
+	inner := after
 	if i := strings.LastIndex(inner, "```"); i >= 0 {
 		inner = inner[:i]
 	}

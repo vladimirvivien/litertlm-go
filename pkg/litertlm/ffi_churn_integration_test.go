@@ -51,7 +51,7 @@ func TestFFIChurn_Generate(t *testing.T) {
 	client := churnClient(t)
 	ctx := context.Background()
 	const n = 150
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out, err := client.Generate(ctx, "What is the capital of France?",
 			litertlm.WithMaxOutputTokens(8))
 		if err != nil {
@@ -70,7 +70,7 @@ func TestFFIChurn_ChatSendClose(t *testing.T) {
 	client := churnClient(t)
 	ctx := context.Background()
 	const n = 150
-	for i := 0; i < n; i++ {
+	for i := range n {
 		chat, err := client.NewChat(ctx)
 		if err != nil {
 			t.Fatalf("NewChat iter %d/%d: %v", i, n, err)
@@ -100,7 +100,7 @@ func TestFFIChurn_ResponseAccessors(t *testing.T) {
 	client := churnClient(t, litertlm.WithBenchmarkEnabled())
 	ctx := context.Background()
 	const n = 150
-	for i := 0; i < n; i++ {
+	for i := range n {
 		resp, err := client.GenerateResponse(ctx, "Name one primary color.",
 			litertlm.WithMaxOutputTokens(4))
 		if err != nil {
@@ -127,7 +127,7 @@ func TestFFIChurn_ResponseAccessors(t *testing.T) {
 func TestFFIChurn_Tokenize(t *testing.T) {
 	client := churnClient(t)
 	const n = 1000
-	for i := 0; i < n; i++ {
+	for i := range n {
 		toks, err := client.Tokenize("the quick brown fox jumps over the lazy dog")
 		if err != nil {
 			t.Fatalf("Tokenize iter %d/%d: %v", i, n, err)

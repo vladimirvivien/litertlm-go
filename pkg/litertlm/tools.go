@@ -245,8 +245,8 @@ func paramsSchemaStruct(t reflect.Type, depth int) (map[string]any, error) {
 	properties := map[string]any{}
 	var required []string
 
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		if !f.IsExported() {
 			continue
 		}

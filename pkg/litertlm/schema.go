@@ -61,8 +61,8 @@ func shapeOfDepth(t reflect.Type, depth int) (string, error) {
 		var b strings.Builder
 		b.WriteString("{")
 		first := true
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
+		for f := range t.Fields() {
+			f := f
 			if !f.IsExported() {
 				continue
 			}

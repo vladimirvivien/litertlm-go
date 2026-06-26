@@ -384,7 +384,7 @@ func (b *bot) handle(ctx context.Context, msg string) error {
 // example.
 func extractMediaPaths(msg string) []string {
 	var paths []string
-	for _, raw := range strings.Fields(msg) {
+	for raw := range strings.FieldsSeq(msg) {
 		token := strings.Trim(raw, "\"'`")
 		token = strings.TrimRight(token, ",!?;:.")
 		ext := strings.ToLower(filepath.Ext(token))

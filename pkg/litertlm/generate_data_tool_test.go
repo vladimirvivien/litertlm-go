@@ -128,7 +128,7 @@ func TestGetOrSynthesizeCaptureTool_ConcurrentSameType(t *testing.T) {
 	results := make([]*ManagedTool[capturePerson, struct{}], N)
 	errs := make([]error, N)
 	wg.Add(N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		go func(i int) {
 			defer wg.Done()
 			results[i], errs[i] = getOrSynthesizeCaptureTool[capturePerson](c)
@@ -193,7 +193,7 @@ func TestCaptureHandler_ConcurrentDistinctSlots(t *testing.T) {
 	const N = 16
 	var wg sync.WaitGroup
 	slots := make([]*capturePerson, N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

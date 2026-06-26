@@ -39,11 +39,11 @@ func snapshotBenchmark(h BenchmarkInfo) *Benchmark {
 		PrefillTokensPerSec: make([]float64, prefillTurns),
 		DecodeTokensPerSec:  make([]float64, decodeTurns),
 	}
-	for i := 0; i < prefillTurns; i++ {
+	for i := range prefillTurns {
 		b.PrefillTokenCounts[i] = h.PrefillTokenCount(i)
 		b.PrefillTokensPerSec[i] = h.PrefillTokensPerSec(i)
 	}
-	for i := 0; i < decodeTurns; i++ {
+	for i := range decodeTurns {
 		b.DecodeTokenCounts[i] = h.DecodeTokenCount(i)
 		b.DecodeTokensPerSec[i] = h.DecodeTokensPerSec(i)
 	}

@@ -53,7 +53,7 @@ func main() {
 
 	fmt.Printf("prompt: %q\n\n", *prompt)
 
-	for _, raw := range strings.Split(*candidates, ",") {
+	for raw := range strings.SplitSeq(*candidates, ",") {
 		text := strings.TrimSpace(raw)
 		if text == "" {
 			continue

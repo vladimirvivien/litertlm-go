@@ -54,33 +54,33 @@ func TestShapeOf_Table(t *testing.T) {
 		typ  reflect.Type
 		want string
 	}{
-		{"flat", reflect.TypeOf(schemaFlat{}),
+		{"flat", reflect.TypeFor[schemaFlat](),
 			`{"name": <string>, "age": <number>}`},
-		{"tagged", reflect.TypeOf(schemaTagged{}),
+		{"tagged", reflect.TypeFor[schemaTagged](),
 			`{"name": <string>, "id": <number>}`},
-		{"ignored field", reflect.TypeOf(schemaIgnored{}),
+		{"ignored field", reflect.TypeFor[schemaIgnored](),
 			`{"public": <string>}`},
-		{"unexported field", reflect.TypeOf(schemaUnexported{}),
+		{"unexported field", reflect.TypeFor[schemaUnexported](),
 			`{"public": <string>}`},
-		{"nested", reflect.TypeOf(schemaNested{}),
+		{"nested", reflect.TypeFor[schemaNested](),
 			`{"title": <string>, "ingredients": [<string>]}`},
-		{"deep", reflect.TypeOf(schemaDeep{}),
+		{"deep", reflect.TypeFor[schemaDeep](),
 			`{"items": [{"title": <string>, "ingredients": [<string>]}]}`},
-		{"map", reflect.TypeOf(schemaWithMap{}),
+		{"map", reflect.TypeFor[schemaWithMap](),
 			`{"counts": {"<key>": <number>}}`},
-		{"pointer field", reflect.TypeOf(schemaWithPointer{}),
+		{"pointer field", reflect.TypeFor[schemaWithPointer](),
 			`{"friend": {"name": <string>, "age": <number>}}`},
-		{"bool and float", reflect.TypeOf(schemaWithBool{}),
+		{"bool and float", reflect.TypeFor[schemaWithBool](),
 			`{"active": <boolean>, "score": <number>}`},
-		{"top-level slice", reflect.TypeOf([]schemaFlat{}),
+		{"top-level slice", reflect.TypeFor[[]schemaFlat](),
 			`[{"name": <string>, "age": <number>}]`},
-		{"top-level array", reflect.TypeOf([3]int{}),
+		{"top-level array", reflect.TypeFor[[3]int](),
 			`[<number>]`},
-		{"top-level pointer", reflect.TypeOf((*schemaFlat)(nil)),
+		{"top-level pointer", reflect.TypeFor[*schemaFlat](),
 			`{"name": <string>, "age": <number>}`},
-		{"plain string", reflect.TypeOf(""),
+		{"plain string", reflect.TypeFor[string](),
 			`<string>`},
-		{"plain int", reflect.TypeOf(0),
+		{"plain int", reflect.TypeFor[int](),
 			`<number>`},
 	}
 	for _, tt := range tests {
@@ -111,9 +111,9 @@ func TestShapeOf_UnsupportedKinds(t *testing.T) {
 		name string
 		typ  reflect.Type
 	}{
-		{"channel", reflect.TypeOf(withChan{})},
-		{"func", reflect.TypeOf(withFunc{})},
-		{"map[int]X", reflect.TypeOf(withMapNonStringKey{})},
+		{"channel", reflect.TypeFor[withChan]()},
+		{"func", reflect.TypeFor[withFunc]()},
+		{"map[int]X", reflect.TypeFor[withMapNonStringKey]()},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := shapeOf(tt.typ)
@@ -134,7 +134,7 @@ func TestShapeOf_RecursionLimit(t *testing.T) {
 	// `*rec` unwraps to `rec`, which has `*rec` again. Each level
 	// increments depth; we should hit the cap and return an error
 	// rather than blowing the stack.
-	_, err := shapeOf(reflect.TypeOf(rec{}))
+	_, err := shapeOf(reflect.TypeFor[rec]())
 	if err == nil || !strings.Contains(err.Error(), "deeper than") {
 		t.Errorf("expected recursion-limit error, got %v", err)
 	}
@@ -145,13 +145,13 @@ func TestIsArrayType(t *testing.T) {
 		typ  reflect.Type
 		want bool
 	}{
-		{reflect.TypeOf(""), false},
-		{reflect.TypeOf(0), false},
-		{reflect.TypeOf(schemaFlat{}), false},
-		{reflect.TypeOf([]int{}), true},
-		{reflect.TypeOf([3]int{}), true},
-		{reflect.TypeOf((*[]int)(nil)), true},
-		{reflect.TypeOf((*schemaFlat)(nil)), false},
+		{reflect.TypeFor[string](), false},
+		{reflect.TypeFor[int](), false},
+		{reflect.TypeFor[schemaFlat](), false},
+		{reflect.TypeFor[[]int](), true},
+		{reflect.TypeFor[[3]int](), true},
+		{reflect.TypeFor[*[]int](), true},
+		{reflect.TypeFor[*schemaFlat](), false},
 	}
 	for _, c := range cases {
 		if got := isArrayType(c.typ); got != c.want {
@@ -168,7 +168,7 @@ func TestJSONFieldName(t *testing.T) {
 		D string `json:"-"`
 		E string `json:",omitempty"`
 	}
-	st := reflect.TypeOf(s{})
+	st := reflect.TypeFor[s]()
 	cases := []struct {
 		field string
 		want  string
