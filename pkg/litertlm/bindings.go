@@ -92,6 +92,9 @@ var (
 	conversationOptionalArgsSetVisualTokenBudgetFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_set_visual_token_budget",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	conversationOptionalArgsSetMaxOutputTokensFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_max_output_tokens",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
 
 	// ---- Logging ----
 	setMinLogLevelFunc = newLazyFun(
@@ -143,6 +146,32 @@ var (
 	engineSettingsSetLitertDispatchLibDirFunc = newLazyFun(
 		"litert_lm_engine_settings_set_litert_dispatch_lib_dir",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer)
+	engineSettingsCreateFromRawFileDescriptorFunc = newLazyFun(
+		"litert_lm_engine_settings_create_from_raw_file_descriptor",
+		&ffi.TypePointer,
+		&ffi.TypeSint32,  // fd
+		&ffi.TypePointer, // backend
+		&ffi.TypePointer, // vision_backend
+		&ffi.TypePointer, // audio_backend
+	)
+	engineSettingsSetNumThreadsFunc = newLazyFun(
+		"litert_lm_engine_settings_set_num_threads",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetAudioNumThreadsFunc = newLazyFun(
+		"litert_lm_engine_settings_set_audio_num_threads",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetLoraRankFunc = newLazyFun(
+		"litert_lm_engine_settings_set_lora_rank",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetSupportedLoraRanksFunc = newLazyFun(
+		"litert_lm_engine_settings_set_supported_lora_ranks",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
+	engineSettingsSetAudioLoraRankFunc = newLazyFun(
+		"litert_lm_engine_settings_set_audio_lora_rank",
+		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetSupportedAudioLoraRanksFunc = newLazyFun(
+		"litert_lm_engine_settings_set_supported_audio_lora_ranks",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
 
 	// ---- Engine ----
 	engineCreateFunc = newLazyFun(
@@ -311,6 +340,11 @@ var (
 		&ffi.TypePointer, // returned const char*
 		&ffi.TypePointer, // conversation
 		&ffi.TypePointer, // message_json
+	)
+	conversationRenderPrefaceToStringFunc = newLazyFun(
+		"litert_lm_conversation_render_preface_to_string",
+		&ffi.TypePointer, // returned const char*
+		&ffi.TypePointer, // conversation
 	)
 	conversationGetBenchmarkInfoFunc = newLazyFun(
 		"litert_lm_conversation_get_benchmark_info",

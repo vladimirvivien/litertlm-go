@@ -2,6 +2,7 @@ package litertlm
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/utils"
@@ -198,4 +199,127 @@ func (e Engine) NewConversation(cfg ConversationConfig) (Conversation, error) {
 		unsafe.Pointer(&e),
 		unsafe.Pointer(&cfg),
 	)
+}
+
+// NewEngineSettingsFromFd constructs an EngineSettings handle from a raw file descriptor.
+// The engine takes ownership of the file descriptor and will close it when done.
+// vision and audio may be nil to leave those backends unset. Caller must Delete().
+func NewEngineSettingsFromFd(fd int, backend string, vision, audio *string) (EngineSettings, error) {
+	backendPtr, err := utils.BytePtrFromString(backend)
+	if err != nil {
+		return 0, err
+	}
+	var visionPtr, audioPtr *byte
+	if vision != nil {
+		visionPtr, err = utils.BytePtrFromString(*vision)
+		if err != nil {
+			return 0, err
+		}
+	}
+	if audio != nil {
+		audioPtr, err = utils.BytePtrFromString(*audio)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	fdVal := int32(fd)
+	return callForHandle[EngineSettings](engineSettingsCreateFromRawFileDescriptorFunc, "engine_settings_create_from_raw_file_descriptor",
+		unsafe.Pointer(&fdVal),
+		unsafe.Pointer(&backendPtr),
+		unsafe.Pointer(&visionPtr),
+		unsafe.Pointer(&audioPtr),
+	)
+}
+
+// SetNumThreads sets the number of threads for the CPU backend.
+func (s EngineSettings) SetNumThreads(n int) {
+	if s == 0 {
+		return
+	}
+	val := int32(n)
+	engineSettingsSetNumThreadsFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&val))
+}
+
+// SetAudioNumThreads sets the number of threads for the audio CPU backend.
+func (s EngineSettings) SetAudioNumThreads(n int) {
+	if s == 0 {
+		return
+	}
+	val := int32(n)
+	engineSettingsSetAudioNumThreadsFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&val))
+}
+
+// SetLoraRank sets the LoRA rank for the engine.
+func (s EngineSettings) SetLoraRank(rank int) {
+	if s == 0 {
+		return
+	}
+	val := int32(rank)
+	engineSettingsSetLoraRankFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&val))
+}
+
+// SetSupportedLoraRanks sets the supported LoRA ranks for the engine.
+func (s EngineSettings) SetSupportedLoraRanks(ranks []int) error {
+	if s == 0 {
+		return fmt.Errorf("litertlm: SetSupportedLoraRanks: settings is nil")
+	}
+	if len(ranks) == 0 {
+		return nil
+	}
+	ptrs := make([]int32, len(ranks))
+	for i, r := range ranks {
+		ptrs[i] = int32(r)
+	}
+	arrPtr := unsafe.Pointer(&ptrs[0])
+	n := uint64(len(ranks))
+	var status int32
+	engineSettingsSetSupportedLoraRanksFunc.Call(
+		unsafe.Pointer(&status),
+		unsafe.Pointer(&s),
+		unsafe.Pointer(&arrPtr),
+		unsafe.Pointer(&n),
+	)
+	runtime.KeepAlive(ptrs)
+	if status != 0 {
+		return fmt.Errorf("litertlm: SetSupportedLoraRanks failed (code=%d)", status)
+	}
+	return nil
+}
+
+// SetAudioLoraRank sets the audio LoRA rank for the engine.
+func (s EngineSettings) SetAudioLoraRank(rank int) {
+	if s == 0 {
+		return
+	}
+	val := int32(rank)
+	engineSettingsSetAudioLoraRankFunc.Call(nil, unsafe.Pointer(&s), unsafe.Pointer(&val))
+}
+
+// SetSupportedAudioLoraRanks sets the supported audio LoRA ranks for the engine.
+func (s EngineSettings) SetSupportedAudioLoraRanks(ranks []int) error {
+	if s == 0 {
+		return fmt.Errorf("litertlm: SetSupportedAudioLoraRanks: settings is nil")
+	}
+	if len(ranks) == 0 {
+		return nil
+	}
+	ptrs := make([]int32, len(ranks))
+	for i, r := range ranks {
+		ptrs[i] = int32(r)
+	}
+	arrPtr := unsafe.Pointer(&ptrs[0])
+	n := uint64(len(ranks))
+	var status int32
+	engineSettingsSetSupportedAudioLoraRanksFunc.Call(
+		unsafe.Pointer(&status),
+		unsafe.Pointer(&s),
+		unsafe.Pointer(&arrPtr),
+		unsafe.Pointer(&n),
+	)
+	runtime.KeepAlive(ptrs)
+	if status != 0 {
+		return fmt.Errorf("litertlm: SetSupportedAudioLoraRanks failed (code=%d)", status)
+	}
+	return nil
 }

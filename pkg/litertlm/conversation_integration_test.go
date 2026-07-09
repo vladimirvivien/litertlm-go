@@ -1,8 +1,10 @@
 package litertlm_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -111,6 +113,19 @@ func TestConversation_RenderMessage_NonEmpty(t *testing.T) {
 	}
 }
 
+func TestConversation_RenderPreface(t *testing.T) {
+	conv := buildIntegrationConversation(t)
+
+	rendered, err := conv.RenderPreface()
+	if err != nil {
+		t.Fatalf("RenderPreface: %v", err)
+	}
+	if rendered == "" {
+		t.Fatal("RenderPreface returned empty string")
+	}
+	t.Logf("Rendered preface: %q", rendered)
+}
+
 // Re-rendering the same JSON produces byte-identical output. The
 // template is deterministic and stateless across calls.
 func TestConversation_RenderMessage_Deterministic(t *testing.T) {
@@ -200,5 +215,67 @@ func TestConversation_TokenCount_Invalid(t *testing.T) {
 	var conv litertlm.Conversation
 	if _, err := conv.TokenCount(); err == nil {
 		t.Fatal("expected error from zero-value Conversation")
+	}
+}
+
+func TestClient_WithModelFd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("raw file descriptor model loading is unsupported on Windows due to CRT boundary limits")
+	}
+	libDir, modelPath := requireTestModel(t)
+
+	if err := litertlm.Load(libDir, "cpu", ""); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	file, err := os.Open(modelPath)
+	if err != nil {
+		t.Fatalf("failed to open model file: %v", err)
+	}
+
+	client, err := litertlm.New(context.Background(),
+		litertlm.WithLib(libDir),
+		litertlm.WithModelFd(int(file.Fd())),
+	)
+	if err != nil {
+		_ = file.Close()
+		t.Fatalf("New with FD: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	// Simple generation check to verify it loaded correctly.
+	res, err := client.Generate(context.Background(), "Paris is the capital of")
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(res), "france") {
+		t.Logf("expected answer to contain 'france', got: %q", res)
+	}
+}
+
+func TestClient_WithThreads(t *testing.T) {
+	libDir, modelPath := requireTestModel(t)
+
+	if err := litertlm.Load(libDir, "cpu", ""); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	client, err := litertlm.New(context.Background(),
+		litertlm.WithLib(libDir),
+		litertlm.WithModel(modelPath),
+		litertlm.WithNumThreads(2),
+	)
+	if err != nil {
+		t.Fatalf("New with threads: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	// Simple generation check to verify it loaded correctly.
+	res, err := client.Generate(context.Background(), "Paris is the capital of")
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(res), "france") {
+		t.Logf("expected answer to contain 'france', got: %q", res)
 	}
 }

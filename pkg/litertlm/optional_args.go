@@ -37,6 +37,18 @@ func (o OptionalArgs) SetVisualTokenBudget(n int) {
 	)
 }
 
+// SetMaxOutputTokens caps the number of output tokens produced per turn.
+func (o OptionalArgs) SetMaxOutputTokens(n int) {
+	if o == 0 {
+		return
+	}
+	conversationOptionalArgsSetMaxOutputTokensFunc.Call(
+		nil,
+		unsafe.Pointer(&o),
+		unsafe.Pointer(new(int32(n))),
+	)
+}
+
 // Clone returns a new Conversation that mirrors c's prefilled state —
 // activation frames and KV cache included. O(1) compared to opening a
 // new Conversation and re-prefilling the same prompt.

@@ -739,14 +739,19 @@ func sendOne(ctx context.Context, transport chatTransport, msgJSON string, opts 
 // default) when no per-call knob is set. Caller must Delete the
 // returned handle.
 func buildOptionalArgs(cfg runtimeConfig) (OptionalArgs, error) {
-	if cfg.visualTokenBudget == nil {
+	if cfg.visualTokenBudget == nil && cfg.maxOutputTokens <= 0 {
 		return 0, nil
 	}
 	o, err := NewOptionalArgs()
 	if err != nil {
 		return 0, fmt.Errorf("litertlm: per-call options: %w", err)
 	}
-	o.SetVisualTokenBudget(*cfg.visualTokenBudget)
+	if cfg.visualTokenBudget != nil {
+		o.SetVisualTokenBudget(*cfg.visualTokenBudget)
+	}
+	if cfg.maxOutputTokens > 0 {
+		o.SetMaxOutputTokens(cfg.maxOutputTokens)
+	}
 	return o, nil
 }
 

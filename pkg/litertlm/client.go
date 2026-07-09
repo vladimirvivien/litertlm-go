@@ -74,8 +74,8 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		opt(&cfg)
 	}
 
-	if cfg.modelPath == "" {
-		return nil, fmt.Errorf("litertlm: New: model path required (WithModel or %s env)", envModel)
+	if cfg.modelPath == "" && cfg.modelFd == nil {
+		return nil, fmt.Errorf("litertlm: New: model path or raw file descriptor required")
 	}
 
 	return runCancellable(ctx,
@@ -91,11 +91,21 @@ func buildClient(cfg clientConfig) (*Client, error) {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 
-	settings, err := NewEngineSettings(cfg.modelPath, cfg.backend, cfg.visionBackend, cfg.audioBackend)
+	var settings EngineSettings
+	var err error
+	if cfg.modelFd != nil {
+		settings, err = NewEngineSettingsFromFd(*cfg.modelFd, cfg.backend, cfg.visionBackend, cfg.audioBackend)
+	} else {
+		settings, err = NewEngineSettings(cfg.modelPath, cfg.backend, cfg.visionBackend, cfg.audioBackend)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
-	applySettings(settings, &cfg)
+	err = applySettings(settings, &cfg)
+	if err != nil {
+		settings.Delete()
+		return nil, fmt.Errorf("litertlm: New: %w", err)
+	}
 
 	engine, err := NewEngine(settings)
 	if err != nil {
@@ -114,7 +124,7 @@ func buildClient(cfg clientConfig) (*Client, error) {
 // individual EngineSettings setters. Only setters whose corresponding
 // option was supplied (or that have a non-zero default) actually run,
 // preserving the C-side defaults for everything else.
-func applySettings(s EngineSettings, cfg *clientConfig) {
+func applySettings(s EngineSettings, cfg *clientConfig) error {
 	if cfg.maxTokens > 0 {
 		s.SetMaxNumTokens(cfg.maxTokens)
 	}
@@ -142,6 +152,29 @@ func applySettings(s EngineSettings, cfg *clientConfig) {
 	if cfg.maxImages != nil {
 		s.SetMaxNumImages(*cfg.maxImages)
 	}
+	if cfg.numThreads != nil {
+		s.SetNumThreads(*cfg.numThreads)
+	}
+	if cfg.audioNumThreads != nil {
+		s.SetAudioNumThreads(*cfg.audioNumThreads)
+	}
+	if cfg.loraRank != nil {
+		s.SetLoraRank(*cfg.loraRank)
+	}
+	if len(cfg.supportedLoraRanks) > 0 {
+		if err := s.SetSupportedLoraRanks(cfg.supportedLoraRanks); err != nil {
+			return err
+		}
+	}
+	if cfg.audioLoraRank != nil {
+		s.SetAudioLoraRank(*cfg.audioLoraRank)
+	}
+	if len(cfg.supportedAudioLoraRanks) > 0 {
+		if err := s.SetSupportedAudioLoraRanks(cfg.supportedAudioLoraRanks); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close releases the engine and engine-settings handles. Safe to call

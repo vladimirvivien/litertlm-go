@@ -197,6 +197,24 @@ func (c Conversation) RenderMessage(messageJSON string) (string, error) {
 	return utils.BytePtrToString(rawPtr), nil
 }
 
+// RenderPreface renders the conversation's preface according to the
+// template. The C side owns the returned buffer; this method copies
+// into Go memory before returning.
+func (c Conversation) RenderPreface() (string, error) {
+	if c == 0 {
+		return "", fmt.Errorf("litertlm: render_preface: invalid conversation")
+	}
+	var rawPtr *byte
+	conversationRenderPrefaceToStringFunc.Call(
+		unsafe.Pointer(&rawPtr),
+		unsafe.Pointer(&c),
+	)
+	if rawPtr == nil {
+		return "", fmt.Errorf("litertlm: render_preface: C side returned NULL")
+	}
+	return utils.BytePtrToString(rawPtr), nil
+}
+
 // Cancel requests cancellation of an in-flight streaming send.
 func (c Conversation) Cancel() {
 	if c == 0 {

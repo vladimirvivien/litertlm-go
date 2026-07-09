@@ -184,6 +184,40 @@ func TestBuildOptionalArgs_UnsetReturnsZero(t *testing.T) {
 	}
 }
 
+func TestBuildOptionalArgs_WithMaxOutputTokens(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("skipping test requiring real library")
+	}
+	cfg := runtimeConfig{maxOutputTokens: 128}
+	opts, err := buildOptionalArgs(cfg)
+	if err != nil {
+		t.Fatalf("buildOptionalArgs: %v", err)
+	}
+	defer opts.Delete()
+	if opts == 0 {
+		t.Fatal("expected non-zero OptionalArgs when maxOutputTokens is set")
+	}
+}
+
+func TestBuildOptionalArgs_WithBudgetAndMaxTokens(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("skipping test requiring real library")
+	}
+	vtb := 256
+	cfg := runtimeConfig{
+		visualTokenBudget: &vtb,
+		maxOutputTokens:   128,
+	}
+	opts, err := buildOptionalArgs(cfg)
+	if err != nil {
+		t.Fatalf("buildOptionalArgs: %v", err)
+	}
+	defer opts.Delete()
+	if opts == 0 {
+		t.Fatal("expected non-zero OptionalArgs when visualTokenBudget and maxOutputTokens are set")
+	}
+}
+
 // TestDiagnoseLoadError verifies that diagnoseLoadError correctly wraps
 // engine preparation failures but leaves other errors as standard New errors.
 func TestDiagnoseLoadError(t *testing.T) {
@@ -230,5 +264,49 @@ func TestDiagnoseLoadError(t *testing.T) {
 				t.Errorf("diagnoseLoadError(%q) = %q, want it to contain %q", tc.err.Error(), got.Error(), tc.expectContain)
 			}
 		})
+	}
+}
+
+// TestOption_NewV014Options threads threading and LoRA configurations.
+func TestOption_NewV014Options(t *testing.T) {
+	cfg := clientConfig{}
+
+	if cfg.modelFd != nil || cfg.numThreads != nil || cfg.audioNumThreads != nil || cfg.loraRank != nil || cfg.audioLoraRank != nil {
+		t.Fatal("new options should default to nil")
+	}
+
+	WithModelFd(10)(&cfg)
+	if cfg.modelFd == nil || *cfg.modelFd != 10 {
+		t.Errorf("modelFd = %v, want 10", cfg.modelFd)
+	}
+
+	WithNumThreads(4)(&cfg)
+	if cfg.numThreads == nil || *cfg.numThreads != 4 {
+		t.Errorf("numThreads = %v, want 4", cfg.numThreads)
+	}
+
+	WithAudioNumThreads(2)(&cfg)
+	if cfg.audioNumThreads == nil || *cfg.audioNumThreads != 2 {
+		t.Errorf("audioNumThreads = %v, want 2", cfg.audioNumThreads)
+	}
+
+	WithLoRARank(8)(&cfg)
+	if cfg.loraRank == nil || *cfg.loraRank != 8 {
+		t.Errorf("loraRank = %v, want 8", cfg.loraRank)
+	}
+
+	WithSupportedLoRARanks([]int{8, 16})(&cfg)
+	if len(cfg.supportedLoraRanks) != 2 || cfg.supportedLoraRanks[0] != 8 || cfg.supportedLoraRanks[1] != 16 {
+		t.Errorf("supportedLoraRanks = %v, want [8, 16]", cfg.supportedLoraRanks)
+	}
+
+	WithAudioLoRARank(4)(&cfg)
+	if cfg.audioLoraRank == nil || *cfg.audioLoraRank != 4 {
+		t.Errorf("audioLoraRank = %v, want 4", cfg.audioLoraRank)
+	}
+
+	WithSupportedAudioLoRARanks([]int{4, 8})(&cfg)
+	if len(cfg.supportedAudioLoraRanks) != 2 || cfg.supportedAudioLoraRanks[0] != 4 || cfg.supportedAudioLoraRanks[1] != 8 {
+		t.Errorf("supportedAudioLoraRanks = %v, want [4, 8]", cfg.supportedAudioLoraRanks)
 	}
 }

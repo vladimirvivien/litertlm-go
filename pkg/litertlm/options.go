@@ -34,6 +34,14 @@ type clientConfig struct {
 	maxImages *int
 
 	defaultSampler *SamplerParams
+
+	modelFd                 *int
+	numThreads              *int
+	audioNumThreads         *int
+	loraRank                *int
+	supportedLoraRanks      []int
+	audioLoraRank           *int
+	supportedAudioLoraRanks []int
 }
 
 // runtimeConfig is the resolved per-call configuration.
@@ -177,6 +185,42 @@ func WithDefaultSampler(p SamplerParams) Option {
 		pp := p
 		c.defaultSampler = &pp
 	}
+}
+
+// WithModelFd sets the raw file descriptor of the model file to load.
+// The engine takes ownership of this file descriptor and closes it when done.
+func WithModelFd(fd int) Option {
+	return func(c *clientConfig) { c.modelFd = &fd }
+}
+
+// WithNumThreads sets the number of threads for the CPU backend.
+func WithNumThreads(n int) Option {
+	return func(c *clientConfig) { c.numThreads = &n }
+}
+
+// WithAudioNumThreads sets the number of threads for the audio CPU backend.
+func WithAudioNumThreads(n int) Option {
+	return func(c *clientConfig) { c.audioNumThreads = &n }
+}
+
+// WithLoRARank sets the LoRA rank for the engine.
+func WithLoRARank(rank int) Option {
+	return func(c *clientConfig) { c.loraRank = &rank }
+}
+
+// WithSupportedLoRARanks sets the supported LoRA ranks for the engine.
+func WithSupportedLoRARanks(ranks []int) Option {
+	return func(c *clientConfig) { c.supportedLoraRanks = ranks }
+}
+
+// WithAudioLoRARank sets the audio LoRA rank for the engine.
+func WithAudioLoRARank(rank int) Option {
+	return func(c *clientConfig) { c.audioLoraRank = &rank }
+}
+
+// WithSupportedAudioLoRARanks sets the supported audio LoRA ranks for the engine.
+func WithSupportedAudioLoRARanks(ranks []int) Option {
+	return func(c *clientConfig) { c.supportedAudioLoraRanks = ranks }
 }
 
 // ---- per-call options ----
