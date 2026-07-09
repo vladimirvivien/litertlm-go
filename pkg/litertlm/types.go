@@ -42,3 +42,6 @@ type OptionalArgs uintptr
 
 // JsonResponse wraps a LiteRtLmJsonResponse* returned by Conversation calls.
 type JsonResponse uintptr
+
+// InputData wraps a LiteRtLmInputData* opaque pointer representing input content.
+type InputData uintptr

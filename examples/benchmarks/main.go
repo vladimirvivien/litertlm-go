@@ -73,9 +73,14 @@ func main() {
 	}
 	defer sess.Delete()
 
-	resp, err := sess.GenerateContent([]litertlm.InputData{
-		litertlm.NewTextInputString(*prompt),
-	})
+	in, err := litertlm.NewTextInputString(*prompt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create input: %v\n", err)
+		os.Exit(1)
+	}
+	defer in.Delete()
+
+	resp, err := sess.GenerateContent([]litertlm.InputData{in})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session generate: %v\n", err)
 		os.Exit(1)

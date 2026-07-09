@@ -14,9 +14,10 @@
 //	session, _ := engine.NewSession(0)           // 0 = default config
 //	defer session.Delete()
 //
-//	resp, _ := session.GenerateContent([]litertlm.InputData{
-//	    litertlm.NewTextInputString("What is the tallest building in the world?"),
-//	})
+//	in, _ := litertlm.NewTextInputString("What is the tallest building in the world?")
+//	defer in.Delete()
+//
+//	resp, _ := session.GenerateContent([]litertlm.InputData{in})
 //	defer resp.Delete()
 //	fmt.Println(resp.Text(0))
 //

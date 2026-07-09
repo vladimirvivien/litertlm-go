@@ -197,23 +197,54 @@ func assistantText(envelope string) (string, error) {
 // []InputData expected by Session.GenerateContent and
 // Session.GenerateContentStreamCh. Image and audio parts emit their
 // terminating End-marker automatically.
-func partsToInputs(parts []Part) []InputData {
+func partsToInputs(parts []Part) ([]InputData, error) {
 	out := make([]InputData, 0, len(parts)*2)
 	for _, p := range parts {
 		switch p.kind {
 		case partText:
-			out = append(out, NewTextInputString(p.text))
+			in, err := NewTextInputString(p.text)
+			if err != nil {
+				for _, prev := range out {
+					prev.Delete()
+				}
+				return nil, err
+			}
+			out = append(out, in)
 		case partImage:
-			out = append(out,
-				NewBinaryInput(InputImage, p.data),
-				NewBinaryInput(InputImageEnd, nil),
-			)
+			in1, err := NewBinaryInput(InputImage, p.data)
+			if err != nil {
+				for _, prev := range out {
+					prev.Delete()
+				}
+				return nil, err
+			}
+			in2, err := NewBinaryInput(InputImageEnd, nil)
+			if err != nil {
+				in1.Delete()
+				for _, prev := range out {
+					prev.Delete()
+				}
+				return nil, err
+			}
+			out = append(out, in1, in2)
 		case partAudio:
-			out = append(out,
-				NewBinaryInput(InputAudio, p.data),
-				NewBinaryInput(InputAudioEnd, nil),
-			)
+			in1, err := NewBinaryInput(InputAudio, p.data)
+			if err != nil {
+				for _, prev := range out {
+					prev.Delete()
+				}
+				return nil, err
+			}
+			in2, err := NewBinaryInput(InputAudioEnd, nil)
+			if err != nil {
+				in1.Delete()
+				for _, prev := range out {
+					prev.Delete()
+				}
+				return nil, err
+			}
+			out = append(out, in1, in2)
 		}
 	}
-	return out
+	return out, nil
 }

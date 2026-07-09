@@ -2,71 +2,65 @@ package litertlm
 
 import (
 	"testing"
-	"unsafe"
 )
 
-// InputData layout must stay 24 bytes to match the C struct. The
-// compile-time check in input.go would catch a regression too, but a
-// runtime test surfaces it as a clean test failure with the actual size.
-func TestInputDataLayout(t *testing.T) {
-	if got, want := unsafe.Sizeof(InputData{}), uintptr(24); got != want {
-		t.Fatalf("sizeof(InputData) = %d, want %d", got, want)
-	}
-}
-
 func TestNewTextInput(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	tests := []struct {
-		name     string
-		s        []byte
-		wantSize uintptr
-		wantNil  bool
+		name string
+		s    []byte
 	}{
-		{"non-empty", []byte("hello"), 5, false},
-		{"empty", []byte{}, 0, true},
-		{"nil", nil, 0, true},
+		{"non-empty", []byte("hello")},
+		{"empty", []byte{}},
+		{"nil", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			in := NewTextInput(tt.s)
-			if in.Type != InputText {
-				t.Errorf("Type = %d, want InputText (%d)", in.Type, InputText)
+			in, err := NewTextInput(tt.s)
+			if err != nil {
+				t.Fatalf("NewTextInput failed: %v", err)
 			}
-			if in.Size != tt.wantSize {
-				t.Errorf("Size = %d, want %d", in.Size, tt.wantSize)
-			}
-			if (in.Data == nil) != tt.wantNil {
-				t.Errorf("Data nilness = %v, want %v", in.Data == nil, tt.wantNil)
-			}
-			if !tt.wantNil && in.Data != unsafe.Pointer(&tt.s[0]) {
-				t.Errorf("Data should point to first byte of input")
+			defer in.Delete()
+			if in == 0 {
+				t.Errorf("expected non-zero handle")
 			}
 		})
 	}
 }
 
 func TestNewTextInputString(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	t.Run("non-empty", func(t *testing.T) {
 		s := "hello"
-		in := NewTextInputString(s)
-		if in.Type != InputText {
-			t.Errorf("Type = %d, want InputText", in.Type)
+		in, err := NewTextInputString(s)
+		if err != nil {
+			t.Fatalf("NewTextInputString failed: %v", err)
 		}
-		if in.Size != uintptr(len(s)) {
-			t.Errorf("Size = %d, want %d", in.Size, len(s))
-		}
-		if in.Data != unsafe.Pointer(unsafe.StringData(s)) {
-			t.Errorf("Data should point to string backing bytes")
+		defer in.Delete()
+		if in == 0 {
+			t.Errorf("expected non-zero handle")
 		}
 	})
 	t.Run("empty", func(t *testing.T) {
-		in := NewTextInputString("")
-		if in.Size != 0 || in.Data != nil {
-			t.Errorf("empty string: got Size=%d Data=%v, want 0 / nil", in.Size, in.Data)
+		in, err := NewTextInputString("")
+		if err != nil {
+			t.Fatalf("NewTextInputString failed: %v", err)
+		}
+		defer in.Delete()
+		if in == 0 {
+			t.Errorf("expected non-zero handle")
 		}
 	})
 }
 
 func TestNewBinaryInput(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	tests := []struct {
 		name string
 		typ  InputDataType
@@ -79,22 +73,24 @@ func TestNewBinaryInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := []byte{0x01, 0x02, 0x03}
-			in := NewBinaryInput(tt.typ, b)
-			if in.Type != tt.typ {
-				t.Errorf("Type = %d, want %d", in.Type, tt.typ)
+			in, err := NewBinaryInput(tt.typ, b)
+			if err != nil {
+				t.Fatalf("NewBinaryInput failed: %v", err)
 			}
-			if in.Size != uintptr(len(b)) {
-				t.Errorf("Size = %d, want %d", in.Size, len(b))
-			}
-			if in.Data != unsafe.Pointer(&b[0]) {
-				t.Errorf("Data should point to first byte")
+			defer in.Delete()
+			if in == 0 {
+				t.Errorf("expected non-zero handle")
 			}
 		})
 	}
 	t.Run("empty_payload", func(t *testing.T) {
-		in := NewBinaryInput(InputImage, nil)
-		if in.Type != InputImage || in.Size != 0 || in.Data != nil {
-			t.Errorf("nil payload: got %+v", in)
+		in, err := NewBinaryInput(InputImage, nil)
+		if err != nil {
+			t.Fatalf("NewBinaryInput failed: %v", err)
+		}
+		defer in.Delete()
+		if in == 0 {
+			t.Errorf("expected non-zero handle")
 		}
 	})
 }

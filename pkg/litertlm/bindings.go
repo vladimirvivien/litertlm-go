@@ -155,6 +155,20 @@ var (
 		"litert_lm_engine_create_session",
 		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
 
+	// ---- Input Data ----
+	inputDataCreateFunc = newLazyFun(
+		"litert_lm_input_data_create",
+		&ffi.TypePointer,
+		&ffi.TypeSint32,  // type
+		&ffi.TypePointer, // data
+		&ffiTypeSizeT,    // size
+	)
+	inputDataDeleteFunc = newLazyFun(
+		"litert_lm_input_data_delete",
+		&ffi.TypeVoid,
+		&ffi.TypePointer,
+	)
+
 	// ---- Session ----
 	sessionDeleteFunc = newLazyFun(
 		"litert_lm_session_delete",
@@ -380,11 +394,14 @@ var (
 	)
 )
 
+var realLibraryLoaded bool
+
 // loadFuncs stashes the opened library so lazyFun can resolve symbols
 // against it on first call. Symbol lookup itself happens lazily —
 // missing symbols don't fail Load, they panic (with the symbol name)
 // only when their wrapper is actually invoked.
 func loadFuncs(lib ffi.Lib) error {
 	libHandle = lib
+	realLibraryLoaded = true
 	return nil
 }

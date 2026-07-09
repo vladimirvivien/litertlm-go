@@ -59,9 +59,14 @@ func main() {
 
 	// ---- Phase 1: prefill ----
 	prefillStart := time.Now()
-	if perr := session.RunPrefill([]litertlm.InputData{
-		litertlm.NewTextInputString(*prompt),
-	}); perr != nil {
+	in, err := litertlm.NewTextInputString(*prompt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create input: %v\n", err)
+		os.Exit(1)
+	}
+	defer in.Delete()
+
+	if perr := session.RunPrefill([]litertlm.InputData{in}); perr != nil {
 		fmt.Fprintf(os.Stderr, "prefill: %v\n", perr)
 		os.Exit(1)
 	}

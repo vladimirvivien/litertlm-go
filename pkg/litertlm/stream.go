@@ -106,7 +106,11 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 		}
 	})
 
-	inputsPtr := unsafe.Pointer(&inputs[0])
+	ptrs := make([]uintptr, len(inputs))
+	for i, in := range inputs {
+		ptrs[i] = uintptr(in)
+	}
+	inputsPtr := unsafe.Pointer(&ptrs[0])
 	n := uint64(len(inputs))
 	cbAddr := streamTrampAddr
 	cbData := id
@@ -123,7 +127,7 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 
 	if ret != 0 {
 		unregisterStreamCB(id)
-		runtime.KeepAlive(inputs)
+		runtime.KeepAlive(ptrs)
 		return fmt.Errorf("litertlm: generate_content_stream start failed (code=%d)", ret)
 	}
 
@@ -134,14 +138,11 @@ func (s Session) GenerateContentStream(inputs []InputData, cb func(StreamChunk))
 	case <-done:
 	case <-watchdog.C:
 		unregisterStreamCB(id)
-		runtime.KeepAlive(inputs)
+		runtime.KeepAlive(ptrs)
 		return fmt.Errorf("litertlm: generate_content_stream: watchdog fired after %v", streamWatchdog)
 	}
 	unregisterStreamCB(id)
-	// inputs (and the byte buffers it references) must stay live until
-	// the C side has delivered Final — the foreign thread reads through
-	// &inputs[0] across the entire decode, not just during Call.
-	runtime.KeepAlive(inputs)
+	runtime.KeepAlive(ptrs)
 	return nil
 }
 

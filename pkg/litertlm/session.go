@@ -74,7 +74,11 @@ func (s Session) GenerateContent(inputs []InputData) (Responses, error) {
 		return 0, fmt.Errorf("litertlm: generate_content: no inputs")
 	}
 
-	inputsPtr := unsafe.Pointer(&inputs[0])
+	ptrs := make([]uintptr, len(inputs))
+	for i, in := range inputs {
+		ptrs[i] = uintptr(in)
+	}
+	inputsPtr := unsafe.Pointer(&ptrs[0])
 	n := uint64(len(inputs))
 
 	r, err := callForHandle[Responses](sessionGenerateContentFunc, "generate_content",
@@ -82,9 +86,7 @@ func (s Session) GenerateContent(inputs []InputData) (Responses, error) {
 		unsafe.Pointer(&inputsPtr),
 		unsafe.Pointer(&n),
 	)
-	// KeepAlive after the Call ensures inputs (and the byte buffers it
-	// references via &inputs[0]) survive until C is done reading them.
-	runtime.KeepAlive(inputs)
+	runtime.KeepAlive(ptrs)
 	return r, err
 }
 
@@ -119,7 +121,11 @@ func (s Session) RunPrefill(inputs []InputData) error {
 		return fmt.Errorf("litertlm: session_run_prefill: no inputs")
 	}
 
-	inputsPtr := unsafe.Pointer(&inputs[0])
+	ptrs := make([]uintptr, len(inputs))
+	for i, in := range inputs {
+		ptrs[i] = uintptr(in)
+	}
+	inputsPtr := unsafe.Pointer(&ptrs[0])
 	n := uint64(len(inputs))
 
 	var status int32
@@ -129,7 +135,7 @@ func (s Session) RunPrefill(inputs []InputData) error {
 		unsafe.Pointer(&inputsPtr),
 		unsafe.Pointer(&n),
 	)
-	runtime.KeepAlive(inputs)
+	runtime.KeepAlive(ptrs)
 	if status != 0 {
 		return fmt.Errorf("litertlm: session_run_prefill failed (code=%d)", status)
 	}

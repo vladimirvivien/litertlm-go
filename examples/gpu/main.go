@@ -56,7 +56,14 @@ func main() {
 	}
 	defer session.Delete()
 
-	inputs := []litertlm.InputData{litertlm.NewTextInputString(*prompt)}
+	in, err := litertlm.NewTextInputString(*prompt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "input: %v\n", err)
+		os.Exit(1)
+	}
+	defer in.Delete()
+
+	inputs := []litertlm.InputData{in}
 	for chunk := range session.GenerateContentStreamCh(inputs) {
 		if chunk.Err != nil {
 			fmt.Fprintf(os.Stderr, "\nstream error: %v\n", chunk.Err)

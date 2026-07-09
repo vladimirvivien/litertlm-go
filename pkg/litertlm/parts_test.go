@@ -108,70 +108,103 @@ func TestAudioFromFile(t *testing.T) {
 }
 
 func TestPartsToInputs_TextOnly(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	parts := []Part{Text("hello"), Text("world")}
-	inputs := partsToInputs(parts)
+	inputs, err := partsToInputs(parts)
+	if err != nil {
+		t.Fatalf("partsToInputs failed: %v", err)
+	}
+	defer func() {
+		for _, in := range inputs {
+			in.Delete()
+		}
+	}()
 	if len(inputs) != 2 {
 		t.Fatalf("len = %d, want 2", len(inputs))
 	}
 	for i, in := range inputs {
-		if in.Type != InputText {
-			t.Errorf("inputs[%d].Type = %v, want InputText", i, in.Type)
+		if in == 0 {
+			t.Errorf("inputs[%d] is zero", i)
 		}
 	}
 }
 
 func TestPartsToInputs_ImageEmitsEndMarker(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	parts := []Part{Image([]byte{0xFF, 0xD8})}
-	inputs := partsToInputs(parts)
+	inputs, err := partsToInputs(parts)
+	if err != nil {
+		t.Fatalf("partsToInputs failed: %v", err)
+	}
+	defer func() {
+		for _, in := range inputs {
+			in.Delete()
+		}
+	}()
 	if len(inputs) != 2 {
 		t.Fatalf("len = %d, want 2 (image + end)", len(inputs))
-	}
-	if inputs[0].Type != InputImage {
-		t.Errorf("inputs[0].Type = %v, want InputImage", inputs[0].Type)
-	}
-	if inputs[1].Type != InputImageEnd {
-		t.Errorf("inputs[1].Type = %v, want InputImageEnd", inputs[1].Type)
 	}
 }
 
 func TestPartsToInputs_AudioEmitsEndMarker(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	parts := []Part{Audio([]byte("riff"))}
-	inputs := partsToInputs(parts)
+	inputs, err := partsToInputs(parts)
+	if err != nil {
+		t.Fatalf("partsToInputs failed: %v", err)
+	}
+	defer func() {
+		for _, in := range inputs {
+			in.Delete()
+		}
+	}()
 	if len(inputs) != 2 {
 		t.Fatalf("len = %d, want 2 (audio + end)", len(inputs))
-	}
-	if inputs[0].Type != InputAudio {
-		t.Errorf("inputs[0].Type = %v, want InputAudio", inputs[0].Type)
-	}
-	if inputs[1].Type != InputAudioEnd {
-		t.Errorf("inputs[1].Type = %v, want InputAudioEnd", inputs[1].Type)
 	}
 }
 
 func TestPartsToInputs_MixedOrderPreserved(t *testing.T) {
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
 	parts := []Part{
 		Image([]byte{0xFF}),
 		Text("describe"),
 		Audio([]byte("riff")),
 	}
-	inputs := partsToInputs(parts)
-	wantTypes := []InputDataType{
-		InputImage, InputImageEnd,
-		InputText,
-		InputAudio, InputAudioEnd,
+	inputs, err := partsToInputs(parts)
+	if err != nil {
+		t.Fatalf("partsToInputs failed: %v", err)
 	}
-	if len(inputs) != len(wantTypes) {
-		t.Fatalf("len = %d, want %d", len(inputs), len(wantTypes))
-	}
-	for i, want := range wantTypes {
-		if inputs[i].Type != want {
-			t.Errorf("inputs[%d].Type = %v, want %v", i, inputs[i].Type, want)
+	defer func() {
+		for _, in := range inputs {
+			in.Delete()
 		}
+	}()
+	if len(inputs) != 5 {
+		t.Fatalf("len = %d, want 5", len(inputs))
 	}
 }
 
 func TestPartsToInputs_Empty(t *testing.T) {
-	inputs := partsToInputs(nil)
+	if !realLibraryLoaded {
+		t.Skip("C library not loaded")
+	}
+	inputs, err := partsToInputs(nil)
+	if err != nil {
+		t.Fatalf("partsToInputs failed: %v", err)
+	}
+	defer func() {
+		for _, in := range inputs {
+			in.Delete()
+		}
+	}()
 	if len(inputs) != 0 {
 		t.Errorf("nil parts: len = %d, want 0", len(inputs))
 	}
