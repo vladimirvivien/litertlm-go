@@ -25,7 +25,7 @@ Common reasons to drop down:
 
 | High-level                            | Low-level equivalent                                                                                                       |
 |---------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
-| `litertlm.New(ctx, opts...)`          | `Load` + `NewEngineSettings` + setters + `NewEngine`                                                                       |
+| `litertlm.New(ctx, opts...)`          | `Load` + `NewEngineSettings` / `NewEngineSettingsFromFd` + setters + `NewEngine`                                           |
 | `client.Close()`                      | `engine.Delete()` + `settings.Delete()`                                                                                    |
 | `client.Generate(ctx, prompt)`        | `engine.NewSession(0)` + `session.GenerateContent([]InputData{NewTextInputString(prompt)})` + `resp.Text(0)` + `Delete`s   |
 | `client.GenerateStream(ctx, prompt)`  | `session.GenerateContentStreamCh(...)` channel                                                                             |
@@ -41,7 +41,7 @@ Common reasons to drop down:
 
 The low-level API surfaces every C handle as a `uintptr` value type
 (`Engine`, `Session`, `EngineSettings`, `Conversation`, `Responses`,
-`BenchmarkInfo`, `JsonResponse`, …). Each has a `.Delete()` method.
+`BenchmarkInfo`, `JsonResponse`, `InputData`, …). Each has a `.Delete()` method.
 
 **Rules of thumb:**
 

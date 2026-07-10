@@ -46,12 +46,12 @@ below.
 
 ## How it works
 
-To maximize reliability, `GenerateData` uses a two-tier strategy to extract structured data from the model:
+GenerateData uses a two-tier strategy to extract structured data from the model:
 
-### 1. Primary Path: Synthesized Tool Calling (Highly Reliable)
+### 1. Primary Path: Synthesized Tool Calling
 * **Automatic Tool Creation**: The library reflects on your Go struct `T` and automatically registers a temporary "capture tool" representing its schema.
 * **Model Directive**: It instructs the model to populate the fields of this tool to answer your prompt.
-* **Direct Extraction**: When the model calls the tool, the library captures the arguments directly and unmarshals them into your struct `T`. This path is extremely robust because it leverages the model's native function-calling capabilities.
+* **Direct Extraction**: When the model calls the tool, the library captures the arguments directly and unmarshals them into your struct `T`. This path leverages the model's native function-calling capabilities.
 
 ### 2. Fallback Path: Prompt Engineering & Tolerant JSON Parsing
 If the model does not support tool calling, or if the tool call fails:

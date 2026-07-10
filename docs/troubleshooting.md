@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Quirks and known limitations, with their root causes and fixes.
+Known limitations and issues, with their root causes and resolutions.
 
 ## Library not found
 

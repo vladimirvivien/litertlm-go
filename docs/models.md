@@ -4,9 +4,9 @@
 
 ## Tested and supported
 
-The test (`pkg/litertlm/model_matrix_test.go`) runs three checks per
-model — chat send, tokenize round-trip, streaming coherence — on the
-CPU and GPU backends. Results are measured on LiteRT-LM v0.13.1. CPU
+The test suite (`pkg/litertlm/model_matrix_test.go`) runs three checks per
+model — chat send, tokenize round-trip, and streaming coherence — on the
+CPU and GPU backends. Results are measured on LiteRT-LM v0.14.0. CPU
 results are verified on both Linux and Windows; the GPU column is the
 WebGPU / Direct3D 12 backend, measured on Windows.
 
@@ -40,10 +40,10 @@ degenerate. Every processor branch otherwise passes on both backends.
 - **FunctionGemma on GPU.** The mobile-actions q8 fine-tune loads on the
   GPU backend but emits only `<pad>` tokens; it produces correct output
   on CPU. Run it on the CPU backend.
-- **gemma-4-12B fails on both backends (v0.13.1).** CPU: the published
+- **gemma-4-12B fails on both backends (v0.14.0).** CPU: the published
   `.litertlm` declares a GPU-only backend constraint, so `engine_create`
   is rejected with `Main backend constraint mismatch. Model requires one
-  of [gpu]`. GPU: the model fails to load under the v0.13.1 GPU runtime —
+  of [gpu]`. GPU: the model fails to load under the v0.14.0 GPU runtime —
   one allocation exceeds the WebGPU/Direct3D 12 ~2 GB per-buffer limit
   (it loaded under v0.12). Tracked upstream at
   [google-ai-edge/LiteRT-LM#2461](https://github.com/google-ai-edge/LiteRT-LM/issues/2461).
@@ -52,7 +52,7 @@ degenerate. Every processor branch otherwise passes on both backends.
 
 ## Running the tests
 
-The integration battery in `pkg/litertlm/model_matrix_test.go` runs the
+The integration test suite in `pkg/litertlm/model_matrix_test.go` runs the
 text base tier against every `.litertlm` file under
 `LITERTLM_TEST_MODELS_DIR`. Set `LITERTLM_TEST_BACKEND=gpu` to run on
 the GPU backend (default `cpu`).

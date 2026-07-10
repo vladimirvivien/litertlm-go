@@ -14,7 +14,7 @@ A high-performance, cgo-free, purego-backed Go binding for Google's [LiteRT-LM](
 ## 🔥 Features
 
 * 💬 **Stateful Chat & Conversations** — Multi-turn chat orchestration with system prompts, message history, and token tracking.
-* 🖼️ **Multimodal Inputs** — Process text, images, and audio inputs in any order using a unified, easy-to-use interface.
+* 🖼️ **Multimodal Inputs** — Process text, images, and audio inputs in any order using a unified Go interface.
 * 🛠️ **Automated Tool Calling** — Register standard Go functions as tools that the model can call automatically and in parallel.
 * 🎯 **Structured JSON Output** — Extract model outputs directly into Go structs with type-safe generic helpers.
 * ⚡ **High Performance & GPU Acceleration** — Run on CPU or GPU (WebGPU/Direct3D 12) with built-in memory safety.

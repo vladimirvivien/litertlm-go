@@ -126,7 +126,7 @@ copy prebuilt\windows_x86_64\*.dll $Env:LITERTLM_LIB\
 copy bazel-bin\c\litertlm_c_api\litertlm_c_cpu.dll $Env:LITERTLM_LIB\
 ```
 
-For GPU use copy the followings:
+For GPU use, copy the following files:
 
 ```powershell
 # Copy the C API DLL for GPU use 
