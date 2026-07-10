@@ -279,3 +279,32 @@ func TestClient_WithThreads(t *testing.T) {
 		t.Logf("expected answer to contain 'france', got: %q", res)
 	}
 }
+
+func TestEngineSettings_Options(t *testing.T) {
+	libDir, modelPath := requireTestModel(t)
+
+	if err := litertlm.Load(libDir, "cpu", ""); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	settings, err := litertlm.NewEngineSettings(modelPath, "cpu", nil, nil)
+	if err != nil {
+		t.Fatalf("NewEngineSettings: %v", err)
+	}
+	defer settings.Delete()
+
+	// Test threading setters
+	settings.SetNumThreads(4)
+	settings.SetAudioNumThreads(2)
+
+	// Test LoRA setters
+	settings.SetLoraRank(8)
+	settings.SetAudioLoraRank(8)
+
+	// These might return errors on CPU or on models without audio/vision components.
+	// We check that they call the FFI layer safely without panics.
+	_ = settings.SetSupportedLoraRanks([]int{8, 16})
+	_ = settings.SetSupportedAudioLoraRanks([]int{8, 16})
+}
+
+
