@@ -163,8 +163,28 @@ Tool handlers must be safe to invoke from multiple goroutines when
 `n > 1`. Shared mutable state in a closure-captured `ManagedTool`
 handler needs its own synchronization.
 
-`WithSampler` and `WithMaxOutputTokens` are not per-call on Chat —
-they apply at `NewChat` time on the Client's session config.
+`WithMaxOutputTokens(n)` caps output tokens produced for this turn.
+
+```go
+reply, err := chat.Send(ctx, "Write a long story",
+    litertlm.WithMaxOutputTokens(50),
+)
+```
+
+`WithSampler` is not per-call on Chat — it applies at `NewChat` time on the Client's session config.
+
+## Template Preface Rendering
+
+To inspect the system prompts, initial message wrapper formatting, or tools schema structure exactly as they will be formatted for the model (before any user input is appended), call `RenderPreface()` on the underlying `Conversation`:
+
+```go
+rendered, err := chat.Conversation().RenderPreface()
+if err != nil {
+    return err
+}
+fmt.Println(rendered)
+// Output: <|im_start|>system\nYou are a helpful assistant...
+```
 
 ## Tool calling
 

@@ -33,6 +33,7 @@ Use functional options to specify environment and inference engine settings.
 |-------------------------|-----------------------------------------------------------------------|
 | `WithLib(dir)`          | Directory holding `liblitertlm_c_cpu.*` etc. Empty → `$LITERTLM_LIB`. |
 | `WithModel(path)`       | Path to a `.litertlm` file. Empty → `$LITERTLM_MODEL`.                |
+| `WithModelFd(fd)`       | Raw file descriptor of the model file (unsupported on Windows).       |
 | `WithBackend(b)`        | `"cpu"` (default) or `"gpu"`.                                         |
 | `WithVisionBackend(b)`  | Optional extra backend for vision inputs.                             |
 | `WithAudioBackend(b)`   | Optional extra backend for audio inputs.                              |
@@ -49,6 +50,12 @@ Use functional options to specify environment and inference engine settings.
 | `WithBenchmarkEnabled()`                  | Turn on benchmark collection. Read per-call metrics via `Response.Benchmark()`. |
 | `WithParallelSectionLoading(on)`          | Parallel deserialization of `.litertlm` container sections. Defaults to true. |
 | `WithDispatchLibDir(dir)`                 | LiteRT dispatch library directory for the NPU backend.                    |
+| `WithNumThreads(n)`                       | Set the number of threads for the CPU backend.                            |
+| `WithAudioNumThreads(n)`                  | Set the number of threads for the audio CPU backend.                      |
+| `WithLoRARank(rank)`                      | Set the startup LoRA rank for the engine.                                 |
+| `WithSupportedLoRARanks(ranks)`           | Set the supported startup LoRA ranks for the engine.                      |
+| `WithAudioLoRARank(rank)`                 | Set the startup audio LoRA rank for the engine.                           |
+| `WithSupportedAudioLoRARanks(ranks)`      | Set the supported startup audio LoRA ranks for the engine.                |
 
 ### Logging
 

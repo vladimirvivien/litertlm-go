@@ -306,6 +306,13 @@ func (ch *Chat) Close() error {
 	return nil
 }
 
+// Conversation returns the underlying Conversation handle.
+func (ch *Chat) Conversation() Conversation {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	return ch.conv
+}
+
 // Clone returns a new Chat whose underlying Conversation mirrors ch's
 // prefilled state — activation frames and KV cache included. Useful
 // for branching tool loops (run N candidate tools off one prefilled
