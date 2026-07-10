@@ -81,7 +81,7 @@ bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c_cpu --config=w
 # GPU
 bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c `
     --config=windows `
-    --define=litert_link_capi_so=true `
+    --define=litert_runtime_link_mode=dynamic `
     --define=resolve_symbols_in_exec=false
 ```
 
@@ -152,6 +152,7 @@ GPU-backed inference:
 
 ```powershell
 $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+$Env:PATH = "$Env:LITERTLM_LIB;$Env:PATH"
 $Env:LLVM_PROFILE_FILE = "NUL"
 go run .\examples\chat -model C:\path\to\gemma-4-E4B-it.litertlm -backend gpu
 ```
@@ -164,7 +165,7 @@ share the LiteRT runtime instance with the GPU accelerator plugin
 
 Two `--define` flags control how the runtime is linked into `litertlm_c.dll`:
 
-- `--define=litert_link_capi_so=true` — links the C-API DLL against
+- `--define=litert_runtime_link_mode=dynamic` — links the C-API DLL against
   `libLiteRt.dll` dynamically. The C-API DLL and the accelerator plugin then
   share one TFLite delegate registry through the same `libLiteRt.dll`. Required
   for GPU.
@@ -191,7 +192,7 @@ every platform (`.github/workflows/ci-build-win.yml`).
 | `ERROR: Skipping '/c:litertlm_c_cpu': invalid package name '/c'` (Git Bash) | MSYS rewrote `//c:...` as a Windows path | `MSYS_NO_PATHCONV=1 bazelisk build //c/litertlm_c_api:litertlm_c_cpu --config=windows` |
 | Build fails with `LongPathsEnabled` errors | NTFS long path support disabled | Enable it in the registry, or use a shorter `--output_base` (e.g. `C:\bzl`) |
 | `cp: cannot create regular file ...: Permission denied` when restaging | Bazel marks outputs read-only | `chmod u+w` the destination first, or use `copy /Y` in PowerShell |
-| GPU run crashes with `Exception 0xc0000005` after `delegate_webgpu.cc:... # of threads to compile kernels = 1` | GPU `litertlm_c.dll` built without the required `--define` flags | Rebuild per §3 with both `--define=litert_link_capi_so=true` and `--define=resolve_symbols_in_exec=false`; verify per §3.5 |
+| GPU run crashes with `Exception 0xc0000005` after `delegate_webgpu.cc:... # of threads to compile kernels = 1` | GPU `litertlm_c.dll` built without the required --define flags | Rebuild per §3 with both --define=litert_runtime_link_mode=dynamic and --define=resolve_symbols_in_exec=false; verify per §3.5 |
 | GPU run logs `WARNING: GPU accelerator could not be loaded and registered` then falls back to CPU | One of `libLiteRtWebGpuAccelerator.dll` / `libLiteRtTopKWebGpuSampler.dll` / DXC missing from `$LITERTLM_LIB` | Re-run the §6 staging step |
 | GPU run aborts in `engine_create` with `DynamicLib.Open: dxil.dll Windows Error: 87` / `Failed to create WebGPU environment` | `dxcompiler.dll` and/or `dxil.dll` not staged into `$LITERTLM_LIB` (these ship with the Windows SDK, not the LiteRT-LM prebuilts) | Copy both from `C:\Program Files (x86)\Windows Kits\10\bin\<sdk-version>\x64\` per §6 *Stage GPU runtime files* |
 | Empty `default.profraw` files appear in your working directory after each run | The prebuilt LiteRT-LM deps inherit LLVM `-fprofile-instr-generate` instrumentation; the embedded `__llvm_profile_*` runtime writes a coverage dump to `.\default.profraw` on exit | Set `LLVM_PROFILE_FILE=NUL` in the environment to discard the dump: `$Env:LLVM_PROFILE_FILE = "NUL"; go run …` |

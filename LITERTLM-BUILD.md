@@ -82,7 +82,7 @@ bazel build //c/litertlm_c_api:litertlm_c_cpu
 
 # GPU
 bazel build //c/litertlm_c_api:litertlm_c \
-    --define=litert_link_capi_so=true \
+    --define=litert_runtime_link_mode=dynamic \
     --define=resolve_symbols_in_exec=false
 ```
 
@@ -138,12 +138,32 @@ You can download the Gemma 4 `.litertlm` model from the
 ## Test your build
 
 Assuming `LITERTLM_LIB` points to the location of your shared libraries, you can
-test your setup with the following example:
+test your setup with the following examples:
+
+CPU inference:
 
 ```bash
 LITERTLM_LIB=~/include/litertlm/lib go run ./examples/hello \
     -model ~/models/gemma-4-E2B-it.litertlm \
     -backend cpu
+```
+
+GPU-backed inference (Linux):
+
+```bash
+LITERTLM_LIB=~/include/litertlm/lib \
+LD_LIBRARY_PATH=$LITERTLM_LIB:$LD_LIBRARY_PATH \
+LLVM_PROFILE_FILE=/dev/null \
+go run ./examples/chat -model ~/models/gemma-4-E2B-it.litertlm -backend gpu
+```
+
+GPU-backed inference (macOS):
+
+```bash
+LITERTLM_LIB=~/include/litertlm/lib \
+DYLD_LIBRARY_PATH=$LITERTLM_LIB:$DYLD_LIBRARY_PATH \
+LLVM_PROFILE_FILE=/dev/null \
+go run ./examples/chat -model ~/models/gemma-4-E2B-it.litertlm -backend gpu
 ```
 
 ## Build mechanics
@@ -156,7 +176,7 @@ runtime.
 Two `--define` flags control how the runtime is linked into the C-API
 shared library:
 
-- `--define=litert_link_capi_so=true` — links the C-API shared library against
+- `--define=litert_runtime_link_mode=dynamic` — links the C-API shared library against
   `libLiteRt.{so,dylib}` dynamically. The C-API library and the accelerator
   plugin then share one TFLite delegate registry through the same
   `libLiteRt.{so,dylib}`. Required for GPU.

@@ -259,3 +259,28 @@ level (`Conversation.SendMessage`), you will need to strip them yourself:
 ```go
 strings.ReplaceAll(arg, `<|"|>`, "")
 ```
+
+---
+
+## GPU process crashes on Windows (Exception 0xc0000005)
+
+**Symptom.** Running GPU-backed inference crashes the test or application process with a memory access violation (`0xc0000005`).
+
+**Cause.** Graphics API drivers and shader compilers (e.g., Direct3D 12/WebGPU loaded via `libwebgpu_dawn.dll`) cannot compile shaders or manage TLS state on the background worker threads managed by Go's runtime scheduler.
+
+**Fix.** Execute client initialization and inference calls on the operating system's primary main thread. Avoid executing them inside concurrent goroutines or tests without thread locking (`runtime.LockOSThread()`).
+
+---
+
+## Failed to create engine (INTERNAL: ERROR: [unknown:0])
+
+**Symptom.** Client initialization fails early during engine creation with:
+`Failed to create engine: INTERNAL: ERROR: [unknown:0]`
+
+**Cause.** The C-API library (`litertlm_c.dll`/`liblitertlm_c.so`) was linked statically instead of dynamically. Both the C-API library and the GPU accelerator plugin must dynamically link against `libLiteRt` so they can register with the same delegate registry.
+
+**Fix.** Recompile the C-API shared library with the correct Bazel dynamic link flag:
+`--define=litert_runtime_link_mode=dynamic`
+(Avoid using the deprecated `--define=litert_link_capi_so=true` flag).
+Ensure `libLiteRt.dll`/`libLiteRt.so` and `libwebgpu_dawn.dll` are present in your library staging directory, and add that directory to your system path (`PATH` or `LD_LIBRARY_PATH`).
+
