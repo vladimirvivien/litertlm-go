@@ -44,3 +44,9 @@ go run ./examples/<name> -model /abs/path/to/<model>.litertlm [-backend cpu|gpu]
 | `examples/logging/`           | `SetMinLogLevel` — set the LiteRT-LM log severity floor at startup and toggle mid-program |
 | `examples/per-call-sampler/`  | `WithSampler` per-call override — three sampler shapes (Deterministic / Balanced / Creative) on the same Client |
 | `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
+| `examples/template-inspector/` | Template dry-run and raw prompt template introspection via `Chat.Conversation().RenderPreface()` |
+| `examples/fd-loader/`          | Sandboxed model loading directly from open file descriptors (`WithModelFd`) |
+| `examples/thread-tuner/`       | Benchmark profiling of CPU thread allocation sizes (`WithNumThreads`) |
+| `examples/token-limiter/`      | Dynamic sequence output constraints on a per-call basis (`WithMaxOutputTokens`) |
+| `examples/lora-tuner/`         | Low-level base and supported LoRA rank configuration on settings handles at initialization |
+
