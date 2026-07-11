@@ -306,5 +306,3 @@ func TestEngineSettings_Options(t *testing.T) {
 	_ = settings.SetSupportedLoraRanks([]int{8, 16})
 	_ = settings.SetSupportedAudioLoraRanks([]int{8, 16})
 }
-
-

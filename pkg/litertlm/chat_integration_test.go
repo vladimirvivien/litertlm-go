@@ -22,14 +22,14 @@ func TestChat_Integration_Send(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	chat, err := client.NewChat(ctx, litertlm.WithSystemPrompt("You are a helpful assistant."))
 	if err != nil {
 		t.Fatalf("NewChat: %v", err)
 	}
-	defer chat.Close()
+	defer func() { _ = chat.Close() }()
 
 	// 1. Test Send
 	reply, err := chat.Send(ctx, "Reply with the single word: Paris")
@@ -70,7 +70,7 @@ func TestChat_Integration_OptionsAndStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 
@@ -79,7 +79,7 @@ func TestChat_Integration_OptionsAndStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewChat: %v", err)
 	}
-	defer chat.Close()
+	defer func() { _ = chat.Close() }()
 
 	reply, err := chat.Send(ctx, "Explain photosynthesis in detail.", litertlm.WithMaxOutputTokens(4))
 	if err != nil {
@@ -95,7 +95,7 @@ func TestChat_Integration_OptionsAndStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewChat for stream: %v", err)
 	}
-	defer streamChat.Close()
+	defer func() { _ = streamChat.Close() }()
 
 	var chunks []string
 	for chunk, err := range streamChat.SendStream(ctx, "Name three primary colors in one sentence.") {
