@@ -44,8 +44,10 @@ const envLibName = "LITERTLM_LIB_NAME"
 // "cpu" → litertlm_c_cpu, "gpu" → litertlm_c. Unknown values fall back
 // to GPU first, then CPU.
 var libByBackend = map[string]string{
-	"cpu": "litertlm_c_cpu",
-	"gpu": "litertlm_c",
+	"cpu":   "litertlm_c_cpu",
+	"gpu":   "litertlm_c",
+	"apple": "litertlm_c",
+	"metal": "litertlm_c",
 }
 
 // auxLibs are required by the C API at load time and must sit next to
@@ -55,13 +57,14 @@ var auxLibs = []string{
 }
 
 // optionalLibs are GPU accelerator plugins from LiteRT-LM's prebuilt/
-// directory. Their absence is not an error; backend="gpu" calls will
+// directory. Their absence is not an error; backend="gpu", "apple", or "metal" calls will
 // just fail at runtime if any are missing.
 var optionalLibs = []string{
 	"LiteRt",
 	"LiteRtWebGpuAccelerator",
 	"LiteRtTopKWebGpuSampler",
 	"LiteRtMetalAccelerator", // macOS only
+	"LiteRtTopKMetalSampler", // macOS only
 }
 
 var (

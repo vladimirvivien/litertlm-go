@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -78,6 +79,21 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("litertlm: New: model path or raw file descriptor required")
 	}
 
+	// Validate that Apple backend options are only used on macOS/iOS.
+	if cfg.backend == "apple" || cfg.backend == "metal" ||
+		(cfg.visionBackend != nil && (*cfg.visionBackend == "apple" || *cfg.visionBackend == "metal")) ||
+		(cfg.audioBackend != nil && (*cfg.audioBackend == "apple" || *cfg.audioBackend == "metal")) {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {
+			badBackend := cfg.backend
+			if cfg.visionBackend != nil && (*cfg.visionBackend == "apple" || *cfg.visionBackend == "metal") {
+				badBackend = *cfg.visionBackend
+			} else if cfg.audioBackend != nil && (*cfg.audioBackend == "apple" || *cfg.audioBackend == "metal") {
+				badBackend = *cfg.audioBackend
+			}
+			return nil, fmt.Errorf("litertlm: New: backend %q is only supported on macOS/iOS", badBackend)
+		}
+	}
+
 	return runCancellable(ctx,
 		func() (*Client, error) { return buildClient(cfg) },
 		func(c *Client) { _ = c.Close() },
@@ -87,16 +103,21 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 // buildClient performs the synchronous C-side work of constructing a
 // Client. Split out so New can run it under runCancellable.
 func buildClient(cfg clientConfig) (*Client, error) {
-	if err := Load(cfg.libPath, cfg.backend, cfg.libName); err != nil {
+	// Translate Go-side "apple" / "metal" backend alias to "gpu" for C-API loading and settings initialization.
+	cApiBackend := translateBackend(cfg.backend)
+	cApiVision := translateBackendPtr(cfg.visionBackend)
+	cApiAudio := translateBackendPtr(cfg.audioBackend)
+
+	if err := Load(cfg.libPath, cApiBackend, cfg.libName); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 
 	var settings EngineSettings
 	var err error
 	if cfg.modelFd != nil {
-		settings, err = NewEngineSettingsFromFd(*cfg.modelFd, cfg.backend, cfg.visionBackend, cfg.audioBackend)
+		settings, err = NewEngineSettingsFromFd(*cfg.modelFd, cApiBackend, cApiVision, cApiAudio)
 	} else {
-		settings, err = NewEngineSettings(cfg.modelPath, cfg.backend, cfg.visionBackend, cfg.audioBackend)
+		settings, err = NewEngineSettings(cfg.modelPath, cApiBackend, cApiVision, cApiAudio)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
@@ -248,4 +269,19 @@ func diagnoseLoadError(err error, cfg clientConfig) error {
 	}
 
 	return fmt.Errorf("litertlm: New: %w", err)
+}
+
+func translateBackend(b string) string {
+	if b == "apple" || b == "metal" {
+		return "gpu"
+	}
+	return b
+}
+
+func translateBackendPtr(b *string) *string {
+	if b == nil {
+		return nil
+	}
+	val := translateBackend(*b)
+	return &val
 }

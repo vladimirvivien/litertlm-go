@@ -1,7 +1,9 @@
 package litertlm
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -308,5 +310,73 @@ func TestOption_NewV014Options(t *testing.T) {
 	WithSupportedAudioLoRARanks([]int{4, 8})(&cfg)
 	if len(cfg.supportedAudioLoraRanks) != 2 || cfg.supportedAudioLoraRanks[0] != 4 || cfg.supportedAudioLoraRanks[1] != 8 {
 		t.Errorf("supportedAudioLoraRanks = %v, want [4, 8]", cfg.supportedAudioLoraRanks)
+	}
+}
+
+// TestOption_AppleAndMetalBackendOptions verifies that WithBackend accepts "apple" and "metal".
+func TestOption_AppleAndMetalBackendOptions(t *testing.T) {
+	cfg := clientConfig{}
+	WithBackend("apple")(&cfg)
+	if cfg.backend != "apple" {
+		t.Errorf("backend = %q, want apple", cfg.backend)
+	}
+
+	WithBackend("metal")(&cfg)
+	if cfg.backend != "metal" {
+		t.Errorf("backend = %q, want metal", cfg.backend)
+	}
+}
+
+// TestNew_PlatformValidation verifies that Apple/Metal backends trigger errors on non-Apple systems.
+func TestNew_PlatformValidation(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		opts []Option
+	}{
+		{
+			name: "main backend apple",
+			opts: []Option{WithBackend("apple")},
+		},
+		{
+			name: "main backend metal",
+			opts: []Option{WithBackend("metal")},
+		},
+		{
+			name: "vision backend apple",
+			opts: []Option{WithVisionBackend("apple")},
+		},
+		{
+			name: "audio backend metal",
+			opts: []Option{WithAudioBackend("metal")},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Append model option to avoid path-required error
+			opts := append(tc.opts, WithModel("dummy.litertlm"))
+			_, err := New(ctx, opts...)
+
+			isAppleOS := runtime.GOOS == "darwin" || runtime.GOOS == "ios"
+
+			if isAppleOS {
+				// On Apple, we expect it to pass validation and proceed to try loading libraries,
+				// which will fail because "dummy.litertlm" doesn't exist or libPath is wrong.
+				if err != nil && strings.Contains(err.Error(), "only supported on macOS/iOS") {
+					t.Errorf("unexpected platform validation error on Apple OS: %v", err)
+				}
+			} else {
+				// On non-Apple, it must fail fast with the validation error.
+				if err == nil {
+					t.Fatal("expected platform validation error but got nil")
+				}
+				expect := "only supported on macOS/iOS"
+				if !strings.Contains(err.Error(), expect) {
+					t.Errorf("expected error to contain %q, got %q", expect, err.Error())
+				}
+			}
+		})
 	}
 }
