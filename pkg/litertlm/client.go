@@ -75,6 +75,10 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		opt(&cfg)
 	}
 
+	if cfg.err != nil {
+		return nil, fmt.Errorf("litertlm: New: configuration error: %w", cfg.err)
+	}
+
 	if cfg.modelPath == "" && cfg.modelFd == nil {
 		return nil, fmt.Errorf("litertlm: New: model path or raw file descriptor required")
 	}

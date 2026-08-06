@@ -42,6 +42,8 @@ type clientConfig struct {
 	supportedLoraRanks      []int
 	audioLoraRank           *int
 	supportedAudioLoraRanks []int
+
+	err error
 }
 
 // runtimeConfig is the resolved per-call configuration.
