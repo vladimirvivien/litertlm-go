@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	"github.com/jupiterrider/ffi"
 )
@@ -17,6 +18,8 @@ import (
 // EnvVar is the environment variable consulted when no explicit path is passed
 // to LoadLibrary.
 const EnvVar = "LITERTLM_LIB"
+
+var loaderMu sync.Mutex
 
 // LoadLibrary loads the main C-API shared library identified by `lib` from
 // the directory `path`. If `path` is empty, the value of the LITERTLM_LIB
@@ -29,6 +32,9 @@ const EnvVar = "LITERTLM_LIB"
 // LiteRtWebGpuAccelerator, LiteRtTopKWebGpuSampler, etc.), use
 // LoadAuxLibrary instead.
 func LoadLibrary(path, lib string) (ffi.Lib, error) {
+	loaderMu.Lock()
+	defer loaderMu.Unlock()
+
 	if path == "" {
 		path = os.Getenv(EnvVar)
 	}
@@ -87,6 +93,9 @@ func GetAuxLibraryFilename(path, lib string) string {
 // LoadAuxLibrary is the LoadLibrary equivalent for auxiliary libraries — see
 // GetAuxLibraryFilename for the naming convention.
 func LoadAuxLibrary(path, lib string) (ffi.Lib, error) {
+	loaderMu.Lock()
+	defer loaderMu.Unlock()
+
 	if path == "" {
 		path = os.Getenv(EnvVar)
 	}

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -115,4 +116,21 @@ func TestLoadLibraryEnvFallback(t *testing.T) {
 	if strings.Contains(err.Error(), "LITERTLM_LIB env variable not set") {
 		t.Errorf("expected env fallback to fire; got sentinel error: %v", err)
 	}
+}
+
+func TestLoader_ConcurrentCalls(t *testing.T) {
+	dir := t.TempDir()
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = LoadLibrary(dir, "concurrent_missing_lib")
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = LoadAuxLibrary(dir, "concurrent_missing_aux")
+		}()
+	}
+	wg.Wait()
 }
