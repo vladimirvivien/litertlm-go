@@ -79,15 +79,27 @@ LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
 
 ---
 
-## 🏗️ Building the C Library
+## 📦 Provisioning the C Libraries
 
-LiteRT-LM does not ship prebuilt C-API shared libraries. Build the staging libraries (`litertlm_c.dll` / `litertlm_c_cpu.dll`) for your platform using the guides below:
+LiteRT-LM distributes prebuilt C-API shared libraries (`v0.16.0+`) across Linux, macOS, and Windows. You can download and stage them automatically or manually.
 
-* **Linux / macOS** — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
-* **Windows** — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
+### Automated Provisioning (Go)
+Use `litertlm.LibFetch` to download and stage the prebuilts directly from Go:
 
-> [!IMPORTANT]
-> Minimum supported upstream: **LiteRT-LM v0.13.1**. Stateful token tracking via `Chat.TokenCount()` binds to `litert_lm_conversation_get_token_count`, which was introduced in v0.13.1.
+```go
+libDir, err := litertlm.LibFetch("windows", "amd64", "v0.16.0")
+if err != nil {
+    log.Fatalf("LibFetch failed: %v", err)
+}
+// Pass libDir to litertlm.WithLib(libDir) or set LITERTLM_LIB
+```
+
+### Staging Guides & Custom Builds
+* **Linux / macOS Prebuilts & Staging** — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
+* **Windows Prebuilts & DXC Setup** — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
+
+> [!NOTE]
+> For developers modifying the C++ engine itself, both guides also include instructions for building from source using Bazel. Minimum supported upstream: **LiteRT-LM v0.16.0**.
 
 ---
 

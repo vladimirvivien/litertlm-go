@@ -1,99 +1,181 @@
-# Getting started
+# Getting Started with litertlm-go
 
-## Prerequisites
+This guide shows how to provision the native LiteRT-LM shared libraries, load a `.litertlm` model file, and run text generation in Go.
 
-1. **Shared library** — LiteRT-LM doesn't distribute a
-   prebuilt C API. You will need to build it yourself following instructions in
-   [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
-   (Linux/macOS) or
-   [`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md) (Windows).
-   At the end you should have a directory containing your library dependencies.
+---
 
-2. **A `.litertlm` model file** — download a model file from Hugging Face's
-   [LiteRT Community](https://huggingface.co/litert-community).
-   `gemma-4-E2B-it.litertlm` and `gemma-4-E4B-it.litertlm` are good starting points.
+## 1. Prerequisites
 
-3. **Go 1.26 or newer**.
+1. **Go 1.26 or newer**.
+2. **A `.litertlm` model file:** Download an instruction-tuned model from Hugging Face's [LiteRT Community](https://huggingface.co/litert-community) (e.g. `gemma3-1b-it-int4.litertlm` or `gemma-4-E2B-it.litertlm`).
+3. **Install the package:**
+   ```bash
+   go get github.com/vladimirvivien/litertlm-go@latest
+   ```
 
+---
 
-## First program
+## 2. Method 1: Automated Library Provisioning with `litertlm.LibFetch` (Recommended)
 
-Install the `litertlm-go` package:
+`litertlm-go` includes a built-in helper (`litertlm.LibFetch`) that automatically resolves, downloads, and caches the official prebuilt libraries for your platform (`v0.16.0+`):
 
-```bash
-go get github.com/vladimirvivien/litertlm-go@latest
-```
-
-Instantiate a LiteRT-LM engine client:
+### Go Program (`main.go`)
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "os"
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"runtime"
 
-    "github.com/vladimirvivien/litertlm-go/pkg/litertlm"
+	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
 func main() {
-    ctx := context.Background()
-    client, err := litertlm.New(ctx,
-        litertlm.WithLib(os.Getenv("LITERTLM_LIB")),
-        litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
-    )
-    if err != nil {
-        fmt.Println(err)
-        os.Exit(1)
-    }
-    defer client.Close()
+	ctx := context.Background()
 
-    text, err := client.Generate(ctx, "Write a haiku about the sea.")
-    if err != nil {
-        fmt.Println(err)
-        os.Exit(1)
-    }
-    fmt.Println(text)
+	// 1. Automatically fetch and stage native prebuilt libraries
+	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	if err != nil {
+		log.Fatalf("LibFetch failed: %v", err)
+	}
+
+	// 2. Initialize the client with the staged library and model path
+	client, err := litertlm.New(ctx,
+		litertlm.WithLib(libDir),
+		litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
+	)
+	if err != nil {
+		log.Fatalf("Client initialization failed: %v", err)
+	}
+	defer client.Close()
+
+	// 3. Generate text
+	text, err := client.Generate(ctx, "Write a haiku about the sea.")
+	if err != nil {
+		log.Fatalf("Generation failed: %v", err)
+	}
+	fmt.Println(text)
 }
 ```
 
-`litertlm.New`:
-
-1. Loads the shared library set (calls `Load` internally).
-2. Builds an `EngineSettings` with the supplied options.
-3. Constructs a LiteRT-LM `Engine` from those settings.
-4. Returns a `*Client` with access to the engine.
-
-`client.Close()` releases internal resources and deletes the engine.
-
-### Running the program
-When executing the program, specify the location of the 
-share libraries and a model file:
+### Running the Program
 
 ```bash
-LITERTLM_LIB=/abs/path/to/dist/lib \
-LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
+# Set model path and run (libraries are downloaded and cached automatically)
+export LITERTLM_MODEL="/path/to/gemma3-1b-it-int4.litertlm"
+go run main.go
+```
+
+On Windows (PowerShell):
+```powershell
+$Env:LITERTLM_MODEL = "C:\path\to\gemma3-1b-it-int4.litertlm"
+go run main.go
+```
+
+---
+
+## 3. Method 2: Manual Prebuilt Download & Staging
+
+If you prefer to stage the native shared libraries manually:
+
+### Step 1: Download and Extract Prebuilts
+
+Download the release archive for your platform from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0):
+
+* **Linux x86_64:**
+  ```bash
+  mkdir -p ~/include/litertlm/lib
+  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/litertlm-linux-x86_64-v0.16.0.tar.gz
+  tar -xzf litertlm-linux-x86_64-v0.16.0.tar.gz -C ~/include/litertlm/lib
+  ```
+
+* **macOS ARM64 (Apple Silicon):**
+  ```bash
+  mkdir -p ~/include/litertlm/lib
+  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/CLiteRTLM_mac.xcframework.zip
+  unzip CLiteRTLM_mac.xcframework.zip -d ~/include/litertlm/lib
+  ```
+
+* **Windows x86_64:**
+  ```powershell
+  $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+  New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
+  Invoke-WebRequest -Uri https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/litertlm-windows-x86_64-v0.16.0.zip -OutFile litertlm.zip
+  Expand-Archive -Path litertlm.zip -DestinationPath $Env:LITERTLM_LIB -Force
+  ```
+
+### Step 2: Go Program (`main.go`)
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
+)
+
+func main() {
+	ctx := context.Background()
+
+	client, err := litertlm.New(ctx,
+		litertlm.WithLib(os.Getenv("LITERTLM_LIB")),
+		litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
+	)
+	if err != nil {
+		fmt.Printf("Initialization failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer client.Close()
+
+	text, err := client.Generate(ctx, "Write a haiku about the sea.")
+	if err != nil {
+		fmt.Printf("Generation failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(text)
+}
+```
+
+### Step 3: Run with Environment Variables
+
+```bash
+LITERTLM_LIB=~/include/litertlm/lib \
+LITERTLM_MODEL=~/models/gemma3-1b-it-int4.litertlm \
     go run main.go
 ```
 
-Expected output: a short haiku from the model:
-
+On Windows (PowerShell):
+```powershell
+$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+$Env:LITERTLM_MODEL = "C:\models\gemma3-1b-it-int4.litertlm"
+go run main.go
 ```
-Blue waves crash on shore,
-Salt wind whispers secrets deep,
-Ocean calls to soul.
+
+---
+
+## 4. Expected Output
+
+Both methods produce text completions directly from the model:
+
+```text
+Blue whispers rise and fall,
+Waves crash and secrets hold low,
+Ocean breathes its peace now.
 ```
 
-## What next
+---
 
-- **One-shot text generation** with sampler / token tuning →
-  [Client](client.md)
-- **Multi-turn conversations** with system prompts and tools →
-  [Chat](chat.md)
-- **Type-safe structured output** (model returns JSON, you get a
-  populated struct) → [Structured output](structured-output.md)
-- **Drop down to the C-API-mirroring surface** for prefill/decode,
-  scoring, token introspection → [Low-level API](low-level.md)
-- **Hit a quirky model output, empty completion, or stray
-  `default.profraw` files?** → [Troubleshooting](troubleshooting.md)
+## Next Steps
+
+* **Multi-turn chat & conversations** → [Chat Guide](chat.md)
+* **Automated tool and function calling** → [Tools Guide](tools.md)
+* **Structured JSON decoding** → [Structured Output Guide](structured-output.md)
+* **Model scaling and memory sizing** → [Supported Models](models.md)
+* **Low-level C-API control** → [Low-Level API](low-level.md)

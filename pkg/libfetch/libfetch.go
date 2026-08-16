@@ -154,33 +154,103 @@ func Fetch(ctx context.Context, opts ...Option) (string, error) {
 		}
 	}
 
+	// Populate any missing auxiliary libraries from local staged locations if available
+	populateFromLocalStaging(&c)
+
 	return c.dir, nil
 }
 
+func populateFromLocalStaging(c *config) {
+	var candidateDirs []string
+	if env := os.Getenv("LITERTLM_LIB"); env != "" {
+		candidateDirs = append(candidateDirs, env)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidateDirs = append(candidateDirs,
+			filepath.Join(home, "include", "litertlm", "lib"),
+			filepath.Join(home, ".litertlm", "lib"),
+		)
+	}
+	candidateDirs = append(candidateDirs, "/opt/litertlm/lib", "/usr/local/lib")
+
+	for _, dir := range candidateDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			dst := filepath.Join(c.dir, entry.Name())
+			if _, err := os.Stat(dst); err == nil {
+				continue
+			}
+			src := filepath.Join(dir, entry.Name())
+			data, err := os.ReadFile(src)
+			if err == nil && len(data) > 512 {
+				_ = writeFile(dst, data)
+			}
+		}
+	}
+}
+
 func fetchFromGitHubRelease(ctx context.Context, c *config) error {
+	var candidateURLs []string
+
 	// For macOS Apple Foundation frameworks
 	if strings.HasPrefix(c.platform, "macos") {
-		archiveURL := fmt.Sprintf("%s/%s/CLiteRTLM_mac.xcframework.zip", githubReleaseURL, c.version)
-		return fetchAndExtractZip(ctx, c, archiveURL)
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/%s/CLiteRTLM_mac.xcframework.zip", githubReleaseURL, c.version),
+			fmt.Sprintf("%s/%s/CLiteRTLM.xcframework.zip", githubReleaseURL, c.version),
+		)
+	} else {
+		// Common versioned C-API release zip
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/%s/litert_lm_c_api-0.1.0.zip", githubReleaseURL, c.version),
+			fmt.Sprintf("%s/%s/litert_lm_c_api-%s.zip", githubReleaseURL, c.version, strings.TrimPrefix(c.version, "v")),
+		)
+
+		switch c.platform {
+		case "windows_x86_64":
+			candidateURLs = append(candidateURLs,
+				fmt.Sprintf("%s/%s/litertlm-c-%s-windows-x86_64.zip", githubReleaseURL, c.version, c.version),
+				fmt.Sprintf("%s/%s/litertlm-windows-x86_64-%s.zip", githubReleaseURL, c.version, c.version),
+			)
+		case "linux_x86_64":
+			candidateURLs = append(candidateURLs,
+				fmt.Sprintf("%s/%s/litertlm-c-%s-linux-x86_64.tar.gz", githubReleaseURL, c.version, c.version),
+				fmt.Sprintf("%s/%s/litertlm-linux-x86_64-%s.tar.gz", githubReleaseURL, c.version, c.version),
+			)
+		case "linux_arm64":
+			candidateURLs = append(candidateURLs,
+				fmt.Sprintf("%s/%s/litertlm-c-%s-linux-arm64.tar.gz", githubReleaseURL, c.version, c.version),
+				fmt.Sprintf("%s/%s/litertlm-linux-arm64-%s.tar.gz", githubReleaseURL, c.version, c.version),
+			)
+		}
 	}
 
-	var archiveName string
-	switch c.platform {
-	case "windows_x86_64":
-		archiveName = fmt.Sprintf("litertlm-c-%s-windows-x86_64.zip", c.version)
-	case "linux_x86_64":
-		archiveName = fmt.Sprintf("litertlm-c-%s-linux-x86_64.tar.gz", c.version)
-	case "linux_arm64":
-		archiveName = fmt.Sprintf("litertlm-c-%s-linux-arm64.tar.gz", c.version)
-	default:
-		return fmt.Errorf("no release asset configured for platform %s", c.platform)
+	var lastErr error
+	for _, archiveURL := range candidateURLs {
+		if strings.HasSuffix(archiveURL, ".zip") {
+			if err := fetchAndExtractZip(ctx, c, archiveURL); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		} else {
+			if err := fetchAndExtractTarGz(ctx, c, archiveURL); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		}
 	}
 
-	archiveURL := fmt.Sprintf("%s/%s/%s", githubReleaseURL, c.version, archiveName)
-	if strings.HasSuffix(archiveURL, ".zip") {
-		return fetchAndExtractZip(ctx, c, archiveURL)
+	if lastErr != nil {
+		return lastErr
 	}
-	return fetchAndExtractTarGz(ctx, c, archiveURL)
+	return fmt.Errorf("no valid release asset found for platform %s", c.platform)
 }
 
 func fetchRawPrebuiltAssets(ctx context.Context, c *config) error {
@@ -252,6 +322,20 @@ func prebuiltFilesForPlatform(platform, backend string) []string {
 	}
 }
 
+func isLibraryForPlatform(platform, name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch platform {
+	case "windows_x86_64":
+		return ext == ".dll"
+	case "macos_arm64", "macos_x86_64":
+		return ext == ".dylib" || strings.Contains(name, ".framework")
+	case "linux_x86_64", "linux_arm64":
+		return ext == ".so" || strings.Contains(name, ".so.")
+	default:
+		return ext == ".so" || ext == ".dylib" || ext == ".dll"
+	}
+}
+
 func fetchAndExtractZip(ctx context.Context, c *config, url string) error {
 	c.logf("fetching archive %s", url)
 	data, err := get(ctx, url)
@@ -262,11 +346,15 @@ func fetchAndExtractZip(ctx context.Context, c *config, url string) error {
 	if err != nil {
 		return fmt.Errorf("open zip: %w", err)
 	}
+	extracted := 0
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
 		base := filepath.Base(f.Name)
+		if !isLibraryForPlatform(c.platform, base) {
+			continue
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -279,6 +367,10 @@ func fetchAndExtractZip(ctx context.Context, c *config, url string) error {
 		if err := writeFile(filepath.Join(c.dir, base), content); err != nil {
 			return err
 		}
+		extracted++
+	}
+	if extracted == 0 {
+		return fmt.Errorf("no matching library files found in archive %s", url)
 	}
 	return nil
 }
@@ -295,6 +387,7 @@ func fetchAndExtractTarGz(ctx context.Context, c *config, url string) error {
 	}
 	defer func() { _ = gzr.Close() }()
 	tr := tar.NewReader(gzr)
+	extracted := 0
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -305,6 +398,9 @@ func fetchAndExtractTarGz(ctx context.Context, c *config, url string) error {
 		}
 		if header.Typeflag == tar.TypeReg {
 			base := filepath.Base(header.Name)
+			if !isLibraryForPlatform(c.platform, base) {
+				continue
+			}
 			content, err := io.ReadAll(tr)
 			if err != nil {
 				return err
@@ -312,7 +408,11 @@ func fetchAndExtractTarGz(ctx context.Context, c *config, url string) error {
 			if err := writeFile(filepath.Join(c.dir, base), content); err != nil {
 				return err
 			}
+			extracted++
 		}
+	}
+	if extracted == 0 {
+		return fmt.Errorf("no matching library files found in archive %s", url)
 	}
 	return nil
 }
@@ -376,6 +476,9 @@ func get(ctx context.Context, url string) ([]byte, error) {
 }
 
 func writeFile(dst string, data []byte) error {
+	if bytes.HasPrefix(data, []byte("version https://git-lfs.github.com/spec/v1")) {
+		return fmt.Errorf("refusing to write Git LFS pointer for binary %s", filepath.Base(dst))
+	}
 	tmp := dst + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o755); err != nil {
 		return err

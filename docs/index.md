@@ -66,15 +66,14 @@ LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
 
 Full walkthrough: [Getting started](getting-started.md).
 
-## Building the C library
+## Provisioning the C libraries
 
-LiteRT-LM does not ship prebuilt C API shared libraries. Build them
-using the platform guide:
+LiteRT-LM publishes prebuilt C-API shared libraries (`v0.16.0+`) for Linux, macOS, and Windows. Use `litertlm.LibFetch` in Go to automatically stage dependencies, or consult the platform setup guides:
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
 (Linux/macOS) or
-[`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md).
+[`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md) (Windows).
 
-Minimum supported upstream: **LiteRT-LM v0.13.1**.
+Minimum supported upstream: **LiteRT-LM v0.16.0**.
 
 ## Examples
 
