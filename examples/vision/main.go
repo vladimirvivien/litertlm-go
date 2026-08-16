@@ -17,8 +17,10 @@ import (
 )
 
 func main() {
-	model := flag.String("model", "", "path to a multimodal .litertlm model file (required)")
+	model := flag.String("model", "", "path to a multimodal .litertlm model file (falls back to LITERTLM_MODEL env)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma-4-E2B-it)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	visionBackend := flag.String("vision-backend", "cpu", "vision backend (cpu | gpu)")
 	imagePath := flag.String("image", "", "path to the image file (required)")
@@ -27,10 +29,39 @@ func main() {
 	maxTokens := flag.Int("max-tokens", 4096, "engine token budget; vision needs >=4096 because image patches expand into many tokens")
 	flag.Parse()
 
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
+		os.Exit(2)
+	}
+
 	for _, req := range []struct {
 		name, val string
 	}{
-		{"--model", *model},
 		{"--image", *imagePath},
 		{"--description", *descriptionPath},
 	} {
@@ -52,11 +83,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx,
-		litertlm.WithLib(*libPath),
-		litertlm.WithModel(*model),
+		litertlm.WithLib(resolvedLib),
+		litertlm.WithModel(resolvedModel),
 		litertlm.WithBackend(*backend),
 		litertlm.WithVisionBackend(*visionBackend),
 		litertlm.WithMaxTokens(*maxTokens),

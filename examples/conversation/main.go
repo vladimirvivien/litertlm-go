@@ -78,21 +78,47 @@ func toInt(v any) (int, error) {
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
 	prompt := flag.String("prompt", "What is 17 plus 25?", "user question")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
-	ctx := context.Background()
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx,
-		litertlm.WithLib(*libPath),
-		litertlm.WithModel(*model),
+		litertlm.WithLib(resolvedLib),
+		litertlm.WithModel(resolvedModel),
 		litertlm.WithBackend(*backend),
 	)
 	if err != nil {

@@ -17,6 +17,8 @@ import (
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file (required)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	cacheDir := flag.String("cache-dir", "", "directory passed to WithCacheDir; empty creates a fresh temp dir removed at exit")
@@ -24,8 +26,33 @@ func main() {
 	prompt := flag.String("prompt", "The capital of France is", "completion-style prompt used for the one-shot Generate after each load")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
@@ -37,10 +64,8 @@ func main() {
 	defer cleanup()
 	fmt.Printf("cache dir: %s\n", dir)
 
-	ctx := context.Background()
-
 	fmt.Println("\n=== Run 1 (cold) ===")
-	cold, err := runOnce(ctx, *libPath, *model, *backend, dir, *prompt)
+	cold, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run 1: %v\n", err)
 		os.Exit(1)
@@ -48,7 +73,7 @@ func main() {
 	printTimings(cold)
 
 	fmt.Println("\n=== Run 2 (warm) ===")
-	warm, err := runOnce(ctx, *libPath, *model, *backend, dir, *prompt)
+	warm, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run 2: %v\n", err)
 		os.Exit(1)

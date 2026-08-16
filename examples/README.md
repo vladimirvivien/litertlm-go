@@ -1,14 +1,25 @@
 # litertlm-go examples
 
 This directory contains Go programs demonstrating the use of the `litertlm-go` API.
-Every example takes the same baseline flags:
+Every example supports both local paths and automated downloads:
 
 ```bash
+# Automated provisioning (downloads libraries and model directly):
+go run ./examples/<name> -get-lib v0.16.0 -get-model litert-community/gemma3-1b-it-int4
+
+# Or using pre-existing local paths / environment variables:
 LITERTLM_LIB=/abs/path/to/dist/lib \
-go run ./examples/<name> -model /abs/path/to/<model>.litertlm [-backend cpu|gpu] [-lib=$LITERLM_LIB]
+LITERTLM_MODEL=/abs/path/to/<model>.litertlm \
+go run ./examples/<name> [-backend cpu|gpu]
 ```
 
-`-backend` defaults to `cpu` and `-lib` defaults to `$LITERTLM_LIB`.
+### Common Flags
+
+* `-get-lib <version>`: Automatically download and cache LiteRT-LM shared libraries (e.g. `v0.16.0`).
+* `-get-model <id/url>`: Automatically download and cache a `.litertlm` model from Hugging Face or direct URL (e.g. `litert-community/gemma3-1b-it-int4`).
+* `-model <path>`: Path to a local `.litertlm` model file (falls back to `LITERTLM_MODEL` env).
+* `-lib <path>`: Path to the LiteRT-LM shared library directory (falls back to `LITERTLM_LIB` env).
+* `-backend <cpu|gpu>`: Execution backend (defaults to `cpu`).
 
 ## Index
 

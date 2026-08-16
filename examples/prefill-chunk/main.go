@@ -20,6 +20,8 @@ const defaultPrompt = `The printing press, developed by Johannes Gutenberg in th
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file (required)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu); WithPrefillChunkSize is CPU-only")
 	chunk := flag.Int("chunk", 128, "prefill chunk size for run 2; -1 disables chunking")
@@ -29,10 +31,36 @@ func main() {
 	maxTokens := flag.Int("max-tokens", 4096, "engine total token budget (prompt + output)")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
+
 	if *chunk == 0 {
 		fmt.Fprintln(os.Stderr, "--chunk must be a positive integer or -1 (disable)")
 		os.Exit(2)
@@ -49,10 +77,8 @@ func main() {
 	defer cleanup()
 	fmt.Printf("cache dir: %s\n", dir)
 
-	ctx := context.Background()
-
 	fmt.Println("\n=== Run 1: default (no WithPrefillChunkSize) ===")
-	def, err := runOnce(ctx, *libPath, *model, *backend, dir, nil, *maxTokens, *prompt)
+	def, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, nil, *maxTokens, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run 1: %v\n", err)
 		os.Exit(1)
@@ -60,7 +86,7 @@ func main() {
 	printRun(def)
 
 	fmt.Printf("\n=== Run 2: WithPrefillChunkSize(%d) ===\n", *chunk)
-	sel, err := runOnce(ctx, *libPath, *model, *backend, dir, chunk, *maxTokens, *prompt)
+	sel, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, chunk, *maxTokens, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run 2: %v\n", err)
 		os.Exit(1)

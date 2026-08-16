@@ -49,8 +49,10 @@ const (
 )
 
 func main() {
-	model := flag.String("model", "", "path to .litertlm chat-tuned model file")
-	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries")
+	model := flag.String("model", "", "path to .litertlm chat-tuned model file (falls back to LITERTLM_MODEL env)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	visionBackend := flag.String("vision-backend", "cpu", "vision encoder backend used when an image is attached")
 	audioBackend := flag.String("audio-backend", "cpu", "audio encoder backend used when an audio file is attached")
@@ -74,8 +76,34 @@ func main() {
 	logLevel := flag.String("loglevel", "quiet", "LiteRT-LM log severity floor: verbose | debug | info | warning | error | fatal | quiet (also accepts the numeric form)")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
@@ -85,9 +113,6 @@ func main() {
 		os.Exit(2)
 	}
 	litertlm.SetMinLogLevel(level)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	systemPrompt, err := resolveSystemPrompt(*systemFlag, *systemFile)
 	if err != nil {
@@ -103,8 +128,8 @@ func main() {
 	}
 
 	opts := []litertlm.Option{
-		litertlm.WithLib(*libPath),
-		litertlm.WithModel(*model),
+		litertlm.WithLib(resolvedLib),
+		litertlm.WithModel(resolvedModel),
 		litertlm.WithBackend(*backend),
 		litertlm.WithVisionBackend(*visionBackend),
 		litertlm.WithAudioBackend(*audioBackend),

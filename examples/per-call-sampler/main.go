@@ -17,6 +17,8 @@ import (
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file (required)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	prompt := flag.String("prompt", "Write a haiku about the changing seasons.", "prompt issued for all three sampler shapes")
@@ -24,17 +26,41 @@ func main() {
 	maxTokens := flag.Int("max-tokens", 96, "per-call decode cap (WithMaxOutputTokens)")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
-	ctx := context.Background()
 	client, err := litertlm.New(ctx,
-		litertlm.WithLib(*libPath),
-		litertlm.WithModel(*model),
+		litertlm.WithLib(resolvedLib),
+		litertlm.WithModel(resolvedModel),
 		litertlm.WithBackend(*backend),
 	)
 	if err != nil {

@@ -17,23 +17,50 @@ import (
 )
 
 func main() {
-	model := flag.String("model", "", "path to .litertlm model file")
+	model := flag.String("model", "", "path to .litertlm model file (falls back to LITERTLM_MODEL env)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
 	prompt := flag.String("prompt", "Write a short haiku about the sea.", "prompt text")
 	system := flag.String("system", "You are a friendly assistant.", "system message")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	maxTokens := flag.Int("max", 1024, "max total tokens (prompt + output); must be >= the model's smallest prefill signature, typically 128")
 	speculative := flag.Bool("speculative", false, "enable multi-token-prediction (MTP) speculative decoding; requires a model with an MTP draft head (e.g. litert-community/gemma-4-E4B)")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
 	opts := []litertlm.Option{
-		litertlm.WithLib(*libPath),
-		litertlm.WithModel(*model),
+		litertlm.WithLib(resolvedLib),
+		litertlm.WithModel(resolvedModel),
 		litertlm.WithBackend(*backend),
 		litertlm.WithMaxTokens(*maxTokens),
 	}
@@ -41,7 +68,6 @@ func main() {
 		opts = append(opts, litertlm.WithSpeculativeDecodingEnabled(true))
 	}
 
-	ctx := context.Background()
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 	client, err := litertlm.New(ctx, opts...)
 	if err != nil {

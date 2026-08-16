@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,26 +13,53 @@ import (
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
 
 	litertlm.SetMinLogLevel(litertlm.LogQuiet)
 
 	// Load C-API libraries
-	if err := litertlm.Load(*libPath, *backend, ""); err != nil {
+	if err := litertlm.Load(resolvedLib, *backend, ""); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to load libraries: %v\n", err)
 		os.Exit(1)
 	}
 
 	// 1. Create EngineSettings low-level config
 	fmt.Println("Creating EngineSettings...")
-	settings, err := litertlm.NewEngineSettings(*model, *backend, nil, nil)
+	settings, err := litertlm.NewEngineSettings(resolvedModel, *backend, nil, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "NewEngineSettings: %v\n", err)
 		os.Exit(1)

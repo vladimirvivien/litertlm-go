@@ -18,6 +18,8 @@ import (
 
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file (required)")
+	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	dtype := flag.Int("dtype", 1, "activation dtype for run 2: 0=F32, 1=F16, 2=I16, 3=I8")
@@ -26,10 +28,36 @@ func main() {
 	keepCache := flag.Bool("keep-cache", false, "skip cleanup of an auto-created temp cache dir")
 	flag.Parse()
 
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "--model is required")
+	ctx := context.Background()
+
+	resolvedLib := *libPath
+	if *getLib != "" {
+		staged, err := litertlm.LibFetch("", "", *getLib)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedLib = staged
+	}
+
+	resolvedModel := *model
+	if resolvedModel == "" {
+		resolvedModel = os.Getenv("LITERTLM_MODEL")
+	}
+	if *getModel != "" {
+		staged, err := litertlm.FetchModel(ctx, *getModel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fetch model: %v\n", err)
+			os.Exit(1)
+		}
+		resolvedModel = staged
+	}
+
+	if resolvedModel == "" {
+		fmt.Fprintln(os.Stderr, "--model or --get-model (or LITERTLM_MODEL env) is required")
 		os.Exit(2)
 	}
+
 	if *dtype < 0 || *dtype > 3 {
 		fmt.Fprintln(os.Stderr, "--dtype must be 0, 1, 2, or 3")
 		os.Exit(2)
@@ -43,10 +71,8 @@ func main() {
 	defer cleanup()
 	fmt.Printf("cache dir: %s\n", dir)
 
-	ctx := context.Background()
-
 	fmt.Println("\n=== Run 1: default activation dtype ===")
-	def, err := runOnce(ctx, *libPath, *model, *backend, dir, nil, *prompt)
+	def, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, nil, *prompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run 1: %v\n", err)
 		os.Exit(1)
@@ -54,7 +80,7 @@ func main() {
 	printRun(def)
 
 	fmt.Printf("\n=== Run 2: WithActivationDataType(%d) — %s ===\n", *dtype, dtypeName(*dtype))
-	sel, err := runOnce(ctx, *libPath, *model, *backend, dir, dtype, *prompt)
+	sel, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, dir, dtype, *prompt)
 	if err != nil {
 		fmt.Printf("engine construction failed: %v\n", err)
 		fmt.Printf("dtype %d (%s) is not supported on backend %q.\n", *dtype, dtypeName(*dtype), *backend)
