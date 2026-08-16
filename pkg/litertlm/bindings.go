@@ -27,6 +27,12 @@ var (
 	sessionConfigSetApplyPromptTemplateFunc = newLazyFun(
 		"litert_lm_session_config_set_apply_prompt_template",
 		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8)
+	sessionConfigSetLoraPathFunc = newLazyFun(
+		"litert_lm_session_config_set_lora_path",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionConfigSetAudioLoraPathFunc = newLazyFun(
+		"litert_lm_session_config_set_audio_lora_path",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionConfigDeleteFunc = newLazyFun(
 		"litert_lm_session_config_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
@@ -77,6 +83,13 @@ var (
 		&ffi.TypeVoid,
 		&ffi.TypePointer, // config
 		&ffi.TypeUint8,   // filter_channel_content_from_kv_cache (bool)
+	)
+	conversationConfigSetStreamToolCallsFunc = newLazyFun(
+		"litert_lm_conversation_config_set_stream_tool_calls",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // config
+		&ffi.TypeUint8,   // stream_tool_calls (bool)
+		&ffi.TypePointer, // channel_name (const char*)
 	)
 	conversationConfigDeleteFunc = newLazyFun(
 		"litert_lm_conversation_config_delete",

@@ -125,6 +125,30 @@ func (c ConversationConfig) SetFilterChannelContentFromKVCache(on bool) {
 	)
 }
 
+// SetStreamToolCalls configures whether tool call tokens are streamed
+// under the specified channel name.
+func (c ConversationConfig) SetStreamToolCalls(stream bool, channelName string) error {
+	if c == 0 {
+		return fmt.Errorf("litertlm: set_stream_tool_calls: invalid conversation config")
+	}
+	var v uint8
+	if stream {
+		v = 1
+	}
+	var chPtr *byte
+	if channelName != "" {
+		p, err := utils.BytePtrFromString(channelName)
+		if err != nil {
+			return err
+		}
+		chPtr = p
+	}
+	conversationConfigSetStreamToolCallsFunc.Call(
+		nil, unsafe.Pointer(&c), unsafe.Pointer(&v), unsafe.Pointer(&chPtr),
+	)
+	return nil
+}
+
 // Delete releases a ConversationConfig handle.
 func (c ConversationConfig) Delete() {
 	if c == 0 {

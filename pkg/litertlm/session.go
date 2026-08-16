@@ -56,6 +56,42 @@ func (c SessionConfig) SetSamplerParams(p SamplerParams) {
 	runtime.KeepAlive(p)
 }
 
+// SetLoraPath sets the path to the text LoRA weights file for this session.
+func (c SessionConfig) SetLoraPath(path string) error {
+	if c == 0 {
+		return fmt.Errorf("litertlm: set_lora_path: invalid session config")
+	}
+	cStr, err := utils.BytePtrFromString(path)
+	if err != nil {
+		return err
+	}
+	var res int32
+	sessionConfigSetLoraPathFunc.Call(unsafe.Pointer(&res), unsafe.Pointer(&c), unsafe.Pointer(&cStr))
+	runtime.KeepAlive(cStr)
+	if res != 0 {
+		return fmt.Errorf("litertlm: set_lora_path: failed with code %d", res)
+	}
+	return nil
+}
+
+// SetAudioLoraPath sets the path to the audio LoRA weights file for this session.
+func (c SessionConfig) SetAudioLoraPath(path string) error {
+	if c == 0 {
+		return fmt.Errorf("litertlm: set_audio_lora_path: invalid session config")
+	}
+	cStr, err := utils.BytePtrFromString(path)
+	if err != nil {
+		return err
+	}
+	var res int32
+	sessionConfigSetAudioLoraPathFunc.Call(unsafe.Pointer(&res), unsafe.Pointer(&c), unsafe.Pointer(&cStr))
+	runtime.KeepAlive(cStr)
+	if res != 0 {
+		return fmt.Errorf("litertlm: set_audio_lora_path: failed with code %d", res)
+	}
+	return nil
+}
+
 // Delete releases a Session handle.
 func (s Session) Delete() {
 	if s == 0 {
