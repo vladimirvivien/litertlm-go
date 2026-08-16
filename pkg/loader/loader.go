@@ -41,6 +41,7 @@ func LoadLibrary(path, lib string) (ffi.Lib, error) {
 	if path == "" {
 		return ffi.Lib{}, fmt.Errorf("library path not specified and %s env variable not set", EnvVar)
 	}
+	setDllDir(path)
 	return ffi.Load(GetLibraryFilename(path, lib))
 }
 
@@ -102,5 +103,6 @@ func LoadAuxLibrary(path, lib string) (ffi.Lib, error) {
 	if path == "" {
 		return ffi.Lib{}, fmt.Errorf("library path not specified and %s env variable not set", EnvVar)
 	}
+	setDllDir(path)
 	return ffi.Load(GetAuxLibraryFilename(path, lib))
 }

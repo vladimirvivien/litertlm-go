@@ -60,4 +60,6 @@ go run ./examples/<name> [-backend cpu|gpu]
 | `examples/thread-tuner/`       | Benchmark profiling of CPU thread allocation sizes (`WithNumThreads`) |
 | `examples/token-limiter/`      | Dynamic sequence output constraints on a per-call basis (`WithMaxOutputTokens`) |
 | `examples/lora-tuner/`         | Low-level base and supported LoRA rank configuration on settings handles at initialization |
+| `examples/model-downloader/`   | Standalone model downloader utility using `litertlm.FetchModel` |
+| `examples/config-file/`        | Configure `litertlm.Client` from a centralized `config.json` file using `WithConfigFile` |
 

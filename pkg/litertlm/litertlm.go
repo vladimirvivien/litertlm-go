@@ -61,6 +61,7 @@ var auxLibs = []string{
 // directory. Their absence is not an error; backend="gpu", "apple", or "metal" calls will
 // just fail at runtime if any are missing.
 var optionalLibs = []string{
+	"webgpu_dawn",
 	"LiteRt",
 	"LiteRtWebGpuAccelerator",
 	"LiteRtTopKWebGpuSampler",
