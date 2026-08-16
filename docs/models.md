@@ -90,9 +90,47 @@ On GPU backends using WebGPU / Direct3D 12, individual buffer allocations are su
 * Quantized `int4` formats (e.g., Gemma 3 12B/27B `int4`) partition tensor weights into sub-buffers to stay within standard GPU driver limits.
 * If a model fails during initialization with `failed to prepare engine`, verify available dedicated VRAM or switch to the CPU backend (`WithBackend("cpu")`).
 
+## 5. Automated Model Downloading (`litertlm.FetchModel`)
+
+`litertlm-go` includes a built-in downloader to automatically download and stage `.litertlm` models from Hugging Face or direct URLs with progress reporting and range-based resumable transfers:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// Download Gemma 3 1B from Hugging Face with progress updates
+	modelPath, err := litertlm.FetchModel(ctx, "litert-community/gemma3-1b-it-int4",
+		litertlm.WithModelProgress(func(downloaded, total int64, pct float64) {
+			if total > 0 {
+				fmt.Printf("\rDownloading: %.1f%% (%.1f / %.1f MB)", pct, float64(downloaded)/1e6, float64(total)/1e6)
+			}
+		}),
+	)
+	if err != nil {
+		log.Fatalf("FetchModel failed: %v", err)
+	}
+	fmt.Printf("\nModel cached at: %s\n", modelPath)
+}
+```
+
+Supported identifier formats:
+* **Hugging Face Shorthand:** `litert-community/gemma3-1b-it-int4` or `gemma3-1b-it-int4`
+* **Full Repo + File:** `hf:google/gemma-3-1b-it:model.litertlm`
+* **Direct HTTPS URL:** `https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm`
+
 ---
 
-## 5. Integration Test Execution
+## 6. Integration Test Execution
 
 To execute the model matrix battery against local model files:
 

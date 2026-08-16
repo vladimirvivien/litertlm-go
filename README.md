@@ -32,74 +32,78 @@ go get github.com/vladimirvivien/litertlm-go@latest
 
 ## 🚀 Quickstart
 
+### Programmatic Setup (Automated)
+
+Download both native prebuilts and model artifacts on-the-fly in Go:
+
 ```go
 package main
 
 import (
 	"context"
 	"fmt"
-	"os"
+	"log"
+	"runtime"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
 func main() {
 	ctx := context.Background()
-	
-	// Initialize client using compiled libraries and model
+
+	// 1. Fetch prebuilt libraries automatically
+	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	if err != nil {
+		log.Fatalf("LibFetch failed: %v", err)
+	}
+
+	// 2. Download model from Hugging Face automatically
+	modelPath, err := litertlm.FetchModel(ctx, "litert-community/gemma3-1b-it-int4")
+	if err != nil {
+		log.Fatalf("FetchModel failed: %v", err)
+	}
+
+	// 3. Initialize client and generate text
 	client, err := litertlm.New(ctx,
-		litertlm.WithLib(os.Getenv("LITERTLM_LIB")),
-		litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
+		litertlm.WithLib(libDir),
+		litertlm.WithModel(modelPath),
 	)
 	if err != nil {
-		fmt.Printf("Initialization failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Initialization failed: %v", err)
 	}
 	defer client.Close()
 
-	// Generate text
 	text, err := client.Generate(ctx, "Write a haiku about the sea.")
 	if err != nil {
-		fmt.Printf("Generation failed: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Generation failed: %v", err)
 	}
 	fmt.Println(text)
 }
 ```
 
-Run with your compiled libraries and model paths:
+### Manual Setup
+
+Run with pre-existing local libraries and model paths:
+
 ```bash
 LITERTLM_LIB=/abs/path/to/dist/lib \
-LITERTLM_MODEL=/abs/path/to/gemma-4-E2B-it.litertlm \
+LITERTLM_MODEL=/abs/path/to/gemma3-1b-it-int4.litertlm \
     go run main.go
 ```
 
 > [!TIP]
-> To run on the GPU backend, configure your initialization with `litertlm.WithBackend("gpu")` (defaults to `"cpu"`).
+> To run on the GPU backend, configure initialization with `litertlm.WithBackend("gpu")` (defaults to `"cpu"`).
 
 ---
 
-## 📦 Provisioning the C Libraries
+## 📦 Provisioning & Staging
 
-LiteRT-LM distributes prebuilt C-API shared libraries (`v0.16.0+`) across Linux, macOS, and Windows. You can download and stage them automatically or manually.
-
-### Automated Provisioning (Go)
-Use `litertlm.LibFetch` to download and stage the prebuilts directly from Go:
-
-```go
-libDir, err := litertlm.LibFetch("windows", "amd64", "v0.16.0")
-if err != nil {
-    log.Fatalf("LibFetch failed: %v", err)
-}
-// Pass libDir to litertlm.WithLib(libDir) or set LITERTLM_LIB
-```
-
-### Staging Guides & Custom Builds
-* **Linux / macOS Prebuilts & Staging** — [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
-* **Windows Prebuilts & DXC Setup** — [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
+* **Automated Provisioning (Go):** Use `litertlm.LibFetch` and `litertlm.FetchModel`.
+* **Linux / macOS Manual Staging:** [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
+* **Windows Manual Staging & DXC Setup:** [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 
 > [!NOTE]
-> For developers modifying the C++ engine itself, both guides also include instructions for building from source using Bazel. Minimum supported upstream: **LiteRT-LM v0.16.0**.
+> For developers modifying the C++ engine itself, both build guides also include instructions for building from source using Bazel. Minimum supported upstream: **LiteRT-LM v0.16.0**.
 
 ---
 

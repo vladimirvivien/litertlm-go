@@ -1,23 +1,24 @@
 # Getting Started with litertlm-go
 
-This guide shows how to provision the native LiteRT-LM shared libraries, load a `.litertlm` model file, and run text generation in Go.
+`litertlm-go` supports two setup workflows:
+1. **Fully Programmatic Setup (Recommended):** Automatically downloads and caches both the native C libraries and the model artifact in Go without manual setup steps.
+2. **Manual Provisioning:** Manually download the `.litertlm` model file and native shared libraries, specifying their paths via environment variables or options.
 
 ---
 
 ## 1. Prerequisites
 
 1. **Go 1.26 or newer**.
-2. **A `.litertlm` model file:** Download an instruction-tuned model from Hugging Face's [LiteRT Community](https://huggingface.co/litert-community) (e.g. `gemma3-1b-it-int4.litertlm` or `gemma-4-E2B-it.litertlm`).
-3. **Install the package:**
+2. **Install the package:**
    ```bash
    go get github.com/vladimirvivien/litertlm-go@latest
    ```
 
 ---
 
-## 2. Method 1: Automated Library Provisioning with `litertlm.LibFetch` (Recommended)
+## 2. Method 1: Fully Programmatic Setup (Recommended)
 
-`litertlm-go` includes a built-in helper (`litertlm.LibFetch`) that automatically resolves, downloads, and caches the official prebuilt libraries for your platform (`v0.16.0+`):
+In this workflow, Go automatically fetches the platform prebuilt libraries (`litertlm.LibFetch`) and downloads the `.litertlm` model from Hugging Face (`litertlm.FetchModel`):
 
 ### Go Program (`main.go`)
 
@@ -28,7 +29,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"runtime"
 
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
@@ -37,23 +37,29 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// 1. Automatically fetch and stage native prebuilt libraries
+	// 1. Automatically fetch and cache native LiteRT-LM shared libraries
 	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
 	if err != nil {
 		log.Fatalf("LibFetch failed: %v", err)
 	}
 
-	// 2. Initialize the client with the staged library and model path
+	// 2. Automatically download and cache the model from Hugging Face
+	modelPath, err := litertlm.FetchModel(ctx, "litert-community/gemma3-1b-it-int4")
+	if err != nil {
+		log.Fatalf("FetchModel failed: %v", err)
+	}
+
+	// 3. Initialize the client using the staged library and model
 	client, err := litertlm.New(ctx,
 		litertlm.WithLib(libDir),
-		litertlm.WithModel(os.Getenv("LITERTLM_MODEL")),
+		litertlm.WithModel(modelPath),
 	)
 	if err != nil {
 		log.Fatalf("Client initialization failed: %v", err)
 	}
 	defer client.Close()
 
-	// 3. Generate text
+	// 4. Generate text
 	text, err := client.Generate(ctx, "Write a haiku about the sea.")
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
@@ -65,26 +71,22 @@ func main() {
 ### Running the Program
 
 ```bash
-# Set model path and run (libraries are downloaded and cached automatically)
-export LITERTLM_MODEL="/path/to/gemma3-1b-it-int4.litertlm"
-go run main.go
-```
-
-On Windows (PowerShell):
-```powershell
-$Env:LITERTLM_MODEL = "C:\path\to\gemma3-1b-it-int4.litertlm"
 go run main.go
 ```
 
 ---
 
-## 3. Method 2: Manual Prebuilt Download & Staging
+## 3. Method 2: Manual Model & Library Provisioning
 
-If you prefer to stage the native shared libraries manually:
+If you already have a model file and native shared libraries on disk:
 
-### Step 1: Download and Extract Prebuilts
+### Step 1: Obtain the Model File
 
-Download the release archive for your platform from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0):
+Download a `.litertlm` model from Hugging Face's [LiteRT Community](https://huggingface.co/litert-community) (e.g., `gemma3-1b-it-int4.litertlm` or `gemma-4-E2B-it.litertlm`).
+
+### Step 2: Obtain the Shared Libraries
+
+Download the prebuilt release archive for your platform from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0):
 
 * **Linux x86_64:**
   ```bash
@@ -108,7 +110,7 @@ Download the release archive for your platform from the [LiteRT-LM Releases](htt
   Expand-Archive -Path litertlm.zip -DestinationPath $Env:LITERTLM_LIB -Force
   ```
 
-### Step 2: Go Program (`main.go`)
+### Step 3: Go Program (`main.go`)
 
 ```go
 package main
@@ -143,7 +145,7 @@ func main() {
 }
 ```
 
-### Step 3: Run with Environment Variables
+### Step 4: Run with Environment Variables
 
 ```bash
 LITERTLM_LIB=~/include/litertlm/lib \
