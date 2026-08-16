@@ -66,7 +66,11 @@ func DefaultPaths() []string {
 			"/opt/litertlm/lib",
 		)
 		if runtime.GOOS == "darwin" {
-			paths = append(paths, "/opt/homebrew/lib")
+			paths = append(paths,
+				"~/Library/Frameworks",
+				"/Library/Frameworks",
+				"/opt/homebrew/lib",
+			)
 		}
 		paths = append(paths, "/usr/local/lib")
 		return paths

@@ -44,10 +44,11 @@ const envLibName = "LITERTLM_LIB_NAME"
 // "cpu" → litertlm_c_cpu, "gpu" → litertlm_c. Unknown values fall back
 // to GPU first, then CPU.
 var libByBackend = map[string]string{
-	"cpu":   "litertlm_c_cpu",
-	"gpu":   "litertlm_c",
-	"apple": "litertlm_c",
-	"metal": "litertlm_c",
+	"cpu":     "litertlm_c_cpu",
+	"gpu":     "litertlm_c",
+	"apple":   "litertlm_c",
+	"metal":   "litertlm_c",
+	"ynnpack": "litertlm_c_cpu",
 }
 
 // auxLibs are required by the C API at load time and must sit next to

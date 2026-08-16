@@ -1,9 +1,7 @@
 package litertlm
 
 import (
-	"context"
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -313,8 +311,8 @@ func TestOption_NewV014Options(t *testing.T) {
 	}
 }
 
-// TestOption_AppleAndMetalBackendOptions verifies that WithBackend accepts "apple" and "metal".
-func TestOption_AppleAndMetalBackendOptions(t *testing.T) {
+// TestOption_BackendAliases verifies that WithBackend accepts aliases like "apple", "metal", and "ynnpack".
+func TestOption_BackendAliases(t *testing.T) {
 	cfg := clientConfig{}
 	WithBackend("apple")(&cfg)
 	if cfg.backend != "apple" {
@@ -325,58 +323,41 @@ func TestOption_AppleAndMetalBackendOptions(t *testing.T) {
 	if cfg.backend != "metal" {
 		t.Errorf("backend = %q, want metal", cfg.backend)
 	}
+
+	WithBackend("ynnpack")(&cfg)
+	if cfg.backend != "ynnpack" {
+		t.Errorf("backend = %q, want ynnpack", cfg.backend)
+	}
 }
 
-// TestNew_PlatformValidation verifies that Apple/Metal backends trigger errors on non-Apple systems.
-func TestNew_PlatformValidation(t *testing.T) {
-	ctx := context.Background()
-
+// TestTranslateBackend verifies backend alias mappings for C-API invocation.
+func TestTranslateBackend(t *testing.T) {
 	tests := []struct {
-		name string
-		opts []Option
+		in   string
+		want string
 	}{
-		{
-			name: "main backend apple",
-			opts: []Option{WithBackend("apple")},
-		},
-		{
-			name: "main backend metal",
-			opts: []Option{WithBackend("metal")},
-		},
-		{
-			name: "vision backend apple",
-			opts: []Option{WithVisionBackend("apple")},
-		},
-		{
-			name: "audio backend metal",
-			opts: []Option{WithAudioBackend("metal")},
-		},
+		{"apple", "gpu"},
+		{"metal", "gpu"},
+		{"ynnpack", "cpu"},
+		{"cpu", "cpu"},
+		{"gpu", "gpu"},
+		{"npu", "npu"},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Append model option to avoid path-required error
-			opts := append(tc.opts, WithModel("dummy.litertlm"))
-			_, err := New(ctx, opts...)
+		got := translateBackend(tc.in)
+		if got != tc.want {
+			t.Errorf("translateBackend(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 
-			isAppleOS := runtime.GOOS == "darwin" || runtime.GOOS == "ios"
+		inVal := tc.in
+		gotPtr := translateBackendPtr(&inVal)
+		if gotPtr == nil || *gotPtr != tc.want {
+			t.Errorf("translateBackendPtr(%q) = %v, want %q", tc.in, gotPtr, tc.want)
+		}
+	}
 
-			if isAppleOS {
-				// On Apple, we expect it to pass validation and proceed to try loading libraries,
-				// which will fail because "dummy.litertlm" doesn't exist or libPath is wrong.
-				if err != nil && strings.Contains(err.Error(), "only supported on macOS/iOS") {
-					t.Errorf("unexpected platform validation error on Apple OS: %v", err)
-				}
-			} else {
-				// On non-Apple, it must fail fast with the validation error.
-				if err == nil {
-					t.Fatal("expected platform validation error but got nil")
-				}
-				expect := "only supported on macOS/iOS"
-				if !strings.Contains(err.Error(), expect) {
-					t.Errorf("expected error to contain %q, got %q", expect, err.Error())
-				}
-			}
-		})
+	if translateBackendPtr(nil) != nil {
+		t.Error("translateBackendPtr(nil) should return nil")
 	}
 }

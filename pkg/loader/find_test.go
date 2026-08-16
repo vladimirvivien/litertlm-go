@@ -134,4 +134,17 @@ func TestDefaultPaths(t *testing.T) {
 			t.Errorf("DefaultPaths %v does not contain %q", paths, want)
 		}
 	}
+
+	if runtime.GOOS == "darwin" {
+		var foundFramework bool
+		for _, p := range paths {
+			if strings.Contains(p, "Frameworks") {
+				foundFramework = true
+				break
+			}
+		}
+		if !foundFramework {
+			t.Errorf("DefaultPaths on darwin does not contain Frameworks: %v", paths)
+		}
+	}
 }

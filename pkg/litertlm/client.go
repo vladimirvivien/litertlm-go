@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 )
@@ -81,21 +80,6 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 
 	if cfg.modelPath == "" && cfg.modelFd == nil {
 		return nil, fmt.Errorf("litertlm: New: model path or raw file descriptor required")
-	}
-
-	// Validate that Apple backend options are only used on macOS/iOS.
-	if cfg.backend == "apple" || cfg.backend == "metal" ||
-		(cfg.visionBackend != nil && (*cfg.visionBackend == "apple" || *cfg.visionBackend == "metal")) ||
-		(cfg.audioBackend != nil && (*cfg.audioBackend == "apple" || *cfg.audioBackend == "metal")) {
-		if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {
-			badBackend := cfg.backend
-			if cfg.visionBackend != nil && (*cfg.visionBackend == "apple" || *cfg.visionBackend == "metal") {
-				badBackend = *cfg.visionBackend
-			} else if cfg.audioBackend != nil && (*cfg.audioBackend == "apple" || *cfg.audioBackend == "metal") {
-				badBackend = *cfg.audioBackend
-			}
-			return nil, fmt.Errorf("litertlm: New: backend %q is only supported on macOS/iOS", badBackend)
-		}
 	}
 
 	return runCancellable(ctx,
@@ -278,6 +262,9 @@ func diagnoseLoadError(err error, cfg clientConfig) error {
 func translateBackend(b string) string {
 	if b == "apple" || b == "metal" {
 		return "gpu"
+	}
+	if b == "ynnpack" {
+		return "cpu"
 	}
 	return b
 }
