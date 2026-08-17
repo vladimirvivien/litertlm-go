@@ -56,6 +56,7 @@ Use functional options to specify environment and inference engine settings.
 | `WithSupportedLoRARanks(ranks)`           | Set the supported startup LoRA ranks for the engine.                      |
 | `WithAudioLoRARank(rank)`                 | Set the startup audio LoRA rank for the engine.                           |
 | `WithSupportedAudioLoRARanks(ranks)`      | Set the supported startup audio LoRA ranks for the engine.                |
+| `WithConfigFile(path, profile)`          | Load engine and sampler configurations from a centralized `config.json` file. |
 
 ### Logging
 

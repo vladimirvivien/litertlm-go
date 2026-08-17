@@ -36,6 +36,7 @@ Chat configuration:
 | `WithConstrainedDecoding(on)`   | Toggles constrained-decoding mode. |
 | `WithExtraContext(json)`        | Adds optional extra context (in JSON format) to the conversation preface. |
 | `WithFilterChannelContentFromKVCache(on)` | Excludes model reasoning-channel tokens from the KV cache to conserve cache space. |
+| `WithMaxToolHops(n)`            | Caps the auto-dispatch tool execution loop iterations (defaults to 5). |
 
 ## `Send(ctx, message)` and `Reply`
 
