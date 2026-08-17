@@ -68,10 +68,7 @@ func main() {
 		if total > 0 {
 			mbDown := float64(downloaded) / (1024 * 1024)
 			mbTotal := float64(total) / (1024 * 1024)
-			bars := int(pct / 2.5)
-			if bars > 40 {
-				bars = 40
-			}
+			bars := min(int(pct/2.5), 40)
 			barStr := strings.Repeat("=", bars) + strings.Repeat(" ", 40-bars)
 			fmt.Printf("\r[%s] %.1f%% (%.1f / %.1f MB)", barStr, pct, mbDown, mbTotal)
 		} else {

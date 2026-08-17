@@ -31,14 +31,12 @@ func TestConcurrent_Load(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 20 {
+		wg.Go(func() {
 			if err := litertlm.Load(libDir, "cpu", ""); err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -60,10 +58,8 @@ func TestConcurrent_SessionConfig(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 20 {
+		wg.Go(func() {
 			cfg, err := litertlm.NewSessionConfig()
 			if err != nil {
 				t.Errorf("NewSessionConfig: %v", err)
@@ -75,7 +71,7 @@ func TestConcurrent_SessionConfig(t *testing.T) {
 			cfg.SetApplyPromptTemplate(true)
 			_ = cfg.SetLoraPath("nonexistent.lora")
 			_ = cfg.SetAudioLoraPath("nonexistent_audio.lora")
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -105,7 +101,7 @@ func TestConcurrent_ClientLifecycle(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

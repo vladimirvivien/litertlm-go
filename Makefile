@@ -1,7 +1,13 @@
-.PHONY: build vet test lint tidy all clean
+.PHONY: build vet test lint fmt fix tidy all clean
 
 # Default target: everything CI runs, locally.
-all: build vet test lint
+all: fix fmt build vet test lint
+
+fix:
+	go fix ./...
+
+fmt:
+	go fmt ./...
 
 build:
 	go build ./...
