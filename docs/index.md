@@ -10,7 +10,7 @@ A Go binding for Google's
 
 ## 🔥 Features
 
-* 📦 **Automated Provisioning** — Automatically fetch, cache, and stage official LiteRT-LM shared libraries (`LibFetch`) and `.litertlm` models from Hugging Face (`FetchModel`) in Go.
+* 📦 **Automated Provisioning** — Automatically fetch, cache, and stage official LiteRT-LM shared libraries (`FetchLib`) and `.litertlm` models from Hugging Face (`FetchModel`) in Go.
 * ⚙️ **Centralized Configuration** — Configure backends, token limits, and sampler parameters from a shared `config.json` file (`WithConfigFile`).
 * 💬 **[Stateful Chat & Conversations](chat.md)** — Multi-turn chat orchestration with system prompts, transcript seeding, KV cache management, and conversation branching (`Chat.Clone`).
 * 🖼️ **[Multimodal Inputs](client.md#multimodal-inputs)** — Process text, images, and audio inputs in any order using a unified Go interface.
@@ -26,10 +26,9 @@ A Go binding for Google's
 go get github.com/vladimirvivien/litertlm-go@latest
 ```
 
-## Quickstart (with Automated Provisioning)
+## Quickstart
 
-Here is how simple it is to get started with `litertlm-go`. Start by programmatically download LiteRT-LM libraries and model artifacts directly in your Go application:
-
+### Automated Provisioning (Recommended)
 
 ```go
 package main
@@ -47,9 +46,9 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Automatically fetch and cache native libraries
-	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
 	if err != nil {
-		log.Fatalf("LibFetch failed: %v", err)
+		log.Fatalf("FetchLib failed: %v", err)
 	}
 
 	// 2. Automatically download model from Hugging Face
@@ -76,9 +75,7 @@ func main() {
 }
 ```
 
-### Manual Provisioning
-
-You can optionally run with pre-existing local libraries and model paths:
+### Manual Setup
 
 ```bash
 LITERTLM_LIB=/abs/path/to/dist/lib \
@@ -90,7 +87,7 @@ Full walkthrough: [Getting started](getting-started.md).
 
 ## Provisioning the C libraries
 
-LiteRT-LM publishes prebuilt C-API shared libraries (`v0.16.0+`) for Linux, macOS, and Windows. Use `litertlm.LibFetch` in Go to programmatically stage dependencies, or consult the platform setup guides:
+LiteRT-LM publishes prebuilt C-API shared libraries (`v0.16.0+`) for Linux, macOS, and Windows. Use `litertlm.FetchLib` in Go to programmatically stage dependencies, or consult the platform setup guides:
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
 (Linux/macOS) or
 [`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md) (Windows).

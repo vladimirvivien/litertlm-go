@@ -12,7 +12,7 @@ A high-performance Go binding for Google's [LiteRT-LM](https://github.com/google
 
 ## 🔥 Features 
 
-* 📦 **Automated Provisioning** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`LibFetch`) and `.litertlm` models from Hugging Face (`FetchModel`) directly in Go.
+* 📦 **Automated Provisioning** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`FetchLib`) and `.litertlm` models from Hugging Face (`FetchModel`) directly in Go.
 * ⚙️ **Centralized Configuration** — Load engine and sampler configurations from a shared `config.json` profile file (`WithConfigFile`).
 * 💬 **Stateful Chat & Conversations** — Multi-turn chat orchestration with system prompts, transcript seeding, KV cache management, and branching (`Chat.Clone`).
 * 🖼️ **Multimodal Inputs** — Process text, image, and audio inputs in any order using a unified Go interface.
@@ -51,9 +51,9 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Fetch prebuilt shared libraries automatically (cached locally)
-	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
 	if err != nil {
-		log.Fatalf("LibFetch failed: %v", err)
+		log.Fatalf("FetchLib failed: %v", err)
 	}
 
 	// 2. Download model from Hugging Face automatically (cached locally)
@@ -96,7 +96,7 @@ LITERTLM_MODEL=/abs/path/to/gemma3-1b-it-int4.litertlm \
 
 ## Provisioning & Staging
 
-* **Automated Provisioning (Go):** Use `litertlm.LibFetch` and `litertlm.FetchModel`.
+* **Automated Provisioning (Go):** Use `litertlm.FetchLib` and `litertlm.FetchModel`.
 * **Linux / macOS Manual Staging:** [`LITERTLM-BUILD.md`](./LITERTLM-BUILD.md)
 * **Windows Manual Staging & DXC Setup:** [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 

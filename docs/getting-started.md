@@ -18,7 +18,7 @@
 
 ## 2. Method 1: Fully Programmatic Setup (Recommended)
 
-In this workflow, Go automatically fetches the platform prebuilt libraries (`litertlm.LibFetch`) and downloads the `.litertlm` model from Hugging Face (`litertlm.FetchModel`):
+In this workflow, Go automatically fetches the platform prebuilt libraries (`litertlm.FetchLib`) and downloads the `.litertlm` model from Hugging Face (`litertlm.FetchModel`):
 
 ### Go Program (`main.go`)
 
@@ -38,9 +38,9 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Automatically fetch and cache native LiteRT-LM shared libraries
-	libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
 	if err != nil {
-		log.Fatalf("LibFetch failed: %v", err)
+		log.Fatalf("FetchLib failed: %v", err)
 	}
 
 	// 2. Automatically download and cache the model from Hugging Face

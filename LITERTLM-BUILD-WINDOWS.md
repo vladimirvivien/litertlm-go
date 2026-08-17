@@ -6,7 +6,7 @@
 
 ## 1. Staging Prebuilt Libraries on Windows (Recommended)
 
-### Option A: Automated Provisioning via `litertlm.LibFetch`
+### Option A: Automated Provisioning via `litertlm.FetchLib`
 
 `litertlm-go` includes a built-in helper that downloads the official Windows prebuilt archive, extracts the required DLLs, and locates DirectX Shader Compiler (DXC) dependencies automatically:
 
@@ -21,9 +21,9 @@ import (
 )
 
 func main() {
-    libDir, err := litertlm.LibFetch("windows", "amd64", "v0.16.0")
+    libDir, err := litertlm.FetchLib("windows", "amd64", "v0.16.0")
     if err != nil {
-        log.Fatalf("LibFetch failed: %v", err)
+        log.Fatalf("FetchLib failed: %v", err)
     }
     fmt.Printf("LiteRT-LM libraries staged at: %s\n", libDir)
 }

@@ -7,8 +7,8 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-func TestLibFetch_InvalidPlatform(t *testing.T) {
-	_, err := litertlm.LibFetch("invalid_os", "invalid_arch", "v0.16.0")
+func TestFetchLib_InvalidPlatform(t *testing.T) {
+	_, err := litertlm.FetchLib("invalid_os", "invalid_arch", "v0.16.0")
 	if err == nil {
 		t.Fatal("expected error for invalid OS/arch, got nil")
 	}

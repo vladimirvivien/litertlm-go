@@ -11,9 +11,9 @@ import (
 	"github.com/vladimirvivien/litertlm-go/pkg/litertlm"
 )
 
-// TestLibFetch_LiveDownloadAndBind tests fetching and binding against
+// TestFetchLib_LiveDownloadAndBind tests fetching and binding against
 // shared libraries.
-func TestLibFetch_LiveDownloadAndBind(t *testing.T) {
+func TestFetchLib_LiveDownloadAndBind(t *testing.T) {
 	// If local LITERTLM_LIB exists, test explicit fetch to a temp dir
 	// and verify that Load binds symbols from that directory.
 	existingLib := os.Getenv("LITERTLM_LIB")

@@ -6,7 +6,7 @@
 
 ## 1. Staging Prebuilt Libraries (Recommended)
 
-### Option A: Automated Provisioning via `litertlm.LibFetch`
+### Option A: Automated Provisioning via `litertlm.FetchLib`
 
 `litertlm-go` includes a built-in helper to automatically download and stage the official prebuilts:
 
@@ -22,9 +22,9 @@ import (
 )
 
 func main() {
-    libDir, err := litertlm.LibFetch(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+    libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
     if err != nil {
-        log.Fatalf("LibFetch failed: %v", err)
+        log.Fatalf("FetchLib failed: %v", err)
     }
     fmt.Printf("LiteRT-LM libraries staged at: %s\n", libDir)
 }

@@ -28,7 +28,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.LibFetch("", "", *getLib)
+		staged, err := litertlm.FetchLib("", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -86,7 +86,7 @@ func main() {
 
 	// 2. Automatically fetch C-API libraries if LITERTLM_LIB is not provided
 	if *libPath == "" {
-		stagedLib, errLib := litertlm.LibFetch("", "", "v0.16.0")
+		stagedLib, errLib := litertlm.FetchLib("", "", "v0.16.0")
 		if errLib == nil {
 			*libPath = stagedLib
 		}

@@ -29,7 +29,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.LibFetch("", "", *getLib)
+		staged, err := litertlm.FetchLib("", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
