@@ -24,9 +24,9 @@ func TestResolveModelIdentifier(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			in:           "https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm",
-			wantURL:      "https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm",
-			wantFilename: "gemma3-1b-it-int4.litertlm",
+			in:           "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E4B-it-gpu.litertlm",
 		},
 		{
 			in:           "hf:google/gemma-3-1b-it:model.litertlm",
@@ -34,9 +34,39 @@ func TestResolveModelIdentifier(t *testing.T) {
 			wantFilename: "model.litertlm",
 		},
 		{
-			in:           "litert-community/gemma3-1b-it-int4/gemma3-1b-it-int4.litertlm",
-			wantURL:      "https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm",
-			wantFilename: "gemma3-1b-it-int4.litertlm",
+			in:           "litert-community/gemma-4-E4B-it-litert-lm/gemma-4-E4B-it-gpu.litertlm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E4B-it-gpu.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-E4B-it-litert-lm:gpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E4B-it-gpu.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-E4B-it-litert-lm:cpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+			wantFilename: "gemma-4-E4B-it.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-E4B-it-litert-lm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+			wantFilename: "gemma-4-E4B-it.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-E2B-it-litert-lm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
+			wantFilename: "gemma-4-E2B-it.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-12B-it-litert-lm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it.litertlm",
+			wantFilename: "gemma-4-12B-it.litertlm",
+		},
+		{
+			in:           "litert-community/gemma-4-31B-it-litert-lm",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-31B-it-litert-lm/resolve/main/gemma-4-31B-it.litertlm",
+			wantFilename: "gemma-4-31B-it.litertlm",
 		},
 		{
 			in:           "litert-community/gemma3-1b-it-int4",
@@ -44,9 +74,29 @@ func TestResolveModelIdentifier(t *testing.T) {
 			wantFilename: "gemma3-1b-it-int4.litertlm",
 		},
 		{
-			in:           "gemma3-1b-it-int4",
-			wantURL:      "https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm",
-			wantFilename: "gemma3-1b-it-int4.litertlm",
+			in:           "gemma-4-E4B-it",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+			wantFilename: "gemma-4-E4B-it.litertlm",
+		},
+		{
+			in:           "gemma-4-E4B-it-gpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E4B-it-gpu.litertlm",
+		},
+		{
+			in:           "gemma-4-E2B-it",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
+			wantFilename: "gemma-4-E2B-it.litertlm",
+		},
+		{
+			in:           "gemma-4-12B-it",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it.litertlm",
+			wantFilename: "gemma-4-12B-it.litertlm",
+		},
+		{
+			in:           "gemma-4-31B-it",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-31B-it-litert-lm/resolve/main/gemma-4-31B-it.litertlm",
+			wantFilename: "gemma-4-31B-it.litertlm",
 		},
 		{
 			in:      "",
@@ -67,6 +117,60 @@ func TestResolveModelIdentifier(t *testing.T) {
 				if got.Filename != tc.wantFilename {
 					t.Errorf("Filename = %q, want %q", got.Filename, tc.wantFilename)
 				}
+			}
+		})
+	}
+}
+
+func TestResolveModelIdentifierWithVariant(t *testing.T) {
+	tests := []struct {
+		name         string
+		in           string
+		variant      string
+		wantURL      string
+		wantFilename string
+	}{
+		{
+			name:         "gemma 4 4b with GPU variant option",
+			in:           "litert-community/gemma-4-E4B-it-litert-lm",
+			variant:      "gpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E4B-it-gpu.litertlm",
+		},
+		{
+			name:         "gemma 4 4b with CPU variant option",
+			in:           "litert-community/gemma-4-E4B-it-litert-lm",
+			variant:      "cpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+			wantFilename: "gemma-4-E4B-it.litertlm",
+		},
+		{
+			name:         "gemma 4 2b shorthand with GPU variant option",
+			in:           "gemma-4-E2B-it",
+			variant:      "gpu",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-gpu.litertlm",
+			wantFilename: "gemma-4-E2B-it-gpu.litertlm",
+		},
+		{
+			name:         "gemma 4 12b with web variant option",
+			in:           "litert-community/gemma-4-12B-it-litert-lm",
+			variant:      "web",
+			wantURL:      "https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/main/gemma-4-12B-it-web.litertlm",
+			wantFilename: "gemma-4-12B-it-web.litertlm",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolveModelIdentifierWithVariant(tc.in, tc.variant)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.URL != tc.wantURL {
+				t.Errorf("URL = %q, want %q", got.URL, tc.wantURL)
+			}
+			if got.Filename != tc.wantFilename {
+				t.Errorf("Filename = %q, want %q", got.Filename, tc.wantFilename)
 			}
 		})
 	}
@@ -109,6 +213,31 @@ func TestFetch_DirectDownload(t *testing.T) {
 
 	if atomic.LoadInt32(&progressCalled) == 0 {
 		t.Error("expected progress callback to be called at least once")
+	}
+}
+
+func TestFetch_WithGPUAndCPUOptions(t *testing.T) {
+	testData := []byte("model binary data")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(testData)))
+		_, _ = w.Write(testData)
+	}))
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// Test WithGPU option
+	filePathGPU, err := Fetch(ctx, srv.URL+"/gemma-4-E4B-it.litertlm",
+		WithDir(tmpDir),
+		WithGPU(),
+	)
+	if err != nil {
+		t.Fatalf("Fetch WithGPU: %v", err)
+	}
+	if filepath.Base(filePathGPU) != "gemma-4-E4B-it-gpu.litertlm" {
+		t.Errorf("expected GPU filename, got %s", filepath.Base(filePathGPU))
 	}
 }
 

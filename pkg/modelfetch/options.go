@@ -18,6 +18,7 @@ type config struct {
 	timeout      time.Duration
 	skipIfExists bool
 	sha256Sum    string
+	variant      string
 }
 
 // Option configures model download behavior.
@@ -34,6 +35,28 @@ func WithDir(dir string) Option {
 func WithFilename(name string) Option {
 	return func(c *config) {
 		c.filename = name
+	}
+}
+
+// WithVariant specifies a hardware or runtime variant (e.g. "gpu", "cpu", "web")
+// to select the appropriate model artifact from a multi-file repository.
+func WithVariant(variant string) Option {
+	return func(c *config) {
+		c.variant = variant
+	}
+}
+
+// WithGPU is a convenience option that sets the model variant to "gpu".
+func WithGPU() Option {
+	return func(c *config) {
+		c.variant = "gpu"
+	}
+}
+
+// WithCPU is a convenience option that sets the model variant to "cpu".
+func WithCPU() Option {
+	return func(c *config) {
+		c.variant = "cpu"
 	}
 }
 

@@ -29,7 +29,7 @@ func Fetch(ctx context.Context, modelIDOrURL string, opts ...Option) (string, er
 		opt(&c)
 	}
 
-	target, err := ResolveModelIdentifier(modelIDOrURL)
+	target, err := ResolveModelIdentifierWithVariant(modelIDOrURL, c.variant)
 	if err != nil {
 		return "", err
 	}

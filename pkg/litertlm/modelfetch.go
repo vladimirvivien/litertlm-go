@@ -16,6 +16,9 @@ type ModelProgressFunc = modelfetch.ProgressFunc
 var (
 	WithModelDir       = modelfetch.WithDir
 	WithModelFilename  = modelfetch.WithFilename
+	WithModelVariant   = modelfetch.WithVariant
+	WithModelGPU       = modelfetch.WithGPU
+	WithModelCPU       = modelfetch.WithCPU
 	WithModelAuthToken = modelfetch.WithAuthToken
 	WithModelProgress  = modelfetch.WithProgress
 	WithModelTimeout   = modelfetch.WithTimeout
@@ -23,7 +26,7 @@ var (
 )
 
 // FetchModel resolves and downloads a .litertlm model artifact from a direct URL or
-// Hugging Face repository shorthand (e.g. "litert-community/gemma3-1b-it-int4").
+// Hugging Face repository shorthand (e.g. "litert-community/gemma-4-E4B-it-litert-lm").
 func FetchModel(ctx context.Context, modelIDOrURL string, opts ...ModelFetchOption) (string, error) {
 	return modelfetch.Fetch(ctx, modelIDOrURL, opts...)
 }
