@@ -23,13 +23,19 @@ jobs:
       - name: go mod tidy check
         run: |
           go mod tidy
-          git diff --exit-code || (echo "go.mod or go.sum is not tidy. Run 'go mod tidy' locally." && exit 1)
+          if ! git diff --exit-code; then
+            echo "::error::go.mod or go.sum is not tidy. Run 'go mod tidy' locally."
+            exit 1
+          fi
 
       - name: go fix & fmt check
         run: |
           go fix ./...
           go fmt ./...
-          git diff --exit-code || (echo "Code has pending fixes or formatting. Run 'go fix ./...' and 'go fmt ./...' locally." && exit 1)
+          if ! git diff --exit-code; then
+            echo "::error::Code has pending fixes or formatting. Run 'go fix ./...' and 'go fmt ./...' locally."
+            exit 1
+          fi
 
       - name: go build
         run: go build ./...
@@ -38,7 +44,7 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test ./...
+        run: go test -race ./...
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
