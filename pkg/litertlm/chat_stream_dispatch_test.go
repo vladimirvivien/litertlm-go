@@ -165,8 +165,7 @@ func TestStream_HopCapExceeded(t *testing.T) {
 		}
 		_ = chunk
 	}
-	var hops *ToolHopsError
-	if !errors.As(gotErr, &hops) {
+	if _, ok := errors.AsType[*ToolHopsError](gotErr); !ok {
 		t.Errorf("err = %v, want *ToolHopsError", gotErr)
 	}
 }

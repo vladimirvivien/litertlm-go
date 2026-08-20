@@ -178,7 +178,7 @@ func TestResolveModelIdentifierWithVariant(t *testing.T) {
 
 func TestFetch_DirectDownload(t *testing.T) {
 	testData := []byte("dummy litertlm model binary data for test")
-	var progressCalled int32
+	var progressCalled atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.Itoa(len(testData)))
@@ -192,7 +192,7 @@ func TestFetch_DirectDownload(t *testing.T) {
 	filePath, err := Fetch(ctx, srv.URL+"/test-model.litertlm",
 		WithDir(tmpDir),
 		WithProgress(func(downloaded, total int64, pct float64) {
-			atomic.AddInt32(&progressCalled, 1)
+			progressCalled.Add(1)
 		}),
 	)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestFetch_DirectDownload(t *testing.T) {
 		t.Errorf("content mismatch: got %q, want %q", string(content), string(testData))
 	}
 
-	if atomic.LoadInt32(&progressCalled) == 0 {
+	if progressCalled.Load() == 0 {
 		t.Error("expected progress callback to be called at least once")
 	}
 }

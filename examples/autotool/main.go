@@ -112,8 +112,7 @@ func main() {
 	fmt.Printf("user>     %s\n", *prompt)
 	reply, err := chat.Send(ctx, *prompt)
 	if err != nil {
-		var hops *litertlm.ToolHopsError
-		if errors.As(err, &hops) {
+		if hops, ok := errors.AsType[*litertlm.ToolHopsError](err); ok {
 			fmt.Fprintf(os.Stderr, "hop cap exceeded after %d iterations; last reply: %s\n",
 				hops.Hops, hops.LastReply.Raw())
 		} else {
