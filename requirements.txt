@@ -1,0 +1,7 @@
+# Python dependencies for building the docs site (MkDocs Material).
+# Used by .github/workflows/docs.yml in CI and by local previews:
+#
+#   pip install -r docs/requirements.txt
+#   mkdocs serve  # http://localhost:8000/
+#
+mkdocs-material>=9.7,<10
