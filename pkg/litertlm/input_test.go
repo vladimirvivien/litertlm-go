@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewTextInput(t *testing.T) {
-	if !realLibraryLoaded {
+	if !rt.isRealLibraryLoaded() {
 		t.Skip("C library not loaded")
 	}
 	tests := []struct {
@@ -31,7 +31,7 @@ func TestNewTextInput(t *testing.T) {
 }
 
 func TestNewTextInputString(t *testing.T) {
-	if !realLibraryLoaded {
+	if !rt.isRealLibraryLoaded() {
 		t.Skip("C library not loaded")
 	}
 	t.Run("non-empty", func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestNewTextInputString(t *testing.T) {
 }
 
 func TestNewBinaryInput(t *testing.T) {
-	if !realLibraryLoaded {
+	if !rt.isRealLibraryLoaded() {
 		t.Skip("C library not loaded")
 	}
 	tests := []struct {

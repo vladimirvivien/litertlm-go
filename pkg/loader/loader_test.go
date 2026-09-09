@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestGetLibraryFilename(t *testing.T) {
+func TestLibraryFilename(t *testing.T) {
 	dir := filepath.Join("tmp", "dist", "lib")
-	got := GetLibraryFilename(dir, "litertlm_c_cpu")
+	got := LibraryFilename(dir, "litertlm_c_cpu")
 
 	var want string
 	switch runtime.GOOS {
@@ -26,13 +26,13 @@ func TestGetLibraryFilename(t *testing.T) {
 	}
 
 	if got != want {
-		t.Fatalf("GetLibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
+		t.Fatalf("LibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
 	}
 }
 
-func TestGetAuxLibraryFilename(t *testing.T) {
+func TestAuxLibraryFilename(t *testing.T) {
 	dir := filepath.Join("tmp", "dist", "lib")
-	got := GetAuxLibraryFilename(dir, "GemmaModelConstraintProvider")
+	got := AuxLibraryFilename(dir, "GemmaModelConstraintProvider")
 
 	var want string
 	switch runtime.GOOS {
@@ -49,7 +49,7 @@ func TestGetAuxLibraryFilename(t *testing.T) {
 	}
 
 	if got != want {
-		t.Fatalf("GetAuxLibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
+		t.Fatalf("AuxLibraryFilename(%q) = %q, want %q", runtime.GOOS, got, want)
 	}
 }
 
@@ -67,17 +67,17 @@ func TestLoadLibraryNoPath(t *testing.T) {
 // Spaces in paths must survive the filename composition. ffi.Load will
 // fail because the file doesn't exist, but the error must reference the
 // path including the spaces — proving they weren't dropped or split.
-func TestGetLibraryFilenameWithSpaces(t *testing.T) {
+func TestLibraryFilenameWithSpaces(t *testing.T) {
 	dir := filepath.Join("path with spaces", "lib")
-	got := GetLibraryFilename(dir, "litertlm_c_cpu")
+	got := LibraryFilename(dir, "litertlm_c_cpu")
 	if !strings.Contains(got, "path with spaces") {
 		t.Errorf("got %q, expected substring %q", got, "path with spaces")
 	}
 }
 
-func TestGetAuxLibraryFilenameWithSpaces(t *testing.T) {
+func TestAuxLibraryFilenameWithSpaces(t *testing.T) {
 	dir := filepath.Join("my libs", "v1")
-	got := GetAuxLibraryFilename(dir, "GemmaModelConstraintProvider")
+	got := AuxLibraryFilename(dir, "GemmaModelConstraintProvider")
 	if !strings.Contains(got, "my libs") {
 		t.Errorf("got %q, expected substring %q", got, "my libs")
 	}
@@ -122,15 +122,12 @@ func TestLoader_ConcurrentCalls(t *testing.T) {
 	dir := t.TempDir()
 	var wg sync.WaitGroup
 	for range 20 {
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = LoadLibrary(dir, "concurrent_missing_lib")
-		}()
-		go func() {
-			defer wg.Done()
+		})
+		wg.Go(func() {
 			_, _ = LoadAuxLibrary(dir, "concurrent_missing_aux")
-		}()
+		})
 	}
 	wg.Wait()
 }

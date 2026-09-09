@@ -3,16 +3,10 @@ package litertlm
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Reply is one assistant turn returned by Chat.Send / Chat.SendToolResult.
-// It wraps the JSON document the C side surfaces (the chat template's
-// rendering of the model's output, parsed into structured fields).
-//
-// The underlying C-side JSON handle is freed during the SendMessage
-// call that produced the Reply, so a Reply has no external lifetime
-// concerns and is safe to pass around or hold indefinitely.
+// It wraps the JSON document surfaced by the C API.
 type Reply struct {
 	raw       string
 	role      string
@@ -31,22 +25,27 @@ func (r *Reply) Text() string {
 	if r == nil {
 		return ""
 	}
-	var b strings.Builder
-	for _, p := range r.content {
-		if p.Type == "text" {
-			b.WriteString(p.Text)
-		}
-	}
-	return b.String()
+	text, _ := concatTextParts(r.content)
+	return text
 }
 
-// ToolCalls returns the function-call requests the model made on this
-// turn. Empty when the model answered with text only.
+// ToolCalls returns a defensive copy of the function-call requests the
+// model made on this turn. Empty when the model answered with text only.
 func (r *Reply) ToolCalls() []ToolCall {
-	if r == nil {
+	if r == nil || len(r.toolCalls) == 0 {
 		return nil
 	}
-	return r.toolCalls
+	out := make([]ToolCall, len(r.toolCalls))
+	for i, tc := range r.toolCalls {
+		out[i] = ToolCall{
+			Type: tc.Type,
+			Function: ToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: cloneJSONMap(tc.Function.Arguments),
+			},
+		}
+	}
+	return out
 }
 
 // HasToolCalls reports whether this reply requests one or more tool
@@ -55,10 +54,7 @@ func (r *Reply) HasToolCalls() bool {
 	return r != nil && len(r.toolCalls) > 0
 }
 
-// Raw returns the original JSON document as-returned by the C API.
-// Useful for logging / debugging when fields the high-level Reply
-// doesn't surface (image parts, audio parts, reasoning channels) are
-// present.
+// Raw returns the original JSON document as returned by the C API.
 func (r *Reply) Raw() string {
 	if r == nil {
 		return ""
@@ -67,10 +63,7 @@ func (r *Reply) Raw() string {
 }
 
 // parseReply unmarshals the C-side JSON envelope into a *Reply and
-// strips Gemma 4 quote markers (`<|"|>`) from any string-typed tool
-// arguments. The marker leakage is a known C-side passthrough quirk
-// for string-typed function args; this normalisation runs once here
-// so callers always see clean values.
+// strips Gemma 4 quote markers (`<|"|>`) from any string-typed tool arguments.
 func parseReply(raw string) (*Reply, error) {
 	var msg struct {
 		Role      string             `json:"role"`
@@ -81,14 +74,7 @@ func parseReply(raw string) (*Reply, error) {
 		return nil, fmt.Errorf("litertlm: parse reply: %w (raw=%s)", err, raw)
 	}
 
-	for i := range msg.ToolCalls {
-		args := msg.ToolCalls[i].Function.Arguments
-		for k, v := range args {
-			if s, ok := v.(string); ok {
-				args[k] = strings.ReplaceAll(s, `<|"|>`, "")
-			}
-		}
-	}
+	stripToolQuoteMarkers(msg.ToolCalls)
 
 	return &Reply{
 		raw:       raw,

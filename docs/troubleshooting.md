@@ -5,7 +5,7 @@ Known limitations and issues, with their root causes and resolutions.
 ## Library not found
 
 **Symptom.** `litertlm.New` (or `litertlm.Load`) returns
-`"litertlm_c_cpu" not found; checked: ...` listing several paths.
+`"litert-lm" not found; checked: ...` listing several paths.
 
 **Cause.** The LiteRT-LM shared library is not at any of the locations
 the loader searches.
@@ -20,9 +20,10 @@ the loader searches.
     - Windows: `%LOCALAPPDATA%\litertlm\lib`,
       `%PROGRAMFILES%\litertlm\lib`.
 
-The default library short-name is selected by backend
-(`litertlm_c_cpu` for cpu, `litertlm_c` for gpu). Override it with
-`WithLibName("...")` or `LITERTLM_LIB_NAME`.
+The default library short-name is `litert-lm` (`liblitert-lm.so`,
+`liblitert-lm.dylib`, `litert-lm.dll`), falling back to legacy
+backend-specific names (`litertlm_c_cpu` / `litertlm_c`) when absent.
+Override it with `WithLibName("...")` or `LITERTLM_LIB_NAME`.
 
 **Fix.** Either:
 
@@ -155,28 +156,27 @@ defaults to 4096, which works for every Gemma 4 variant.
 
 ---
 
-## Panic: `litertlm: missing C symbol "..." in loaded library`
+## `ErrUnimplemented`: `missing C symbol "..." in loaded library`
 
-**Symptom.** A call into the Go API panics with a message like:
+**Symptom.** A call into the Go API returns an error wrapping
+`litertlm.ErrUnimplemented` (`*litertlm.CError` with `Code: StatusUnimplemented`):
 
 ```
-panic: litertlm: missing C symbol "litert_lm_session_config_set_apply_prompt_template"
-in loaded library (refresh the prebuilt LiteRT-LM libs to a build that
-exports it): symbol not found
+litertlm: missing C symbol "litert_lm_session_config_set_apply_prompt_template"
+in loaded library (refresh prebuilt LiteRT-LM libs)
 ```
 
-`litertlm.Load` succeeds — the panic fires the first time a method
-whose underlying C symbol is missing actually runs (which may be
-during `litertlm.New`, or later when you invoke a specific feature).
+`litertlm.Load` validates the major C API version (`1.x`) and returns
+early; per-symbol lookup happens lazily on first use of a method, so
+version-specific symbols fail with `ErrUnimplemented` when invoked
+against a build that does not export them.
 
-**Cause.** The Go bindings resolve C symbols lazily, on first call.
-The LiteRT-LM library staged in `$LITERTLM_LIB` predates the named
-symbol — typically because the prebuilt libs were copied from an
-older upstream build than this `litertlm-go` release was compiled
-against.
+**Cause.** The LiteRT-LM library staged in `$LITERTLM_LIB` does not
+export the named C API symbol — typically because it predates the
+requested C API minor version.
 
 **Fix.** Re-stage the prebuilt LiteRT-LM libraries from a current
-upstream build per
+upstream release (`v0.19.1` or newer) per
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md).
 
 ---
@@ -187,13 +187,17 @@ upstream build per
 `WARNING: GPU accelerator could not be loaded and registered` and
 inference continues on CPU.
 
-**Cause.** One or more GPU plugins
-(`libLiteRtWebGpuAccelerator.*`, `libLiteRtTopKWebGpuSampler.*`, the
-DirectX Shader Compiler on Windows) are missing from `$LITERTLM_LIB`.
+**Cause.** On Windows, DirectX Shader Compiler binaries
+(`dxcompiler.dll`, `dxil.dll`) are missing from `$LITERTLM_LIB`, or an
+older split build is missing GPU accelerator plugins
+(`libLiteRtWebGpuAccelerator.*`, `libLiteRtTopKWebGpuSampler.*`). Unified
+`liblitert-lm` builds bundle the LiteRT GPU accelerator internally.
 
-**Fix.** Re-stage the prebuilt accelerator plugins per
-[`LITERTLM-BUILD.md` §4](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
-(or the Windows equivalent).
+**Fix.** Stage `dxcompiler.dll` and `dxil.dll` on Windows (automatic
+with `libfetch.Fetch(..., libfetch.WithBackend("gpu"))`), or re-stage the
+shared library files per
+[`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md)
+and [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md).
 
 ---
 
@@ -277,10 +281,7 @@ strings.ReplaceAll(arg, `<|"|>`, "")
 **Symptom.** Client initialization fails early during engine creation with:
 `Failed to create engine: INTERNAL: ERROR: [unknown:0]`
 
-**Cause.** The C-API library (`litertlm_c.dll`/`liblitertlm_c.so`) was linked statically instead of dynamically. Both the C-API library and the GPU accelerator plugin must dynamically link against `libLiteRt` so they can register with the same delegate registry.
+**Cause.** Custom source builds splitting the C API from auxiliary GPU plugin libraries linked `libLiteRt` statically instead of dynamically, preventing delegate registration.
 
-**Fix.** Recompile the C-API shared library with the correct Bazel dynamic link flag:
-`--define=litert_runtime_link_mode=dynamic`
-(Avoid using the deprecated `--define=litert_link_capi_so=true` flag).
-Ensure `libLiteRt.dll`/`libLiteRt.so` and `libwebgpu_dawn.dll` are present in your library staging directory, and add that directory to your system path (`PATH` or `LD_LIBRARY_PATH`).
+**Fix.** Prefer building upstream's unified target (`//c:litert-lm`) from [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md). For split source builds with separate plugin libraries, compile with `--define=litert_runtime_link_mode=dynamic` and ensure `$LITERTLM_LIB` contains `libLiteRt` and `libwebgpu_dawn` on `PATH` / `LD_LIBRARY_PATH`.
 

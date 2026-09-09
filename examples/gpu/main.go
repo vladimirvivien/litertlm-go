@@ -20,7 +20,7 @@ func main() {
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
 	prompt := flag.String("prompt", "Summarise Go's approach to concurrency in one paragraph.", "prompt text")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the GPU-capable LiteRT-LM shared library + GPU plugin .so/.dylib/.dll files (falls back to LITERTLM_LIB env)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	maxTokens := flag.Int("max", 1024, "max total tokens (prompt + output); must be >= the model's smallest prefill signature, typically 128")
 	flag.Parse()
 
@@ -28,7 +28,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -68,7 +68,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer settings.Delete()
-	settings.SetMaxNumTokens(*maxTokens)
+	if err = settings.SetMaxNumTokens(*maxTokens); err != nil {
+		fmt.Fprintf(os.Stderr, "set max tokens: %v\n", err)
+		os.Exit(1)
+	}
 
 	engine, err := litertlm.NewEngine(settings)
 	if err != nil {

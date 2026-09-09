@@ -1,6 +1,4 @@
-//go:build linux || freebsd || darwin
-
-package utils
+package cstr
 
 import "testing"
 
@@ -29,9 +27,6 @@ func TestBytePtrRoundTrip(t *testing.T) {
 }
 
 func TestBytePtrFromStringNullByte(t *testing.T) {
-	// unix.BytePtrFromString rejects strings containing NUL bytes
-	// because the result would be ambiguous when re-read as
-	// null-terminated. Confirm our wrapper preserves that behavior.
 	_, err := BytePtrFromString("abc\x00def")
 	if err == nil {
 		t.Fatal("expected error for string containing null byte, got nil")

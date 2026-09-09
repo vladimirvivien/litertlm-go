@@ -1,73 +1,51 @@
 package litertlm
 
-import (
-	"unsafe"
-
-	"github.com/vladimirvivien/litertlm-go/pkg/utils"
-)
+import "unsafe"
 
 // Delete releases a Responses handle.
-func (r Responses) Delete() {
-	if r == 0 {
-		return
-	}
-	responsesDeleteFunc.Call(nil, unsafe.Pointer(&r))
-}
+func (r Responses) Delete() { deleteHandle(r, responsesDeleteFunc) }
 
 // NumCandidates returns the number of response candidates available.
 func (r Responses) NumCandidates() int {
-	if r == 0 {
-		return 0
-	}
-	var n int32
-	responsesGetNumCandidatesFunc.Call(unsafe.Pointer(&n), unsafe.Pointer(&r))
-	return int(n)
+	return int(getHandleScalar[Responses, uint64](r, responsesGetNumCandidatesFunc, "responses_get_num_candidates", 0))
 }
 
 // Text returns the response text at index i, copied into Go memory.
 // Returns "" if the index is out of bounds or the underlying pointer is
 // null. The copy lets the result outlive Responses.Delete().
 func (r Responses) Text(i int) string {
-	if r == 0 {
+	if r == 0 || i < 0 {
 		return ""
 	}
-	var ptr *byte
-	responsesGetResponseTextAtFunc.Call(
-		unsafe.Pointer(&ptr),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if ptr == nil {
+	idx := uint64(i)
+	s, ok, err := callStatusString(responsesGetResponseTextAtFunc, "responses_get_response_text_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil || !ok {
 		return ""
 	}
-	return utils.BytePtrToString(ptr)
+	return s
 }
 
 // Score returns the candidate's score at index i. ok mirrors the C
 // `has_score_at` predicate, which returns true whenever a score slot
 // exists for the index — *not* whether a meaningful score was computed.
 // Only ScoreTexts populates real values; GenerateContent / RunDecode
-// candidates report (0, true) as a placeholder. Use the producing
-// method to decide whether a returned score is meaningful.
+// candidates report (0, true) as a placeholder.
 func (r Responses) Score(i int) (float32, bool) {
-	if r == 0 {
+	if r == 0 || i < 0 {
 		return 0, false
 	}
-	var has uint8
-	responsesHasScoreAtFunc.Call(
-		unsafe.Pointer(&has),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if has == 0 {
+	idx := uint64(i)
+	has, err := callStatusBool(responsesHasScoreAtFunc, "responses_has_score_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil || !has {
 		return 0, false
 	}
-	var v float32
-	responsesGetScoreAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
+	v, err := callStatusScalar[float32](responsesGetScoreAtFunc, "responses_get_score_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil {
+		return 0, false
+	}
 	return v, true
 }
 
@@ -75,25 +53,21 @@ func (r Responses) Score(i int) (float32, bool) {
 // is false when no length was stored — most often when ScoreTexts was
 // called with storeTokenLengths=false.
 func (r Responses) TokenLength(i int) (int, bool) {
-	if r == 0 {
+	if r == 0 || i < 0 {
 		return 0, false
 	}
-	var has uint8
-	responsesHasTokenLengthAtFunc.Call(
-		unsafe.Pointer(&has),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if has == 0 {
+	idx := uint64(i)
+	has, err := callStatusBool(responsesHasTokenLengthAtFunc, "responses_has_token_length_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil || !has {
 		return 0, false
 	}
-	var v int32
-	responsesGetTokenLengthAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	return int(v), true
+	n, err := callStatusScalar[uint64](responsesGetTokenLengthAtFunc, "responses_get_token_length_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil {
+		return 0, false
+	}
+	return int(n), true
 }
 
 // TokenScores returns the per-token scores for candidate i, or
@@ -101,38 +75,27 @@ func (r Responses) TokenLength(i int) (int, bool) {
 // The returned slice is copied into Go memory and is safe to retain
 // after the underlying Responses handle is deleted.
 func (r Responses) TokenScores(i int) ([]float32, bool) {
-	if r == 0 {
+	if r == 0 || i < 0 {
 		return nil, false
 	}
-	var has uint8
-	responsesHasTokenScoresAtFunc.Call(
-		unsafe.Pointer(&has),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if has == 0 {
+	idx := uint64(i)
+	has, err := callStatusBool(responsesHasTokenScoresAtFunc, "responses_has_token_scores_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil || !has {
 		return nil, false
 	}
-	var n int32
-	responsesGetNumTokenScoresAtFunc.Call(
-		unsafe.Pointer(&n),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if n <= 0 {
+	n, err := callStatusScalar[uint64](responsesGetNumTokenScoresAtFunc, "responses_get_num_token_scores_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil {
+		return nil, false
+	}
+	if n == 0 {
 		return []float32{}, true
 	}
-	var ptr *float32
-	responsesGetTokenScoresAtFunc.Call(
-		unsafe.Pointer(&ptr),
-		unsafe.Pointer(&r),
-		unsafe.Pointer(new(int32(i))),
-	)
-	if ptr == nil {
+	ptr, err := callStatusScalar[*float32](responsesGetTokenScoresAtFunc, "responses_get_token_scores_at",
+		unsafe.Pointer(&r), unsafe.Pointer(&idx))
+	if err != nil || ptr == nil {
 		return nil, false
 	}
-	out := make([]float32, n)
-	src := unsafe.Slice(ptr, n)
-	copy(out, src)
-	return out, true
+	return copyCSlice(ptr, n), true
 }

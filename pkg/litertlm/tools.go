@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -43,9 +44,7 @@ const (
 	ToolPolicyReturnOnError ToolPolicy = iota
 
 	// ToolPolicyInformOnError marshals the handler error's message
-	// as the tool's result and continues the dispatch loop. The
-	// model can apologize, retry with different arguments, or pick
-	// a different tool.
+	// as the tool's result and continues the dispatch loop.
 	ToolPolicyInformOnError
 )
 
@@ -66,9 +65,6 @@ func WithToolPolicy(p ToolPolicy) ToolOption {
 // a JSON-Schema parameters map. The model sees the declaration but
 // the framework does not dispatch it — the caller observes
 // Reply.ToolCalls and replies with Chat.SendToolResult on its own.
-//
-// Use ManagedTool (via RegisterTool) when the framework should run
-// the handler and forward the result automatically.
 type RawTool struct {
 	name        string
 	description string
@@ -76,14 +72,13 @@ type RawTool struct {
 }
 
 // NewRawTool constructs a RawTool from a name, description, and
-// JSON-Schema parameters object. parameters follows the OpenAI /
-// Anthropic function-calling shape (typically a top-level
-// `{"type": "object", "properties": {...}, "required": [...]}`).
+// JSON-Schema parameters object. The parameters map is cloned so later
+// caller mutations do not affect the tool declaration.
 func NewRawTool(name, description string, parameters map[string]any) *RawTool {
 	return &RawTool{
 		name:        name,
 		description: description,
-		parameters:  parameters,
+		parameters:  cloneJSONMap(parameters),
 	}
 }
 
@@ -93,13 +88,11 @@ func (r *RawTool) Name() string { return r.name }
 // Description returns the tool's description.
 func (r *RawTool) Description() string { return r.description }
 
-// Parameters returns the JSON-Schema parameters object.
-func (r *RawTool) Parameters() map[string]any { return r.parameters }
+// Parameters returns a defensive copy of the JSON-Schema parameters object.
+func (r *RawTool) Parameters() map[string]any { return cloneJSONMap(r.parameters) }
 
 // ManagedTool wraps a typed handler and a JSON-Schema description of
-// its input. Construct with RegisterTool; attach to a Chat with
-// WithTool. The framework dispatches calls to the handler directly
-// when the model invokes the tool.
+// its input. Construct with RegisterTool; attach to a Chat with WithTool.
 type ManagedTool[I, O any] struct {
 	name        string
 	description string
@@ -114,16 +107,11 @@ func (t *ManagedTool[I, O]) Name() string { return t.name }
 // Description returns the tool's description.
 func (t *ManagedTool[I, O]) Description() string { return t.description }
 
-// Parameters returns the JSON-Schema parameters object derived from I.
-func (t *ManagedTool[I, O]) Parameters() map[string]any { return t.parameters }
+// Parameters returns a defensive copy of the JSON-Schema parameters object.
+func (t *ManagedTool[I, O]) Parameters() map[string]any { return cloneJSONMap(t.parameters) }
 
-// policy returns the configured ToolPolicy. Used by the dispatch
-// loop to decide what to do with a handler error.
 func (t *ManagedTool[I, O]) policy() ToolPolicy { return t.errPolicy }
 
-// invoke unmarshals argsJSON into a fresh I, runs the handler, and
-// returns the typed O. The dispatcher marshals the result back to
-// JSON for the model.
 func (t *ManagedTool[I, O]) invoke(ctx context.Context, argsJSON []byte) (any, error) {
 	var in I
 	if len(argsJSON) > 0 && string(argsJSON) != "null" {
@@ -139,22 +127,7 @@ func (t *ManagedTool[I, O]) invoke(ctx context.Context, argsJSON []byte) (any, e
 }
 
 // RegisterTool builds a ManagedTool[I, O] and registers it on c so
-// the same name cannot be reused. I must be a struct or pointer to a
-// struct; the returned tool exposes a JSON-Schema parameters map
-// derived from I's exported fields.
-//
-// Field rules for I:
-//   - Exported fields only.
-//   - Field name from `json:"name"` tag, else lowercased Go name.
-//     `json:"-"` excludes the field.
-//   - Description from `description:"..."` tag, optional.
-//   - Pointer fields are optional; non-pointer fields are required.
-//   - Supported kinds: string, bool, all int/uint/float widths,
-//     slice/array, nested struct, pointer (unwrapped).
-//   - Nesting capped at depth 32.
-//
-// Attach the returned tool to a Chat with WithTool(t). Pass
-// WithToolPolicy to override the default error-handling policy.
+// the same name cannot be reused.
 func RegisterTool[I, O any](
 	c *Client,
 	name, description string,
@@ -205,28 +178,37 @@ func RegisterTool[I, O any](
 	return tool, nil
 }
 
-// unregisterTool removes name from the client's tool registry. Used
-// by internal synthesized-tool flows that need cleanup paths. No-op
-// when name is absent.
-func (c *Client) unregisterTool(name string) {
-	if c == nil {
-		return
+func cloneJSONMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.tools, name)
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = cloneJSONValue(v)
+	}
+	return out
+}
+
+func cloneJSONValue(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		return cloneJSONMap(x)
+	case []any:
+		cp := make([]any, len(x))
+		for i, elem := range x {
+			cp[i] = cloneJSONValue(elem)
+		}
+		return cp
+	case []string:
+		return slices.Clone(x)
+	case []int:
+		return slices.Clone(x)
+	default:
+		return v
+	}
 }
 
 // paramsSchemaOf generates a formal JSON-Schema object for type t.
-// t must be a struct or pointer to a struct. The output shape
-// matches the OpenAI / Anthropic function-calling parameters
-// convention:
-//
-//	{
-//	    "type":       "object",
-//	    "properties": {<field>: <schema>, ...},
-//	    "required":   ["<field>", ...]
-//	}
 func paramsSchemaOf(t reflect.Type) (map[string]any, error) {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()

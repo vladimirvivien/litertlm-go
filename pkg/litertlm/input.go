@@ -1,61 +1,39 @@
 package litertlm
 
 import (
-	"fmt"
+	"runtime"
 	"unsafe"
 )
 
 // Delete releases the allocated InputData handle.
-func (i InputData) Delete() {
-	if i == 0 {
-		return
-	}
-	inputDataDeleteFunc.Call(nil, unsafe.Pointer(&i))
+func (i InputData) Delete() { deleteHandle(i, inputDataDeleteFunc) }
+
+func newInputData(t InputDataType, data unsafe.Pointer, size int) (InputData, error) {
+	typ := int32(t)
+	sz := uint64(size)
+	return callStatusHandle[InputData](inputDataCreateFunc, "input_data_create",
+		unsafe.Pointer(&typ),
+		unsafe.Pointer(&data),
+		unsafe.Pointer(&sz),
+	)
 }
 
 // NewTextInput builds an InputData referencing the UTF-8 bytes of s.
 // Since LiteRT-LM copies the data internally on creation, the backing slice
 // does not need to be pinned or kept alive after this function returns.
 func NewTextInput(s []byte) (InputData, error) {
-	var data unsafe.Pointer
-	if len(s) > 0 {
-		data = unsafe.Pointer(&s[0])
-	}
-	var h InputData
-	t := int32(InputText)
-	size := uint64(len(s))
-	inputDataCreateFunc.Call(
-		unsafe.Pointer(&h),
-		unsafe.Pointer(&t),
-		unsafe.Pointer(&data),
-		unsafe.Pointer(&size),
-	)
-	if h == 0 {
-		return 0, fmt.Errorf("litertlm: input_data_create failed for text input")
-	}
-	return h, nil
+	return NewBinaryInput(InputText, s)
 }
 
-// NewTextInputString is a convenience wrapper over NewTextInput for Go
-// strings.
+// NewTextInputString is a convenience wrapper over NewTextInput for Go strings.
 func NewTextInputString(s string) (InputData, error) {
 	var data unsafe.Pointer
 	if len(s) > 0 {
 		data = unsafe.Pointer(unsafe.StringData(s))
 	}
-	var h InputData
-	t := int32(InputText)
-	size := uint64(len(s))
-	inputDataCreateFunc.Call(
-		unsafe.Pointer(&h),
-		unsafe.Pointer(&t),
-		unsafe.Pointer(&data),
-		unsafe.Pointer(&size),
-	)
-	if h == 0 {
-		return 0, fmt.Errorf("litertlm: input_data_create failed for text input string")
-	}
-	return h, nil
+	h, err := newInputData(InputText, data, len(s))
+	runtime.KeepAlive(s)
+	return h, err
 }
 
 // NewBinaryInput builds an InputData for image or audio bytes. Use
@@ -65,17 +43,7 @@ func NewBinaryInput(t InputDataType, b []byte) (InputData, error) {
 	if len(b) > 0 {
 		data = unsafe.Pointer(&b[0])
 	}
-	var h InputData
-	typ := int32(t)
-	size := uint64(len(b))
-	inputDataCreateFunc.Call(
-		unsafe.Pointer(&h),
-		unsafe.Pointer(&typ),
-		unsafe.Pointer(&data),
-		unsafe.Pointer(&size),
-	)
-	if h == 0 {
-		return 0, fmt.Errorf("litertlm: input_data_create failed for binary input type %d", t)
-	}
-	return h, nil
+	h, err := newInputData(t, data, len(b))
+	runtime.KeepAlive(b)
+	return h, err
 }

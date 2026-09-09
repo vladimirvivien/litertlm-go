@@ -301,35 +301,6 @@ func TestRegisterTool_AcceptsNamesContainingReservedPrefix(t *testing.T) {
 	}
 }
 
-// ---- unregisterTool -----------------------------------------------------
-
-func TestUnregisterTool_RemovesEntry(t *testing.T) {
-	c := &Client{}
-	handler := func(ctx context.Context, in weatherIn) (weatherOut, error) {
-		return weatherOut{}, nil
-	}
-	if _, err := RegisterTool(c, "weather", "d", handler); err != nil {
-		t.Fatalf("RegisterTool: %v", err)
-	}
-	c.unregisterTool("weather")
-	if _, ok := c.tools["weather"]; ok {
-		t.Error("unregisterTool: entry still present")
-	}
-}
-
-func TestUnregisterTool_NoOpForMissing(t *testing.T) {
-	c := &Client{}
-	c.unregisterTool("never_registered") // must not panic
-	if len(c.tools) != 0 {
-		t.Errorf("unregisterTool created entries: %v", c.tools)
-	}
-}
-
-func TestUnregisterTool_NilClient(t *testing.T) {
-	var c *Client
-	c.unregisterTool("anything") // must not panic
-}
-
 // ---- ManagedTool.invoke -------------------------------------------------
 
 func TestManagedTool_Invoke(t *testing.T) {

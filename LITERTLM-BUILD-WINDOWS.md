@@ -1,6 +1,6 @@
 # Staging & Building LiteRT-LM C Shared Libraries on Windows
 
-`litertlm-go` loads native LiteRT-LM shared libraries (`*.dll`) at runtime. Starting with **v0.16.0**, official prebuilt Windows binaries are distributed by the LiteRT-LM project.
+`litertlm-go` loads the unified `litert-lm.dll` shared library targeting LiteRT-LM **v0.19.1** (C API `1.0.0`). Official prebuilt Windows binaries are distributed by the LiteRT-LM project.
 
 ---
 
@@ -8,12 +8,13 @@
 
 ### Option A: Automated Provisioning via `litertlm.FetchLib`
 
-`litertlm-go` includes a built-in helper that downloads the official Windows prebuilt archive, extracts the required DLLs, and locates DirectX Shader Compiler (DXC) dependencies automatically:
+`litertlm-go` includes a built-in helper that downloads the official Windows prebuilt archive (`litert_lm_c_api-1.0.0.zip`) and extracts `litert-lm.dll`. Use `libfetch.Fetch` with `libfetch.WithBackend("gpu")` when you also want DirectX Shader Compiler (`dxcompiler.dll`, `dxil.dll`) staged automatically:
 
 ```go
 package main
 
 import (
+    "context"
     "fmt"
     "log"
 
@@ -21,7 +22,7 @@ import (
 )
 
 func main() {
-    libDir, err := litertlm.FetchLib("windows", "amd64", "v0.16.0")
+    libDir, err := litertlm.FetchLib(context.Background(), "windows", "amd64", "v0.19.1")
     if err != nil {
         log.Fatalf("FetchLib failed: %v", err)
     }
@@ -31,12 +32,13 @@ func main() {
 
 ### Option B: Manual Download & Staging
 
-1. Download `litertlm-windows-x86_64-v0.16.0.zip` from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0).
-2. Extract the archive into your staging directory (e.g. `%USERPROFILE%\include\litertlm\lib`):
+1. Download `litert_lm_c_api-1.0.0.zip` from [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.19.1).
+2. Extract the archive and copy `lib\windows_x86_64\litert-lm.dll` into your staging directory (e.g. `$Env:USERPROFILE\include\litertlm\lib`):
    ```powershell
    $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
    New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
-   Expand-Archive -Path litertlm-windows-x86_64-v0.16.0.zip -DestinationPath $Env:LITERTLM_LIB -Force
+   Expand-Archive -Path litert_lm_c_api-1.0.0.zip -DestinationPath .\litert_lm_c_api -Force
+   Copy-Item .\litert_lm_c_api\lib\windows_x86_64\litert-lm.dll $Env:LITERTLM_LIB\
    ```
 3. **DirectX Shader Compiler (DXC) for GPU Inference:**
    For Direct3D 12 / WebGPU execution, copy `dxcompiler.dll` and `dxil.dll` from the Windows SDK:
@@ -86,67 +88,27 @@ If you are developing custom C++ engine features or operators, compile from sour
 ```powershell
 git clone https://github.com/google-ai-edge/LiteRT-LM.git
 cd LiteRT-LM
-git checkout v0.16.0
+git checkout v0.19.1
 git lfs install --local
 git lfs pull
 ```
 
-### Step 2: Configure Bazel Target
+### Step 2: Build the Unified DLL
 
-Create `c/litertlm_c_api/BUILD`:
-
-```python
-package(default_visibility = ["//visibility:public"])
-
-WIN_EXPORTS = [
-    "/EXPORT:litert_lm_log",
-    "/EXPORT:litert_lm_set_min_log_level",
-]
-
-cc_binary(
-    name = "litertlm_c_cpu",
-    linkshared = 1,
-    linkopts = select({
-        "@platforms//os:windows": ["/WHOLEARCHIVE:engine_cpu.lib"] + WIN_EXPORTS,
-        "//conditions:default": [],
-    }),
-    deps = ["//c:engine_cpu"],
-)
-
-cc_binary(
-    name = "litertlm_c",
-    linkshared = 1,
-    linkopts = select({
-        "@platforms//os:windows": ["/WHOLEARCHIVE:engine.lib"] + WIN_EXPORTS,
-        "//conditions:default": [],
-    }),
-    deps = ["//c:engine"],
-)
-```
-
-### Step 3: Build Binaries
+Upstream defines the unified C-API shared library target `//c:litert-lm`:
 
 ```powershell
 $Env:MSYS_NO_PATHCONV = 1
-
-# CPU Library
-bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c_cpu --config=windows
-
-# GPU Library
-bazelisk --output_base=C:\bzl build //c/litertlm_c_api:litertlm_c `
-    --config=windows `
-    --define=litert_runtime_link_mode=dynamic `
-    --define=resolve_symbols_in_exec=false
+bazelisk --output_base=C:\bzl build //c:litert-lm --config=windows
 ```
 
-### Step 4: Stage Binaries
+### Step 3: Stage Binaries
 
 ```powershell
 $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
 New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
 
-Copy-Item prebuilt\windows_x86_64\*.dll $Env:LITERTLM_LIB\
-Copy-Item bazel-bin\c\litertlm_c_api\litertlm_c*.dll $Env:LITERTLM_LIB\
+Copy-Item bazel-bin\c\litert-lm.dll $Env:LITERTLM_LIB\
 ```
 
 ---
@@ -155,7 +117,7 @@ Copy-Item bazel-bin\c\litertlm_c_api\litertlm_c*.dll $Env:LITERTLM_LIB\
 
 | Symptom | Cause | Solution |
 |---|---|---|
-| `load: ... lib<name>.dll: The specified module could not be found` | Auxiliary plugin DLLs missing from staging path | Ensure all `prebuilt\windows_x86_64\*.dll` files are copied to `$Env:LITERTLM_LIB` |
+| `"litert-lm" not found` or `load: ... The specified module could not be found` | `litert-lm.dll` missing from staging path | Ensure `litert-lm.dll` is in `$Env:LITERTLM_LIB` (or pass `WithLib`) |
 | `DynamicLib.Open: dxil.dll Windows Error: 87` / `Failed to create WebGPU environment` | `dxcompiler.dll` or `dxil.dll` missing | Copy both DLLs from the Windows SDK into `$Env:LITERTLM_LIB` |
 | Build fails with `LongPathsEnabled` errors | NTFS long paths disabled | Enable LongPathsEnabled in registry or use `--output_base=C:\bzl` |
 | Empty `default.profraw` files appear in current directory | Upstream binary LLVM profiling runtime | Set `$Env:LLVM_PROFILE_FILE = "NUL"` in PowerShell |

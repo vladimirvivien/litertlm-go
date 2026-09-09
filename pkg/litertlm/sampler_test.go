@@ -1,18 +1,9 @@
 package litertlm
 
 import (
+	"strings"
 	"testing"
-	"unsafe"
 )
-
-// SamplerParams must be 20 bytes (5 × 4-byte fields) to match the C
-// struct. A regression here would corrupt the entire SetSamplerParams
-// call.
-func TestSamplerParamsLayout(t *testing.T) {
-	if got, want := unsafe.Sizeof(SamplerParams{}), uintptr(20); got != want {
-		t.Fatalf("sizeof(SamplerParams) = %d, want %d", got, want)
-	}
-}
 
 func TestDefaultSamplerParams(t *testing.T) {
 	p := DefaultSamplerParams()
@@ -30,5 +21,13 @@ func TestDefaultSamplerParams(t *testing.T) {
 	}
 	if p.Seed != 0 {
 		t.Errorf("Seed = %d, want 0", p.Seed)
+	}
+}
+
+func TestSessionConfig_SetSamplerParams_ZeroHandle(t *testing.T) {
+	var cfg SessionConfig
+	err := cfg.SetSamplerParams(DefaultSamplerParams())
+	if err == nil || !strings.Contains(err.Error(), "invalid session config") {
+		t.Errorf("expected invalid session config error, got %v", err)
 	}
 }

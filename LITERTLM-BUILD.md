@@ -1,6 +1,6 @@
 # Staging & Building LiteRT-LM C Shared Libraries (Linux & macOS)
 
-`litertlm-go` loads LiteRT-LM shared libraries (`*.so` on Linux, `*.dylib` on macOS) at runtime. Starting with upstream **v0.16.0**, official prebuilt shared libraries are distributed for Linux and macOS.
+`litertlm-go` loads the unified `liblitert-lm` shared library (`liblitert-lm.so` on Linux, `liblitert-lm.dylib` on macOS) targeting LiteRT-LM **v0.19.1** (C API `1.0.0`). Official prebuilt shared libraries are distributed for Linux and macOS.
 
 ---
 
@@ -14,6 +14,7 @@
 package main
 
 import (
+    "context"
     "fmt"
     "log"
     "runtime"
@@ -22,7 +23,7 @@ import (
 )
 
 func main() {
-    libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+    libDir, err := litertlm.FetchLib(context.Background(), runtime.GOOS, runtime.GOARCH, "v0.19.1")
     if err != nil {
         log.Fatalf("FetchLib failed: %v", err)
     }
@@ -32,14 +33,15 @@ func main() {
 
 ### Option B: Manual Download
 
-1. Download the prebuilt release archive for your platform from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0):
-   * **Linux x86_64:** `litertlm-linux-x86_64-v0.16.0.tar.gz`
-   * **Linux ARM64:** `litertlm-linux-arm64-v0.16.0.tar.gz`
-   * **macOS ARM64 (Apple Silicon):** `litertlm-macos-arm64-v0.16.0.tar.gz`
-2. Extract the archive to a local staging directory (e.g., `~/include/litertlm/lib`):
+1. Download the C-API release archive (`litert_lm_c_api-1.0.0.zip`) or macOS archive from [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.19.1).
+2. Extract the platform shared library (`liblitert-lm.so` for Linux, `liblitert-lm.dylib` for macOS) into a local staging directory (e.g., `~/include/litertlm/lib`):
    ```bash
    mkdir -p ~/include/litertlm/lib
-   tar -xzf litertlm-linux-x86_64-v0.16.0.tar.gz -C ~/include/litertlm/lib
+   unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
+   # Linux x86_64:
+   cp /tmp/litert_lm_c_api/lib/linux_x86_64/liblitert-lm.so ~/include/litertlm/lib/
+   # macOS ARM64:
+   cp /tmp/litert_lm_c_api/lib/macos_arm64/liblitert-lm.dylib ~/include/litertlm/lib/
    ```
 3. Set the environment variable:
    ```bash
@@ -82,58 +84,32 @@ If you are modifying the C++ engine or building custom operator extensions, you 
 ```bash
 git clone https://github.com/google-ai-edge/LiteRT-LM.git
 cd LiteRT-LM
-git checkout v0.16.0
+git checkout v0.19.1
 git lfs install --local
 git lfs pull
 ```
 
-### Step 2: Configure Bazel C-API Target
+### Step 2: Build the Unified Shared Library
 
-Create `c/litertlm_c_api/BUILD`:
-
-```python
-package(default_visibility = ["//visibility:public"])
-
-cc_binary(
-    name = "litertlm_c_cpu",
-    linkshared = 1,
-    deps = ["//c:engine_cpu"],
-)
-
-cc_binary(
-    name = "litertlm_c",
-    linkshared = 1,
-    deps = ["//c:engine"],
-)
-```
-
-### Step 3: Build Shared Libraries
+Upstream provides the unified C-API target `//c:litert-lm`:
 
 ```bash
-# CPU library
-bazelisk build //c/litertlm_c_api:litertlm_c_cpu
-
-# GPU library (requires dynamic linking flags)
-bazelisk build //c/litertlm_c_api:litertlm_c \
-    --define=litert_runtime_link_mode=dynamic \
-    --define=resolve_symbols_in_exec=false
+bazelisk build //c:litert-lm
 ```
 
-### Step 4: Stage Built Binaries
+### Step 3: Stage Built Binaries
 
-Copy the compiled libraries and upstream plugin dependencies to your staging directory:
+Copy the compiled library to your staging directory:
 
 ```bash
 export LITERTLM_LIB=~/include/litertlm/lib
 mkdir -p $LITERTLM_LIB
 
 # Linux
-cp prebuilt/linux_x86_64/*.so $LITERTLM_LIB
-cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.so $LITERTLM_LIB
+cp bazel-bin/c/liblitert-lm.so $LITERTLM_LIB/
 
 # macOS
-cp prebuilt/macos_arm64/*.dylib $LITERTLM_LIB
-cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.dylib $LITERTLM_LIB
+cp bazel-bin/c/liblitert-lm.dylib $LITERTLM_LIB/
 ```
 
 ---
@@ -142,7 +118,7 @@ cp bazel-bin/c/litertlm_c_api/liblitertlm_c*.dylib $LITERTLM_LIB
 
 | Symptom | Cause | Solution |
 |---|---|---|
-| Link error *"not an object or archive"* on a `prebuilt/*.so` | LFS pointer file, not binary | Run `git lfs install --local && git lfs pull` |
-| `cannot open shared object file: libLiteRt.so` | Auxiliary GPU dependencies missing from directory | Ensure `prebuilt/<platform>/*` files are copied into `$LITERTLM_LIB` |
-| `engine_create` returns `NULL` | Model path invalid or insufficient memory | Check model file integrity and verify system RAM/VRAM |
+| Link error *"not an object or archive"* on a `prebuilt/*` library | LFS pointer file, not binary | Run `git lfs install --local && git lfs pull` |
+| `liblitert-lm.so: cannot open shared object file` | Library directory not staged or `LITERTLM_LIB` unset | Ensure `$LITERTLM_LIB` contains `liblitert-lm.so` (or pass `WithLib`) |
+| `NewEngine` returns an initialization error | Model path invalid, unsupported backend, or insufficient memory | Check model file integrity, backend constraint, and available RAM/VRAM |
 | Empty `default.profraw` files appear on exit | Upstream binaries built with LLVM profiling | Set `export LLVM_PROFILE_FILE=/dev/null` in environment |

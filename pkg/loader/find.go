@@ -9,7 +9,7 @@ import (
 )
 
 // Find returns the first directory in candidates where
-// GetLibraryFilename(dir, libName) refers to an existing file.
+// LibraryFilename(dir, libName) refers to an existing file.
 // candidates are checked in order; the empty string is skipped. On
 // miss, the returned error names every resolved filename that was
 // checked, so callers see exactly where Find looked.
@@ -28,7 +28,7 @@ func Find(libName string, candidates []string) (string, error) {
 			continue
 		}
 		expanded := expandUser(dir)
-		full := GetLibraryFilename(expanded, libName)
+		full := LibraryFilename(expanded, libName)
 		if _, err := os.Stat(full); err == nil {
 			return expanded, nil
 		}

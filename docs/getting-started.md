@@ -38,7 +38,7 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Automatically fetch and cache native LiteRT-LM shared libraries
-	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(ctx, runtime.GOOS, runtime.GOARCH, "v0.19.1")
 	if err != nil {
 		log.Fatalf("FetchLib failed: %v", err)
 	}
@@ -86,28 +86,31 @@ Download a `.litertlm` model from Hugging Face's [LiteRT Community](https://hugg
 
 ### Step 2: Obtain the Shared Libraries
 
-Download the prebuilt release archive for your platform from the [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0):
+Download the C-API release archive (`litert_lm_c_api-1.0.0.zip`) or macOS framework archive from [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.19.1):
 
 * **Linux x86_64:**
   ```bash
   mkdir -p ~/include/litertlm/lib
-  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/litertlm-linux-x86_64-v0.16.0.tar.gz
-  tar -xzf litertlm-linux-x86_64-v0.16.0.tar.gz -C ~/include/litertlm/lib
+  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
+  unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
+  cp /tmp/litert_lm_c_api/lib/linux_x86_64/liblitert-lm.so ~/include/litertlm/lib/
   ```
 
 * **macOS ARM64 (Apple Silicon):**
   ```bash
   mkdir -p ~/include/litertlm/lib
-  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/CLiteRTLM_mac.xcframework.zip
-  unzip CLiteRTLM_mac.xcframework.zip -d ~/include/litertlm/lib
+  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
+  unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
+  cp /tmp/litert_lm_c_api/lib/macos_arm64/liblitert-lm.dylib ~/include/litertlm/lib/
   ```
 
 * **Windows x86_64:**
   ```powershell
   $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
   New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
-  Invoke-WebRequest -Uri https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.16.0/litertlm-windows-x86_64-v0.16.0.zip -OutFile litertlm.zip
-  Expand-Archive -Path litertlm.zip -DestinationPath $Env:LITERTLM_LIB -Force
+  Invoke-WebRequest -Uri https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip -OutFile litert_lm_c_api.zip
+  Expand-Archive -Path litert_lm_c_api.zip -DestinationPath .\litert_lm_c_api -Force
+  Copy-Item .\litert_lm_c_api\lib\windows_x86_64\litert-lm.dll $Env:LITERTLM_LIB\
   ```
 
 ### Step 3: Go Program (`main.go`)

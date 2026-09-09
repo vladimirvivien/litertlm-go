@@ -2,21 +2,17 @@ package litertlm
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
-	"github.com/vladimirvivien/litertlm-go/pkg/utils"
+	"github.com/vladimirvivien/litertlm-go/internal/cstr"
 )
 
 // NewConversationConfig builds a ConversationConfig populated with the
 // given fields. Empty JSON strings or zero sessionConfig are skipped.
 //
 // systemMessageJSON should be the content (a JSON string or content
-// array), not a `{role,content}` envelope — the C side wraps it itself
-// (see c/engine.cc litert_lm_conversation_create). The C config
-// constructor ignores its `engine` argument; the wrapper still
-// requires it as a non-zero handle for callsite symmetry with
-// NewConversation. Setters copy strings into std::string fields, so
-// the Go bytes need not outlive the call.
+// array), not a `{role,content}` envelope — the C side wraps it itself.
 func NewConversationConfig(
 	engine Engine,
 	sessionConfig SessionConfig,
@@ -29,65 +25,46 @@ func NewConversationConfig(
 		return 0, fmt.Errorf("litertlm: conversation_config_create: invalid engine")
 	}
 
-	c, err := callForHandle[ConversationConfig](conversationConfigCreateFunc,
-		"conversation_config_create")
+	c, err := callStatusHandle[ConversationConfig](conversationConfigCreateFunc, "conversation_config_create")
 	if err != nil {
 		return 0, err
 	}
 
 	if sessionConfig != 0 {
-		conversationConfigSetSessionConfigFunc.Call(
-			nil,
+		if err = callStatus(
+			conversationConfigSetSessionConfigFunc,
+			"conversation_config_set_session_config",
 			unsafe.Pointer(&c),
 			unsafe.Pointer(&sessionConfig),
-		)
-	}
-
-	if systemMessageJSON != "" {
-		sysPtr, err := utils.BytePtrFromString(systemMessageJSON)
-		if err != nil {
+		); err != nil {
 			c.Delete()
 			return 0, err
 		}
-		conversationConfigSetSystemMessageFunc.Call(
-			nil,
-			unsafe.Pointer(&c),
-			unsafe.Pointer(&sysPtr),
-		)
 	}
 
-	if toolsJSON != "" {
-		toolsPtr, err := utils.BytePtrFromString(toolsJSON)
-		if err != nil {
+	for _, step := range []struct {
+		fn  *lazyFun
+		op  string
+		val string
+	}{
+		{conversationConfigSetSystemMessageFunc, "conversation_config_set_system_message", systemMessageJSON},
+		{conversationConfigSetToolsFunc, "conversation_config_set_tools", toolsJSON},
+		{conversationConfigSetMessagesFunc, "conversation_config_set_messages", messagesJSON},
+	} {
+		if step.val == "" {
+			continue
+		}
+		if err = setHandleString(c, "conversation config", step.fn, step.op, step.val); err != nil {
 			c.Delete()
 			return 0, err
 		}
-		conversationConfigSetToolsFunc.Call(
-			nil,
-			unsafe.Pointer(&c),
-			unsafe.Pointer(&toolsPtr),
-		)
-	}
-
-	if messagesJSON != "" {
-		msgsPtr, err := utils.BytePtrFromString(messagesJSON)
-		if err != nil {
-			c.Delete()
-			return 0, err
-		}
-		conversationConfigSetMessagesFunc.Call(
-			nil,
-			unsafe.Pointer(&c),
-			unsafe.Pointer(&msgsPtr),
-		)
 	}
 
 	if enableConstrainedDecoding {
-		conversationConfigSetEnableConstrainedDecodingFunc.Call(
-			nil,
-			unsafe.Pointer(&c),
-			unsafe.Pointer(new(uint8(1))),
-		)
+		if err = setHandleBool(c, "conversation config", conversationConfigSetEnableConstrainedDecodingFunc, "conversation_config_set_enable_constrained_decoding", true); err != nil {
+			c.Delete()
+			return 0, err
+		}
 	}
 
 	return c, nil
@@ -100,33 +77,19 @@ func (c ConversationConfig) SetExtraContext(extraContextJSON string) error {
 	if c == 0 || extraContextJSON == "" {
 		return nil
 	}
-	ctxPtr, err := utils.BytePtrFromString(extraContextJSON)
-	if err != nil {
-		return err
-	}
-	conversationConfigSetExtraContextFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(&ctxPtr))
-	return nil
+	return setHandleString(c, "conversation config", conversationConfigSetExtraContextFunc, "conversation_config_set_extra_context", extraContextJSON)
 }
 
 // SetFilterChannelContentFromKVCache toggles whether reasoning-channel
 // content is excluded from the conversation's KV cache. When on, the
-// model's internal-reasoning tokens (between <|channel> ... <channel|>
-// markers) are not persisted across turns.
-func (c ConversationConfig) SetFilterChannelContentFromKVCache(on bool) {
-	if c == 0 {
-		return
-	}
-	var v uint8
-	if on {
-		v = 1
-	}
-	conversationConfigSetFilterChannelContentFromKVCacheFunc.Call(
-		nil, unsafe.Pointer(&c), unsafe.Pointer(&v),
-	)
+// model's internal-reasoning tokens (between <|channel> ... <channel|>)
+// are not persisted across turns.
+func (c ConversationConfig) SetFilterChannelContentFromKVCache(on bool) error {
+	return setHandleBool(c, "conversation config", conversationConfigSetFilterChannelContentFromKVCacheFunc, "conversation_config_set_filter_channel_content_from_kv_cache", on)
 }
 
-// SetStreamToolCalls configures whether tool call tokens are streamed
-// under the specified channel name.
+// SetStreamToolCalls configures whether tool call tokens should be emitted to
+// streaming callers rather than held until complete, and under what channel name.
 func (c ConversationConfig) SetStreamToolCalls(stream bool, channelName string) error {
 	if c == 0 {
 		return fmt.Errorf("litertlm: set_stream_tool_calls: invalid conversation config")
@@ -135,45 +98,43 @@ func (c ConversationConfig) SetStreamToolCalls(stream bool, channelName string) 
 	if stream {
 		v = 1
 	}
-	var chPtr *byte
-	if channelName != "" {
-		p, err := utils.BytePtrFromString(channelName)
-		if err != nil {
-			return err
-		}
-		chPtr = p
+	chPtr, err := bytePtrOrNil(channelName)
+	if err != nil {
+		return err
 	}
-	conversationConfigSetStreamToolCallsFunc.Call(
-		nil, unsafe.Pointer(&c), unsafe.Pointer(&v), unsafe.Pointer(&chPtr),
+	err = callStatus(
+		conversationConfigSetStreamToolCallsFunc,
+		"conversation_config_set_stream_tool_calls",
+		unsafe.Pointer(&c), unsafe.Pointer(&v), unsafe.Pointer(&chPtr),
 	)
-	return nil
+	runtime.KeepAlive(chPtr)
+	return err
 }
 
 // Delete releases a ConversationConfig handle.
-func (c ConversationConfig) Delete() {
-	if c == 0 {
-		return
-	}
-	conversationConfigDeleteFunc.Call(nil, unsafe.Pointer(&c))
-}
+func (c ConversationConfig) Delete() { deleteHandle(c, conversationConfigDeleteFunc) }
 
 // Delete releases a Conversation handle.
-func (c Conversation) Delete() {
+func (c Conversation) Delete() { deleteHandle(c, conversationDeleteFunc) }
+
+// Clone returns a new Conversation that mirrors c's prefilled state —
+// activation frames and KV cache included. O(1) compared to opening a
+// new Conversation and re-prefilling the same prompt.
+func (c Conversation) Clone() (Conversation, error) {
 	if c == 0 {
-		return
+		return 0, fmt.Errorf("litertlm: conversation_clone: invalid conversation")
 	}
-	conversationDeleteFunc.Call(nil, unsafe.Pointer(&c))
+	return callStatusHandle[Conversation](conversationCloneFunc, "conversation_clone", unsafe.Pointer(&c))
 }
 
 // SendMessage runs a blocking multi-turn send and returns the JSON
 // response (copied into Go memory). opts carries per-call knobs such
-// as the visual token budget; pass OptionalArgs(0) for C-side
-// defaults.
+// as the visual token budget; pass OptionalArgs(0) for C-side defaults.
 func (c Conversation) SendMessage(messageJSON, extraContext string, opts OptionalArgs) (string, error) {
 	if c == 0 {
 		return "", fmt.Errorf("litertlm: send_message: invalid conversation")
 	}
-	msgPtr, err := utils.BytePtrFromString(messageJSON)
+	msgPtr, err := cstr.BytePtrFromString(messageJSON)
 	if err != nil {
 		return "", err
 	}
@@ -182,13 +143,15 @@ func (c Conversation) SendMessage(messageJSON, extraContext string, opts Optiona
 		return "", err
 	}
 
-	handle, err := callForHandle[JsonResponse](conversationSendMessageFunc,
+	handle, err := callStatusHandle[JSONResponse](conversationSendMessageFunc,
 		"conversation_send_message",
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 		unsafe.Pointer(&ctxPtr),
 		unsafe.Pointer(&opts),
 	)
+	runtime.KeepAlive(msgPtr)
+	runtime.KeepAlive(ctxPtr)
 	if err != nil {
 		return "", err
 	}
@@ -197,46 +160,48 @@ func (c Conversation) SendMessage(messageJSON, extraContext string, opts Optiona
 }
 
 // RenderMessage runs messageJSON through the chat template and
-// returns the rendered string. Useful for debugging template output
-// or for inspecting how a turn will appear to the model. The C side
-// owns the returned buffer; this method copies into Go memory before
-// returning so the result remains valid for the caller's lifetime.
+// returns the rendered string.
 func (c Conversation) RenderMessage(messageJSON string) (string, error) {
 	if c == 0 {
 		return "", fmt.Errorf("litertlm: render_message: invalid conversation")
 	}
-	msgPtr, err := utils.BytePtrFromString(messageJSON)
+	msgPtr, err := cstr.BytePtrFromString(messageJSON)
 	if err != nil {
 		return "", err
 	}
-	var rawPtr *byte
-	conversationRenderMessageToStringFunc.Call(
-		unsafe.Pointer(&rawPtr),
+	s, ok, err := callStatusString(
+		conversationRenderMessageToStringFunc,
+		"conversation_render_message_to_string",
 		unsafe.Pointer(&c),
 		unsafe.Pointer(&msgPtr),
 	)
-	if rawPtr == nil {
+	runtime.KeepAlive(msgPtr)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
 		return "", fmt.Errorf("litertlm: render_message: C side returned NULL")
 	}
-	return utils.BytePtrToString(rawPtr), nil
+	return s, nil
 }
 
-// RenderPreface renders the conversation's preface according to the
-// template. The C side owns the returned buffer; this method copies
-// into Go memory before returning.
+// RenderPreface renders the conversation's preface according to the template.
 func (c Conversation) RenderPreface() (string, error) {
 	if c == 0 {
 		return "", fmt.Errorf("litertlm: render_preface: invalid conversation")
 	}
-	var rawPtr *byte
-	conversationRenderPrefaceToStringFunc.Call(
-		unsafe.Pointer(&rawPtr),
+	s, ok, err := callStatusString(
+		conversationRenderPrefaceToStringFunc,
+		"conversation_render_preface_to_string",
 		unsafe.Pointer(&c),
 	)
-	if rawPtr == nil {
+	if err != nil {
+		return "", err
+	}
+	if !ok {
 		return "", fmt.Errorf("litertlm: render_preface: C side returned NULL")
 	}
-	return utils.BytePtrToString(rawPtr), nil
+	return s, nil
 }
 
 // Cancel requests cancellation of an in-flight streaming send.
@@ -244,7 +209,8 @@ func (c Conversation) Cancel() {
 	if c == 0 {
 		return
 	}
-	conversationCancelProcessFunc.Call(nil, unsafe.Pointer(&c))
+	var status int32
+	_ = conversationCancelProcessFunc.callErr(unsafe.Pointer(&status), unsafe.Pointer(&c))
 }
 
 // BenchmarkInfo returns conversation-level benchmark metrics. Requires
@@ -253,46 +219,38 @@ func (c Conversation) BenchmarkInfo() (BenchmarkInfo, error) {
 	if c == 0 {
 		return 0, fmt.Errorf("litertlm: benchmark_info: invalid conversation")
 	}
-	return callForHandle[BenchmarkInfo](conversationGetBenchmarkInfoFunc,
+	return callStatusHandle[BenchmarkInfo](conversationGetBenchmarkInfoFunc,
 		"conversation_get_benchmark_info", unsafe.Pointer(&c))
 }
 
 // TokenCount returns the number of tokens currently held in the
 // conversation's KV cache (prefill + decode). Unlike the BenchmarkInfo
 // counts, it does not require EnableBenchmark.
-//
-// Requires LiteRT-LM v0.13.1 or newer.
 func (c Conversation) TokenCount() (int, error) {
 	if c == 0 {
 		return 0, fmt.Errorf("litertlm: conversation_get_token_count: invalid conversation")
 	}
-	var v int32
-	conversationGetTokenCountFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&c))
-	if v < 0 {
-		return 0, fmt.Errorf("litertlm: conversation_get_token_count failed (code=%d)", v)
+	n, err := callStatusScalar[uint64](conversationGetTokenCountFunc,
+		"conversation_get_token_count", unsafe.Pointer(&c))
+	if err != nil {
+		return 0, err
 	}
-	return int(v), nil
+	return int(n), nil
 }
 
-// ---- JsonResponse --------------------------------------------------------
+// ---- JSONResponse --------------------------------------------------------
 
-// Delete releases a JsonResponse handle.
-func (j JsonResponse) Delete() {
-	if j == 0 {
-		return
-	}
-	jsonResponseDeleteFunc.Call(nil, unsafe.Pointer(&j))
-}
+// Delete releases a JSONResponse handle.
+func (j JSONResponse) Delete() { deleteHandle(j, jsonResponseDeleteFunc) }
 
 // String returns the JSON payload as a Go string (copied into Go memory).
-func (j JsonResponse) String() string {
+func (j JSONResponse) String() string {
 	if j == 0 {
 		return ""
 	}
-	var ptr *byte
-	jsonResponseGetStringFunc.Call(unsafe.Pointer(&ptr), unsafe.Pointer(&j))
-	if ptr == nil {
+	s, ok, err := callStatusString(jsonResponseGetStringFunc, "json_response_get_string", unsafe.Pointer(&j))
+	if err != nil || !ok {
 		return ""
 	}
-	return utils.BytePtrToString(ptr)
+	return s
 }

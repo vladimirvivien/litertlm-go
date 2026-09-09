@@ -6,7 +6,7 @@
 //	litertlm.Load(libDir, "cpu", "")             // once; "" auto-picks
 //	defer litertlm.Close()
 //
-//	s := litertlm.NewEngineSettings(modelPath, "cpu", nil, nil)
+//	s, _ := litertlm.NewEngineSettings(modelPath, "cpu", nil, nil)
 //	defer s.Delete()
 //	engine, _ := litertlm.NewEngine(s)
 //	defer engine.Delete()
@@ -28,6 +28,7 @@
 package litertlm
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"sync"
@@ -40,9 +41,12 @@ import (
 // envLibName is consulted by Load when libName is empty.
 const envLibName = "LITERTLM_LIB_NAME"
 
-// libByBackend maps the backend selector to the main C-API shared lib:
-// "cpu" → litertlm_c_cpu, "gpu" → litertlm_c. Unknown values fall back
-// to GPU first, then CPU.
+// defaultUnifiedLib is the unified C-API shared library produced by
+// LiteRT-LM //c:litert-lm (liblitert-lm.so, liblitert-lm.dylib, litert-lm.dll).
+const defaultUnifiedLib = "litert-lm"
+
+// libByBackend maps the backend selector to legacy pre-1.0.0 C-API shared
+// library short-names when falling back from defaultUnifiedLib.
 var libByBackend = map[string]string{
 	"cpu":     "litertlm_c_cpu",
 	"gpu":     "litertlm_c",
@@ -51,16 +55,11 @@ var libByBackend = map[string]string{
 	"ynnpack": "litertlm_c_cpu",
 }
 
-// auxLibs are required by the C API at load time and must sit next to
-// the main library.
-var auxLibs = []string{
-	"GemmaModelConstraintProvider",
-}
-
-// optionalLibs are GPU accelerator plugins from LiteRT-LM's prebuilt/
-// directory. Their absence is not an error; backend="gpu", "apple", or "metal" calls will
-// just fail at runtime if any are missing.
+// optionalLibs are plugin / accelerator libraries that may accompany
+// legacy builds. C API 1.0+ builds bundle dependencies inside liblitert-lm,
+// so absence of these libraries is ignored.
 var optionalLibs = []string{
+	"GemmaModelConstraintProvider",
 	"webgpu_dawn",
 	"LiteRt",
 	"LiteRtWebGpuAccelerator",
@@ -69,15 +68,109 @@ var optionalLibs = []string{
 	"LiteRtTopKMetalSampler", // macOS only
 }
 
+// runtimeState holds process-wide native library, load, and API version state.
+// loadMu serializes Load/SetMinLogLevel initialization; stateMu is a leaf lock
+// held only for fast in-memory field reads/writes and never held across FFI.
+type runtimeState struct {
+	loadMu  sync.Mutex
+	stateMu sync.RWMutex
+
+	loadedOnce        bool
+	path              string
+	pendingLogLevel   *LogLevel
+	libHandle         ffi.Lib
+	realLibraryLoaded bool
+
+	apiMajor         int
+	apiMinor         int
+	apiPatch         int
+	apiVersionLoaded bool
+}
+
+var rt runtimeState
+
+func (s *runtimeState) isLoaded() bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.loadedOnce
+}
+
+func (s *runtimeState) isRealLibraryLoaded() bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.realLibraryLoaded
+}
+
+func (s *runtimeState) libPath() string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.path
+}
+
+func (s *runtimeState) prepSymbol(name string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
+	s.stateMu.RLock()
+	h := s.libHandle
+	s.stateMu.RUnlock()
+	return h.Prep(name, ret, args...)
+}
+
+func (s *runtimeState) setMainLib(lib ffi.Lib, real bool) {
+	s.stateMu.Lock()
+	s.libHandle = lib
+	s.realLibraryLoaded = real
+	s.stateMu.Unlock()
+}
+
+func (s *runtimeState) clearMainLib() {
+	s.stateMu.Lock()
+	s.libHandle = ffi.Lib{}
+	s.realLibraryLoaded = false
+	s.stateMu.Unlock()
+}
+
+func (s *runtimeState) markLoaded(path string) LogLevel {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.path = path
+	s.loadedOnce = true
+	level := LogError
+	if s.pendingLogLevel != nil {
+		level = *s.pendingLogLevel
+		s.pendingLogLevel = nil
+	}
+	return level
+}
+
+func (s *runtimeState) apiVersion() (major, minor, patch int, ok bool) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.apiMajor, s.apiMinor, s.apiPatch, s.apiVersionLoaded
+}
+
+func (s *runtimeState) setAPIVersion(major, minor, patch int) {
+	s.stateMu.Lock()
+	s.apiMajor = major
+	s.apiMinor = minor
+	s.apiPatch = patch
+	s.apiVersionLoaded = true
+	s.stateMu.Unlock()
+}
+
+func (s *runtimeState) resetAPIVersion() {
+	s.stateMu.Lock()
+	s.apiMajor = 0
+	s.apiMinor = 0
+	s.apiPatch = 0
+	s.apiVersionLoaded = false
+	s.stateMu.Unlock()
+}
+
 var (
-	loadMu          sync.Mutex
-	loadedOnce      bool
-	libPath         string
-	pendingLogLevel *LogLevel
-	loadAuxLibrary  = loader.LoadAuxLibrary
-	loadMainLibVar  = loadMainLib
-	loadFuncsVar    = loadFuncs
-	prepAuxSymbol   = func(lib ffi.Lib, name string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
+	loadAuxLibrary     = loader.LoadAuxLibrary
+	loadMainLibVar     = loadMainLib
+	loadFuncsVar       = loadFuncs
+	checkAPIVersionVar = checkAPIVersion
+	prepAuxSymbol      = func(lib ffi.Lib, name string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
 		return lib.Prep(name, ret, args...)
 	}
 )
@@ -85,9 +178,7 @@ var (
 // LibPath returns the directory from which Load opened the shared
 // libraries. Empty until a successful Load.
 func LibPath() string {
-	loadMu.Lock()
-	defer loadMu.Unlock()
-	return libPath
+	return rt.libPath()
 }
 
 // Load opens the LiteRT-LM shared libraries and binds C entry points.
@@ -95,17 +186,17 @@ func LibPath() string {
 //   - path is the directory containing the libs; "" triggers a search
 //     of $LITERTLM_LIB and the platform default paths (see
 //     loader.DefaultPaths).
-//   - backend selects "cpu" or "gpu"; "" or unknown picks GPU then CPU.
+//   - backend selects "cpu" or "gpu"; "" or unknown selects the unified library.
 //   - libName overrides the main C-API library short-name; "" falls
-//     back to $LITERTLM_LIB_NAME, then the backend default.
+//     back to $LITERTLM_LIB_NAME, then "litert-lm".
 //
-// Auxiliary libs are dlopen'd before the main lib so DT_NEEDED references
-// resolve without requiring LD_LIBRARY_PATH / DYLD_LIBRARY_PATH. Load is
-// safe to call concurrently; subsequent successful calls are no-ops.
+// Load validates that the loaded shared library exports C API 1.x via
+// litert_lm_get_api_version. Load is safe to call concurrently; subsequent
+// successful calls are no-ops.
 func Load(path, backend, libName string) error {
-	loadMu.Lock()
-	defer loadMu.Unlock()
-	if loadedOnce {
+	rt.loadMu.Lock()
+	defer rt.loadMu.Unlock()
+	if rt.isLoaded() {
 		return nil
 	}
 
@@ -114,13 +205,16 @@ func Load(path, backend, libName string) error {
 	}
 
 	if path == "" {
-		searchName := libName
-		if searchName == "" {
-			searchName = defaultLibName(backend)
-		}
 		candidates := []string{os.Getenv(loader.EnvVar)}
 		candidates = append(candidates, loader.DefaultPaths()...)
+		searchName := cmp.Or(libName, defaultUnifiedLib)
 		found, err := loader.Find(searchName, candidates)
+		if err != nil && libName == "" {
+			if legacyFound, legacyErr := loader.Find(legacyLibName(backend), candidates); legacyErr == nil {
+				found = legacyFound
+				err = nil
+			}
+		}
 		if err != nil {
 			return err
 		}
@@ -131,19 +225,16 @@ func Load(path, backend, libName string) error {
 		auxLib, err := loadAuxLibrary(path, name)
 		if err == nil && name == "LiteRtTopKWebGpuSampler" {
 			if _, symErr := prepAuxSymbol(auxLib, "LiteRtTopKWebGpuSampler_UpdateConfig", &ffi.TypeVoid); symErr != nil {
+				rt.stateMu.RLock()
 				activeLevel := LogError
-				if pendingLogLevel != nil {
-					activeLevel = *pendingLogLevel
+				if rt.pendingLogLevel != nil {
+					activeLevel = *rt.pendingLogLevel
 				}
+				rt.stateMu.RUnlock()
 				if activeLevel <= LogWarning {
 					fmt.Fprintln(os.Stderr, "litertlm: warning: stale WebGPU sampler library detected (symbol LiteRtTopKWebGpuSampler_UpdateConfig is missing); WebGPU sampler is unavailable, falling back to CPU sampling")
 				}
 			}
-		}
-	}
-	for _, name := range auxLibs {
-		if _, err := loadAuxLibrary(path, name); err != nil {
-			return err
 		}
 	}
 
@@ -154,17 +245,21 @@ func Load(path, backend, libName string) error {
 	if err := loadFuncsVar(mainLib); err != nil {
 		return err
 	}
+	if rt.isRealLibraryLoaded() {
+		if err := checkAPIVersionVar(); err != nil {
+			rt.clearMainLib()
+			return err
+		}
+	}
 
-	libPath = path
-	loadedOnce = true
-	applyPendingLogLevel()
+	level := rt.markLoaded(path)
+	applyLogLevel(level)
 	return nil
 }
 
-// defaultLibName returns the main C-API library short-name picked by
-// the given backend. Used when libName is empty and a search needs a
-// concrete filename to look for.
-func defaultLibName(backend string) string {
+// legacyLibName returns the legacy pre-1.0.0 C-API library short-name
+// selected by backend.
+func legacyLibName(backend string) string {
 	if short, ok := libByBackend[backend]; ok {
 		return short
 	}
@@ -172,19 +267,29 @@ func defaultLibName(backend string) string {
 }
 
 // loadMainLib opens the C-API library. When libName is non-empty it
-// is used verbatim; otherwise the name is selected by backend, with a
-// GPU-then-CPU fallback for unknown backends.
+// is used verbatim; otherwise the unified "litert-lm" library is loaded
+// first, with legacy names as a last-resort fallback.
 func loadMainLib(path, backend, libName string) (ffi.Lib, error) {
 	if libName != "" {
 		return loader.LoadLibrary(path, libName)
 	}
-	if short, ok := libByBackend[backend]; ok {
-		return loader.LoadLibrary(path, short)
-	}
-	if lib, err := loader.LoadLibrary(path, "litertlm_c"); err == nil {
+	lib, err := loader.LoadLibrary(path, defaultUnifiedLib)
+	if err == nil {
 		return lib, nil
 	}
-	return loader.LoadLibrary(path, "litertlm_c_cpu")
+	if short, ok := libByBackend[backend]; ok {
+		if legacyLib, lerr := loader.LoadLibrary(path, short); lerr == nil {
+			return legacyLib, nil
+		}
+	} else {
+		if legacyLib, lerr := loader.LoadLibrary(path, "litertlm_c"); lerr == nil {
+			return legacyLib, nil
+		}
+		if legacyLib, lerr := loader.LoadLibrary(path, "litertlm_c_cpu"); lerr == nil {
+			return legacyLib, nil
+		}
+	}
+	return ffi.Lib{}, err
 }
 
 // Close is a no-op retained for API symmetry: purego doesn't expose

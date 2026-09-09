@@ -408,3 +408,87 @@ func TestFetch_TimeoutAndCancel(t *testing.T) {
 		t.Fatal("expected timeout/cancellation error, got nil")
 	}
 }
+
+func TestFetch_416RetryFreshRequest(t *testing.T) {
+	fullData := []byte("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	var reqCount atomic.Int32
+	var sawRange atomic.Bool
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := reqCount.Add(1)
+		if r.Header.Get("Range") != "" {
+			sawRange.Store(true)
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		if n < 2 {
+			t.Errorf("expected fresh retry request after 416, got attempt %d", n)
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(fullData)))
+		_, _ = w.Write(fullData)
+	}))
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	partPath := filepath.Join(tmpDir, "retry416.litertlm.download")
+	if err := os.WriteFile(partPath, []byte("oversized-stale-partial-file"), 0o644); err != nil {
+		t.Fatalf("write partial: %v", err)
+	}
+
+	filePath, err := Fetch(context.Background(), srv.URL+"/retry416.litertlm",
+		WithDir(tmpDir),
+		WithHTTPClient(srv.Client()),
+	)
+	if err != nil {
+		t.Fatalf("Fetch after 416: %v", err)
+	}
+	if !sawRange.Load() || reqCount.Load() != 2 {
+		t.Fatalf("reqCount=%d sawRange=%v, want 2 requests with initial Range", reqCount.Load(), sawRange.Load())
+	}
+	got, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("read destination: %v", err)
+	}
+	if string(got) != string(fullData) {
+		t.Errorf("content = %q, want %q", got, fullData)
+	}
+}
+
+func TestFetch_SHA256UppercaseAndLocalFallback(t *testing.T) {
+	goodData := []byte("verified model payload")
+	sum := sha256.Sum256(goodData)
+	upperHex := strings.ToUpper(hex.EncodeToString(sum[:]))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(goodData)
+	}))
+	defer srv.Close()
+
+	// Seed a corrupt file with the same filename in LITERTLM_MODELS_DIR.
+	// Fetch with WithSHA256 must NOT return the corrupt local candidate.
+	localModelsDir := t.TempDir()
+	corruptLocal := filepath.Join(localModelsDir, "verified.litertlm")
+	if err := os.WriteFile(corruptLocal, []byte("corrupt local payload"), 0o644); err != nil {
+		t.Fatalf("write corrupt local: %v", err)
+	}
+	t.Setenv("LITERTLM_MODELS_DIR", localModelsDir)
+
+	tmpDir := t.TempDir()
+	gotPath, err := Fetch(context.Background(), srv.URL+"/verified.litertlm",
+		WithDir(tmpDir),
+		WithSHA256(upperHex),
+	)
+	if err != nil {
+		t.Fatalf("Fetch with uppercase SHA256: %v", err)
+	}
+	if gotPath == corruptLocal {
+		t.Fatalf("Fetch returned unverified local candidate %q", corruptLocal)
+	}
+	got, err := os.ReadFile(gotPath)
+	if err != nil {
+		t.Fatalf("read downloaded model: %v", err)
+	}
+	if string(got) != string(goodData) {
+		t.Errorf("downloaded content = %q, want %q", got, goodData)
+	}
+}

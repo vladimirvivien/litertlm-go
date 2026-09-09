@@ -2,13 +2,14 @@
 // shared libraries for litertlm-go at runtime.
 //
 // Libraries are cached in <user cache dir>/litertlm-go/lib/<version>/<platform>.
-// Fetch is idempotent: existing files with matching hashes are not downloaded again.
+// Fetch is idempotent: existing unified libraries are reused without re-downloading.
 package libfetch
 
 import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -23,7 +24,7 @@ import (
 )
 
 // DefaultVersion is the upstream LiteRT-LM prebuilt release version.
-const DefaultVersion = "v0.16.0"
+const DefaultVersion = "v0.19.1"
 
 const (
 	githubReleaseURL = "https://github.com/google-ai-edge/LiteRT-LM/releases/download"
@@ -31,6 +32,8 @@ const (
 	dxcURL           = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2602.24/dxc_2026_05_27.zip"
 	dxcSHA256        = "cf658aacf070d3045e31b8f1f8a696c2945f37c1095019481ef7c513368db3b4"
 )
+
+var lfsPrefix = []byte("version https://git-lfs.github.com/spec/v1")
 
 type config struct {
 	version  string
@@ -43,7 +46,7 @@ type config struct {
 // Option configures Fetch.
 type Option func(*config)
 
-// WithVersion sets the target LiteRT-LM release version (e.g. "v0.16.0").
+// WithVersion sets the target LiteRT-LM release version (e.g. "v0.19.1").
 func WithVersion(v string) Option { return func(c *config) { c.version = v } }
 
 // WithDir sets the target download destination directory.
@@ -63,12 +66,8 @@ func WithLogf(f func(format string, args ...any)) Option {
 // PlatformFor maps Go OS (e.g. "darwin", "linux", "windows") and architecture
 // (e.g. "arm64", "amd64") to the prebuilt distribution platform identifier.
 func PlatformFor(goos, goarch string) (string, error) {
-	if goos == "" {
-		goos = runtime.GOOS
-	}
-	if goarch == "" {
-		goarch = runtime.GOARCH
-	}
+	goos = cmp.Or(goos, runtime.GOOS)
+	goarch = cmp.Or(goarch, runtime.GOARCH)
 	switch strings.ToLower(goos) + "/" + strings.ToLower(goarch) {
 	case "windows/amd64", "windows/x86_64":
 		return "windows_x86_64", nil
@@ -82,6 +81,8 @@ func PlatformFor(goos, goarch string) (string, error) {
 		return "macos_x86_64", nil
 	case "android/arm64", "android/aarch64":
 		return "android_arm64", nil
+	case "android/amd64", "android/x86_64":
+		return "android_x86_64", nil
 	default:
 		return "", fmt.Errorf("libfetch: unsupported OS/arch %s/%s", goos, goarch)
 	}
@@ -94,9 +95,7 @@ func Platform() (string, error) {
 
 // DefaultDir returns the local cache directory for the given version and current platform.
 func DefaultDir(version string) (string, error) {
-	if version == "" {
-		version = DefaultVersion
-	}
+	version = cmp.Or(version, DefaultVersion)
 	p, err := Platform()
 	if err != nil {
 		return "", err
@@ -139,25 +138,52 @@ func Fetch(ctx context.Context, opts ...Option) (string, error) {
 		return "", fmt.Errorf("libfetch: create cache dir: %w", err)
 	}
 
-	// Fetch from GitHub release assets
-	if err := fetchFromGitHubRelease(ctx, &c); err != nil {
-		c.logf("github release fetch error (%v), attempting raw prebuilt assets", err)
-		if errRaw := fetchRawPrebuiltAssets(ctx, &c); errRaw != nil {
-			return "", fmt.Errorf("libfetch: failed to download prebuilts: %w (fallback: %v)", err, errRaw)
+	if hasUnifiedLib(c.dir, c.platform) {
+		c.logf("%s: already present", unifiedLibFilename(c.platform))
+	} else {
+		if err := fetchFromGitHubRelease(ctx, &c); err != nil {
+			c.logf("github release fetch error (%v), attempting raw prebuilt assets", err)
+			if errRaw := fetchRawPrebuiltAssets(ctx, &c); errRaw != nil {
+				return "", fmt.Errorf("libfetch: download prebuilts for %s (%s): %w (fallback: %w); if this release has not published cross-platform C API archives yet, use v0.19.1 or build //c:litert-lm from source", c.version, c.platform, err, errRaw)
+			}
 		}
 	}
 
-	// Fetch Windows DirectX Shader Compiler if running on Windows with GPU
-	if (c.platform == "windows_x86_64" || runtime.GOOS == "windows") && (c.backend == "gpu" || c.backend == "") {
+	// Fetch Windows DirectX Shader Compiler only when targeting Windows GPU.
+	if c.platform == "windows_x86_64" && (c.backend == "gpu" || c.backend == "") {
 		if err := fetchDXC(ctx, &c); err != nil {
 			return "", fmt.Errorf("libfetch: fetch DXC: %w", err)
 		}
 	}
 
-	// Populate any missing auxiliary libraries from local staged locations if available
-	populateFromLocalStaging(&c)
+	// Skip copying legacy auxiliary DLLs into a directory that already holds the unified C API 1.0+ library.
+	if !hasUnifiedLib(c.dir, c.platform) {
+		populateFromLocalStaging(&c)
+	}
 
 	return c.dir, nil
+}
+
+func unifiedLibFilename(platform string) string {
+	switch platform {
+	case "windows_x86_64":
+		return "litert-lm.dll"
+	case "macos_arm64", "macos_x86_64":
+		return "liblitert-lm.dylib"
+	case "linux_x86_64", "linux_arm64", "android_arm64", "android_x86_64":
+		return "liblitert-lm.so"
+	default:
+		return ""
+	}
+}
+
+func hasUnifiedLib(dir, platform string) bool {
+	name := unifiedLibFilename(platform)
+	if name == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, name))
+	return err == nil && info.Size() > 512
 }
 
 func populateFromLocalStaging(c *config) {
@@ -183,55 +209,65 @@ func populateFromLocalStaging(c *config) {
 				continue
 			}
 			dst := filepath.Join(c.dir, entry.Name())
-			if _, err := os.Stat(dst); err == nil {
+			if _, statErr := os.Stat(dst); statErr == nil {
 				continue
 			}
-			src := filepath.Join(dir, entry.Name())
-			data, err := os.ReadFile(src)
-			if err == nil && len(data) > 512 {
-				_ = writeFile(dst, data)
+			info, infoErr := entry.Info()
+			if infoErr != nil || info.Size() <= 512 {
+				continue
 			}
+			f, openErr := os.Open(filepath.Join(dir, entry.Name()))
+			if openErr != nil {
+				continue
+			}
+			_ = writeReaderAtomic(dst, f)
+			_ = f.Close()
 		}
 	}
 }
 
 func fetchFromGitHubRelease(ctx context.Context, c *config) error {
-	var candidateURLs []string
+	trimmedVer := strings.TrimPrefix(c.version, "v")
+	candidateURLs := []string{
+		fmt.Sprintf("%s/%s/litert_lm_c_api-1.1.0.zip", githubReleaseURL, c.version),
+		fmt.Sprintf("%s/%s/litert_lm_c_api-1.0.0.zip", githubReleaseURL, c.version),
+		fmt.Sprintf("%s/%s/litert_lm_c_api-%s.zip", githubReleaseURL, c.version, trimmedVer),
+	}
 
-	// For macOS Apple Foundation frameworks
-	if strings.HasPrefix(c.platform, "macos") {
+	switch c.platform {
+	case "macos_arm64":
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/%s/litert_lm_macos_arm64.tar.gz", githubReleaseURL, c.version),
+			fmt.Sprintf("%s/%s/CLiteRTLM_mac.xcframework.zip", githubReleaseURL, c.version),
+			fmt.Sprintf("%s/%s/CLiteRTLM.xcframework.zip", githubReleaseURL, c.version),
+		)
+	case "macos_x86_64":
 		candidateURLs = append(candidateURLs,
 			fmt.Sprintf("%s/%s/CLiteRTLM_mac.xcframework.zip", githubReleaseURL, c.version),
 			fmt.Sprintf("%s/%s/CLiteRTLM.xcframework.zip", githubReleaseURL, c.version),
 		)
-	} else {
-		// Common versioned C-API release zip
+	case "windows_x86_64":
 		candidateURLs = append(candidateURLs,
-			fmt.Sprintf("%s/%s/litert_lm_c_api-0.1.0.zip", githubReleaseURL, c.version),
-			fmt.Sprintf("%s/%s/litert_lm_c_api-%s.zip", githubReleaseURL, c.version, strings.TrimPrefix(c.version, "v")),
+			fmt.Sprintf("%s/%s/litertlm-c-%s-windows-x86_64.zip", githubReleaseURL, c.version, c.version),
+			fmt.Sprintf("%s/%s/litertlm-windows-x86_64-%s.zip", githubReleaseURL, c.version, c.version),
 		)
-
-		switch c.platform {
-		case "windows_x86_64":
-			candidateURLs = append(candidateURLs,
-				fmt.Sprintf("%s/%s/litertlm-c-%s-windows-x86_64.zip", githubReleaseURL, c.version, c.version),
-				fmt.Sprintf("%s/%s/litertlm-windows-x86_64-%s.zip", githubReleaseURL, c.version, c.version),
-			)
-		case "linux_x86_64":
-			candidateURLs = append(candidateURLs,
-				fmt.Sprintf("%s/%s/litertlm-c-%s-linux-x86_64.tar.gz", githubReleaseURL, c.version, c.version),
-				fmt.Sprintf("%s/%s/litertlm-linux-x86_64-%s.tar.gz", githubReleaseURL, c.version, c.version),
-			)
-		case "linux_arm64":
-			candidateURLs = append(candidateURLs,
-				fmt.Sprintf("%s/%s/litertlm-c-%s-linux-arm64.tar.gz", githubReleaseURL, c.version, c.version),
-				fmt.Sprintf("%s/%s/litertlm-linux-arm64-%s.tar.gz", githubReleaseURL, c.version, c.version),
-			)
-		}
+	case "linux_x86_64":
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/%s/litertlm-c-%s-linux-x86_64.tar.gz", githubReleaseURL, c.version, c.version),
+			fmt.Sprintf("%s/%s/litertlm-linux-x86_64-%s.tar.gz", githubReleaseURL, c.version, c.version),
+		)
+	case "linux_arm64":
+		candidateURLs = append(candidateURLs,
+			fmt.Sprintf("%s/%s/litertlm-c-%s-linux-arm64.tar.gz", githubReleaseURL, c.version, c.version),
+			fmt.Sprintf("%s/%s/litertlm-linux-arm64-%s.tar.gz", githubReleaseURL, c.version, c.version),
+		)
 	}
 
 	var lastErr error
 	for _, archiveURL := range candidateURLs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if strings.HasSuffix(archiveURL, ".zip") {
 			if err := fetchAndExtractZip(ctx, c, archiveURL); err == nil {
 				return nil
@@ -260,6 +296,9 @@ func fetchRawPrebuiltAssets(ctx context.Context, c *config) error {
 	}
 
 	for _, filename := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		dst := filepath.Join(c.dir, filename)
 		if _, err := os.Stat(dst); err == nil {
 			c.logf("%s: already present", filename)
@@ -267,15 +306,20 @@ func fetchRawPrebuiltAssets(ctx context.Context, c *config) error {
 		}
 		url := fmt.Sprintf("%s/%s/prebuilt/%s/%s", rawPrebuiltURL, c.version, c.platform, filename)
 		c.logf("%s: downloading from %s", filename, url)
-		data, err := get(ctx, url)
-		if err != nil {
-			return err
-		}
-		if err := writeFile(dst, data); err != nil {
+		if err := downloadFileAtomic(ctx, url, dst); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func downloadFileAtomic(ctx context.Context, url, dst string) error {
+	resp, err := openHTTP(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return writeReaderAtomic(dst, resp.Body)
 }
 
 func prebuiltFilesForPlatform(platform, backend string) []string {
@@ -329,42 +373,55 @@ func isLibraryForPlatform(platform, name string) bool {
 		return ext == ".dll"
 	case "macos_arm64", "macos_x86_64":
 		return ext == ".dylib" || strings.Contains(name, ".framework")
-	case "linux_x86_64", "linux_arm64":
+	case "linux_x86_64", "linux_arm64", "android_arm64", "android_x86_64":
 		return ext == ".so" || strings.Contains(name, ".so.")
 	default:
 		return ext == ".so" || ext == ".dylib" || ext == ".dll"
 	}
 }
 
+func archiveEntryMatchesPlatform(platform, entryName string) (string, bool) {
+	norm := strings.TrimPrefix(filepath.ToSlash(entryName), "./")
+	if strings.HasPrefix(norm, "lib/") {
+		platformPrefix := "lib/" + platform + "/"
+		if !strings.HasPrefix(norm, platformPrefix) {
+			return "", false
+		}
+	}
+	base := filepath.Base(norm)
+	if !isLibraryForPlatform(platform, base) {
+		return "", false
+	}
+	return base, true
+}
+
 func fetchAndExtractZip(ctx context.Context, c *config, url string) error {
 	c.logf("fetching archive %s", url)
-	data, err := get(ctx, url)
+	tmpZip, _, err := downloadToTempFile(ctx, url, c.dir, false)
 	if err != nil {
 		return err
 	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zr, err := zip.OpenReader(tmpZip)
 	if err != nil {
+		_ = os.Remove(tmpZip)
 		return fmt.Errorf("open zip: %w", err)
 	}
+	// Close zip reader before removing temp file (required on Windows).
+	defer func() {
+		_ = zr.Close()
+		_ = os.Remove(tmpZip)
+	}()
+
 	extracted := 0
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		base := filepath.Base(f.Name)
-		if !isLibraryForPlatform(c.platform, base) {
+		base, ok := archiveEntryMatchesPlatform(c.platform, f.Name)
+		if !ok {
 			continue
 		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		content, err := io.ReadAll(rc)
-		_ = rc.Close()
-		if err != nil {
-			return err
-		}
-		if err := writeFile(filepath.Join(c.dir, base), content); err != nil {
+		if err = extractZipEntry(filepath.Join(c.dir, base), f); err != nil {
 			return err
 		}
 		extracted++
@@ -375,37 +432,45 @@ func fetchAndExtractZip(ctx context.Context, c *config, url string) error {
 	return nil
 }
 
-func fetchAndExtractTarGz(ctx context.Context, c *config, url string) error {
-	c.logf("fetching archive %s", url)
-	data, err := get(ctx, url)
+func extractZipEntry(dst string, f *zip.File) error {
+	rc, err := f.Open()
 	if err != nil {
 		return err
 	}
-	gzr, err := gzip.NewReader(bytes.NewReader(data))
+	defer func() { _ = rc.Close() }()
+	return writeReaderAtomic(dst, rc)
+}
+
+func fetchAndExtractTarGz(ctx context.Context, c *config, url string) error {
+	c.logf("fetching archive %s", url)
+	resp, err := openHTTP(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	gzr, err := gzip.NewReader(resp.Body)
 	if err != nil {
 		return fmt.Errorf("open gzip: %w", err)
 	}
 	defer func() { _ = gzr.Close() }()
+
 	tr := tar.NewReader(gzr)
 	extracted := 0
 	for {
-		header, err := tr.Next()
-		if err == io.EOF {
+		header, nextErr := tr.Next()
+		if nextErr == io.EOF {
 			break
 		}
-		if err != nil {
-			return err
+		if nextErr != nil {
+			return nextErr
 		}
 		if header.Typeflag == tar.TypeReg {
-			base := filepath.Base(header.Name)
-			if !isLibraryForPlatform(c.platform, base) {
+			base, ok := archiveEntryMatchesPlatform(c.platform, header.Name)
+			if !ok {
 				continue
 			}
-			content, err := io.ReadAll(tr)
-			if err != nil {
-				return err
-			}
-			if err := writeFile(filepath.Join(c.dir, base), content); err != nil {
+			if err = writeReaderAtomic(filepath.Join(c.dir, base), tr); err != nil {
 				return err
 			}
 			extracted++
@@ -430,36 +495,40 @@ func fetchDXC(ctx context.Context, c *config) error {
 		return nil
 	}
 	c.logf("dxc: downloading %s", dxcURL)
-	data, err := get(ctx, dxcURL)
+	tmpZip, sumHex, err := downloadToTempFile(ctx, dxcURL, c.dir, true)
 	if err != nil {
 		return err
 	}
-	if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != dxcSHA256 {
+	if !strings.EqualFold(sumHex, dxcSHA256) {
+		_ = os.Remove(tmpZip)
 		return fmt.Errorf("libfetch: dxc sha256 mismatch")
 	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zr, err := zip.OpenReader(tmpZip)
 	if err != nil {
+		_ = os.Remove(tmpZip)
 		return fmt.Errorf("libfetch: open dxc zip: %w", err)
 	}
+	defer func() {
+		_ = zr.Close()
+		_ = os.Remove(tmpZip)
+	}()
+
 	for _, n := range need {
 		entry := "bin/x64/" + n
-		zf, err := zr.Open(entry)
-		if err != nil {
-			return fmt.Errorf("libfetch: dxc zip missing %s: %w", entry, err)
+		zf, openErr := zr.Open(entry)
+		if openErr != nil {
+			return fmt.Errorf("libfetch: dxc zip missing %s: %w", entry, openErr)
 		}
-		content, err := io.ReadAll(zf)
+		writeErr := writeReaderAtomic(filepath.Join(c.dir, n), zf)
 		_ = zf.Close()
-		if err != nil {
-			return err
-		}
-		if err := writeFile(filepath.Join(c.dir, n), content); err != nil {
-			return err
+		if writeErr != nil {
+			return writeErr
 		}
 	}
 	return nil
 }
 
-func get(ctx context.Context, url string) ([]byte, error) {
+func openHTTP(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -468,24 +537,92 @@ func get(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return resp, nil
 }
 
-func writeFile(dst string, data []byte) error {
-	if bytes.HasPrefix(data, []byte("version https://git-lfs.github.com/spec/v1")) {
+func downloadToTempFile(ctx context.Context, url, dir string, verifyHash bool) (tmpPath, sumHex string, err error) {
+	resp, err := openHTTP(ctx, url)
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	tmp, err := os.CreateTemp(dir, "libfetch-archive-*.tmp")
+	if err != nil {
+		return "", "", err
+	}
+	tmpPath = tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	var dst io.Writer = tmp
+	h := sha256.New()
+	if verifyHash {
+		dst = io.MultiWriter(tmp, h)
+	}
+	if _, err = io.Copy(dst, resp.Body); err != nil {
+		return "", "", err
+	}
+	if err = tmp.Close(); err != nil {
+		return "", "", err
+	}
+	cleanup = false
+	if verifyHash {
+		sumHex = hex.EncodeToString(h.Sum(nil))
+	}
+	return tmpPath, sumHex, nil
+}
+
+func writeReaderAtomic(dst string, r io.Reader) error {
+	head := make([]byte, len(lfsPrefix))
+	n, err := io.ReadFull(r, head)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return err
+	}
+	head = head[:n]
+	if bytes.Equal(head, lfsPrefix) {
 		return fmt.Errorf("refusing to write Git LFS pointer for binary %s", filepath.Base(dst))
 	}
-	tmp := dst + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o755); err != nil {
+
+	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		_ = tmp.Close()
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if len(head) > 0 {
+		if _, err = tmp.Write(head); err != nil {
+			return err
+		}
+	}
+	if _, err = io.Copy(tmp, r); err != nil {
 		return err
 	}
+	if err = tmp.Chmod(0o755); err != nil {
+		return err
+	}
+	if err = tmp.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(tmpPath, dst); err != nil {
+		return err
+	}
+	cleanup = false
 	return nil
 }

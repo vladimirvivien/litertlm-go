@@ -60,3 +60,31 @@ func (l LogLevel) String() string {
 		return "LogLevel(" + strconv.Itoa(int(l)) + ")"
 	}
 }
+
+// Modality identifies input and output modalities supported by LiteRT-LM models.
+// Values mirror the `LiteRtLmModality` enum in c/capabilities.h.
+type Modality int32
+
+const (
+	ModalityText   Modality = 0
+	ModalityVision Modality = 1
+	ModalityAudio  Modality = 2
+	ModalityVideo  Modality = 3
+)
+
+// String returns the human-readable name of the modality. Unknown values
+// render as "Modality(<n>)".
+func (m Modality) String() string {
+	switch m {
+	case ModalityText:
+		return "Text"
+	case ModalityVision:
+		return "Vision"
+	case ModalityAudio:
+		return "Audio"
+	case ModalityVideo:
+		return "Video"
+	default:
+		return "Modality(" + strconv.Itoa(int(m)) + ")"
+	}
+}

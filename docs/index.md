@@ -46,7 +46,7 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Automatically fetch and cache native libraries
-	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(ctx, runtime.GOOS, runtime.GOARCH, "v0.19.1")
 	if err != nil {
 		log.Fatalf("FetchLib failed: %v", err)
 	}
@@ -87,12 +87,12 @@ Full walkthrough: [Getting started](getting-started.md).
 
 ## Provisioning the C libraries
 
-LiteRT-LM publishes prebuilt C-API shared libraries (`v0.16.0+`) for Linux, macOS, and Windows. Use `litertlm.FetchLib` in Go to programmatically stage dependencies, or consult the platform setup guides:
+LiteRT-LM publishes prebuilt C-API shared libraries (`v0.19.1+`, C API `1.0.0+`) for Linux, macOS, and Windows. Use `litertlm.FetchLib` in Go to programmatically stage dependencies, or consult the platform setup guides:
 [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)
 (Linux/macOS) or
 [`LITERTLM-BUILD-WINDOWS.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD-WINDOWS.md) (Windows).
 
-Minimum supported upstream: **LiteRT-LM v0.16.0**.
+Minimum supported upstream: **LiteRT-LM v0.19.1** (C API `1.0.0`).
 
 ## Examples
 

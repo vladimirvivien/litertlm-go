@@ -77,7 +77,7 @@ func getOrSynthesizeCaptureTool[T any](c *Client) (*ManagedTool[T, struct{}], er
 
 	params, err := paramsSchemaOf(reflect.TypeFor[T]())
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", errCaptureToolUnsuitable, reflect.TypeFor[T]().String(), err)
+		return nil, fmt.Errorf("%w: %s: %w", errCaptureToolUnsuitable, reflect.TypeFor[T]().String(), err)
 	}
 
 	tool := &ManagedTool[T, struct{}]{

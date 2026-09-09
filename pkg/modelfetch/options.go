@@ -1,6 +1,7 @@
 package modelfetch
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,6 +20,7 @@ type config struct {
 	skipIfExists bool
 	sha256Sum    string
 	variant      string
+	httpClient   *http.Client
 }
 
 // Option configures model download behavior.
@@ -78,6 +80,13 @@ func WithProgress(fn ProgressFunc) Option {
 func WithTimeout(d time.Duration) Option {
 	return func(c *config) {
 		c.timeout = d
+	}
+}
+
+// WithHTTPClient overrides the HTTP client used for model downloads.
+func WithHTTPClient(client *http.Client) Option {
+	return func(c *config) {
+		c.httpClient = client
 	}
 }
 

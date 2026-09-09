@@ -31,9 +31,9 @@ Use functional options to specify environment and inference engine settings.
 
 | Option                  | Effect                                                                |
 |-------------------------|-----------------------------------------------------------------------|
-| `WithLib(dir)`          | Directory holding `liblitertlm_c_cpu.*` etc. Empty → `$LITERTLM_LIB`. |
+| `WithLib(dir)`          | Directory holding `litert-lm.*` (or legacy `liblitertlm_c*.*`). Empty → `$LITERTLM_LIB`. |
 | `WithModel(path)`       | Path to a `.litertlm` file. Empty → `$LITERTLM_MODEL`.                |
-| `WithModelFd(fd)`       | Raw file descriptor of the model file (unsupported on Windows).       |
+| `WithModelFD(fd)`       | Raw file descriptor of the model file (unsupported on Windows).       |
 | `WithBackend(b)`        | `"cpu"` (default) or `"gpu"`.                                         |
 | `WithVisionBackend(b)`  | Optional extra backend for vision inputs.                             |
 | `WithAudioBackend(b)`   | Optional extra backend for audio inputs.                              |
@@ -128,16 +128,20 @@ type Chunk struct {
 
 ### `GenerateResponse(ctx, prompt, opts...)`
 
-Use `GenerateResponse` when you need detailed metadata about the generation, such as scoring or token length, rather than just the raw text. It returns a rich `*Response` object:
+Use `GenerateResponse` when you need candidate metadata or per-call benchmark metrics alongside the text. It returns a `*Response` object:
 
 ```go
 resp, err := client.GenerateResponse(ctx, prompt)
 if err != nil { return err }
 
-fmt.Println(resp.Text())          // Get the generated reply text
-fmt.Println(resp.NumCandidates()) // Number of candidates emitted
-score, ok := resp.Score(0)        // Score of the first candidate
+fmt.Println(resp.Text())          // Generated reply text
+fmt.Println(resp.NumCandidates()) // Number of candidates present (1 when non-empty)
+if b := resp.Benchmark(); b != nil {
+    fmt.Printf("decode=%.1f tok/s\n", b.DecodeTokensPerSec)
+}
 ```
+
+For log-probability candidate scoring or per-token scores and lengths, use `Session.ScoreTexts` with low-level `Responses.Score` and `Responses.TokenLength` (see [Low-level API](low-level.md)).
 
 ## Multimodal inputs
 
@@ -164,9 +168,9 @@ conversation state, use `Chat.SendMulti` / `Chat.SendMultiStream`
 |--------------------------------------|---------------------------------------------------------|
 | `Text(s)`                            | Text prompt segment.                                    |
 | `Image(b)`                           | Image bytes (no MIME claimed).                          |
-| `ImageWithMime(b, "image/jpeg")`     | Explicit MIME (jpeg / png / webp / gif / bmp).          |
+| `ImageWithMIME(b, "image/jpeg")`     | Explicit MIME (jpeg / png / webp / gif / bmp).          |
 | `ImageFromFile(path)`                | Read file; MIME from extension.                         |
-| `Audio(b)` / `AudioWithMime(b, mime)` / `AudioFromFile(path)` | Audio analogues. |
+| `Audio(b)` / `AudioWithMIME(b, mime)` / `AudioFromFile(path)` | Audio analogues. |
 
 ### Example — vision Q&A
 

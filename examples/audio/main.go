@@ -22,7 +22,7 @@ func main() {
 	model := flag.String("model", "", "path to a multimodal .litertlm model file (falls back to LITERTLM_MODEL env)")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma-4-E2B-it)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	audioBackend := flag.String("audio-backend", "cpu", "audio backend (cpu | gpu)")
 	audioPath := flag.String("audio", "", "path to the audio file: .wav / .mp3 / .ogg / .flac / .m4a / .aac (required)")
@@ -36,7 +36,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -87,7 +87,7 @@ func main() {
 	}
 	defer client.Close()
 
-	fmt.Printf("=== Audio: %s (%s) ===\n", *audioPath, displayMime(audio.Mime()))
+	fmt.Printf("=== Audio: %s (%s) ===\n", *audioPath, displayMIME(audio.MIME()))
 
 	out, err := client.GenerateMulti(ctx, []litertlm.Part{
 		audio,
@@ -134,7 +134,7 @@ func main() {
 }
 
 // loadAudio uses AudioFromFile when no MIME override is given (MIME
-// is inferred from the file extension) and AudioWithMime otherwise.
+// is inferred from the file extension) and AudioWithMIME otherwise.
 // The override path is useful when the file extension does not match
 // the actual container (e.g. raw PCM saved as .bin).
 func loadAudio(path, mimeOverride string) (litertlm.Part, error) {
@@ -145,10 +145,10 @@ func loadAudio(path, mimeOverride string) (litertlm.Part, error) {
 	if err != nil {
 		return litertlm.Part{}, err
 	}
-	return litertlm.AudioWithMime(b, mimeOverride), nil
+	return litertlm.AudioWithMIME(b, mimeOverride), nil
 }
 
-func displayMime(m string) string {
+func displayMIME(m string) string {
 	if m == "" {
 		return "mime unknown"
 	}

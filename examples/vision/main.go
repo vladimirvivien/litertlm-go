@@ -20,7 +20,7 @@ func main() {
 	model := flag.String("model", "", "path to a multimodal .litertlm model file (falls back to LITERTLM_MODEL env)")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma-4-E2B-it)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	visionBackend := flag.String("vision-backend", "cpu", "vision backend (cpu | gpu)")
 	imagePath := flag.String("image", "", "path to the image file (required)")
@@ -33,7 +33,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)

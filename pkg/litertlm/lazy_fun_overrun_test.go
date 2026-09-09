@@ -57,7 +57,9 @@ func TestLazyFun_NarrowReturnDoesNotOverrun(t *testing.T) {
 			for i := range buf {
 				buf[i] = 0xAA
 			}
-			lf.Call(unsafe.Pointer(&buf[0]))
+			if err := lf.callErr(unsafe.Pointer(&buf[0])); err != nil {
+				t.Fatalf("callErr: %v", err)
+			}
 
 			// The declared-width return value must arrive intact.
 			var got uint64

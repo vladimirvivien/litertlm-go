@@ -12,30 +12,26 @@ import (
 )
 
 func TestLoad_WebGpuSamplerStaleWarning(t *testing.T) {
-	// Temporarily redirect stderr to capture the logged warning
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	// Swap loadAuxLibrary and prepAuxSymbol with mocks
 	oldLoadAux := loadAuxLibrary
 	oldPrepAux := prepAuxSymbol
-	defer func() {
+	oldLoadMainLibVar := loadMainLibVar
+	oldLoadFuncsVar := loadFuncsVar
+	t.Cleanup(func() {
 		loadAuxLibrary = oldLoadAux
 		prepAuxSymbol = oldPrepAux
+		loadMainLibVar = oldLoadMainLibVar
+		loadFuncsVar = oldLoadFuncsVar
 		os.Stderr = oldStderr
-	}()
+	})
 
-	// Mock loadAuxLibrary to succeed for LiteRtTopKWebGpuSampler and return a zero-value ffi.Lib
 	loadAuxLibrary = func(path, name string) (ffi.Lib, error) {
-		if name == "LiteRtTopKWebGpuSampler" {
-			return ffi.Lib{}, nil
-		}
-		// Return dummy handle for other libs
 		return ffi.Lib{}, nil
 	}
 
-	// Mock prepAuxSymbol to fail specifically for LiteRtTopKWebGpuSampler_UpdateConfig
 	prepAuxSymbol = func(lib ffi.Lib, symbolName string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
 		if symbolName == "LiteRtTopKWebGpuSampler_UpdateConfig" {
 			return ffi.Fun{}, fmt.Errorf("symbol not found")
@@ -43,13 +39,23 @@ func TestLoad_WebGpuSamplerStaleWarning(t *testing.T) {
 		return ffi.Fun{}, nil
 	}
 
-	// Mock other dependencies of Load so it doesn't fail early on mainLib or loadFuncs
-	oldLoadMainLibVar := loadMainLibVar
-	oldLoadFuncsVar := loadFuncsVar
-	defer func() {
-		loadMainLibVar = oldLoadMainLibVar
-		loadFuncsVar = oldLoadFuncsVar
-	}()
+	rt.stateMu.Lock()
+	oldRealLoaded := rt.realLibraryLoaded
+	oldLoadedOnce := rt.loadedOnce
+	oldPath := rt.path
+	oldPending := rt.pendingLogLevel
+	rt.realLibraryLoaded = false
+	rt.loadedOnce = false
+	rt.pendingLogLevel = new(LogWarning)
+	rt.stateMu.Unlock()
+	t.Cleanup(func() {
+		rt.stateMu.Lock()
+		rt.realLibraryLoaded = oldRealLoaded
+		rt.loadedOnce = oldLoadedOnce
+		rt.path = oldPath
+		rt.pendingLogLevel = oldPending
+		rt.stateMu.Unlock()
+	})
 
 	loadMainLibVar = func(path, backend, libName string) (ffi.Lib, error) {
 		return ffi.Lib{}, nil
@@ -58,30 +64,15 @@ func TestLoad_WebGpuSamplerStaleWarning(t *testing.T) {
 		return nil
 	}
 
-	// Reset loadedOnce so Load runs
-	oldLoadedOnce := loadedOnce
-	loadedOnce = false
-	oldPending := pendingLogLevel
-	lvl := LogWarning
-	pendingLogLevel = &lvl
-	defer func() {
-		loadedOnce = oldLoadedOnce
-		pendingLogLevel = oldPending
-	}()
-
-	// Call Load
-	err := Load("dummy_path", "gpu", "dummy_lib")
-	if err != nil {
+	if err := Load("dummy_path", "gpu", "dummy_lib"); err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	// Close the write pipe and read the captured output
 	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
 	got := buf.String()
 
-	// Verify that the warning was logged
 	expectContain := "stale WebGPU sampler library detected"
 	if !strings.Contains(got, expectContain) {
 		t.Errorf("captured stderr = %q, want it to contain %q", got, expectContain)

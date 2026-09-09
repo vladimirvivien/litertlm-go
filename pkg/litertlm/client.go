@@ -2,20 +2,18 @@ package litertlm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
 )
 
-// Default values applied when no Option overrides them.
 const (
 	defaultBackend   = "cpu"
 	defaultMaxTokens = 4096
 )
 
-// Environment variable names consulted by New when WithLib / WithModel
-// are not supplied (or are passed empty).
 const (
 	envLib   = "LITERTLM_LIB"
 	envModel = "LITERTLM_MODEL"
@@ -35,35 +33,13 @@ type Client struct {
 }
 
 // New loads the LiteRT-LM library, applies the supplied Options, and
-// constructs an Engine. The returned Client is ready for Generate /
-// GenerateStream / NewChat. Close must be called when done.
-//
-// Cancelling ctx during New returns ctx.Err() to the caller promptly.
-// The underlying C work (library load, model file mmap, engine
-// construction) has no cancel hook and runs to completion in the
-// background; if it eventually succeeds after cancellation, the
-// resulting handles are released automatically so nothing leaks.
-//
-// New uses these defaults:
-//   - backend: "cpu"
-//   - max tokens: 4096
-//   - lib path: WithLib value, else $LITERTLM_LIB
-//   - model path: WithModel value, else $LITERTLM_MODEL
-//
-// New does not touch the LiteRT-LM log severity floor. The C side
-// defaults to LogInfo (verbose). Call SetMinLogLevel(LogQuiet)
-// before New to silence the loader and executor init chatter.
-//
-// For finer-grained control, the low-level constructors (Load,
-// NewEngineSettings, NewEngine, Engine.NewSession) remain available
-// and are what New itself uses internally.
+// constructs an Engine. Close must be called when done.
 func New(ctx context.Context, opts ...Option) (*Client, error) {
 	cfg := clientConfig{
 		backend:   defaultBackend,
 		maxTokens: defaultMaxTokens,
 	}
 
-	// Env-var fallbacks first, user options override.
 	if v := os.Getenv(envLib); v != "" {
 		cfg.libPath = v
 	}
@@ -78,7 +54,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("litertlm: New: configuration error: %w", cfg.err)
 	}
 
-	if cfg.modelPath == "" && cfg.modelFd == nil {
+	if cfg.modelPath == "" && cfg.modelFD == nil {
 		return nil, fmt.Errorf("litertlm: New: model path or raw file descriptor required")
 	}
 
@@ -88,30 +64,26 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 	)
 }
 
-// buildClient performs the synchronous C-side work of constructing a
-// Client. Split out so New can run it under runCancellable.
 func buildClient(cfg clientConfig) (*Client, error) {
-	// Translate Go-side "apple" / "metal" backend alias to "gpu" for C-API loading and settings initialization.
-	cApiBackend := translateBackend(cfg.backend)
-	cApiVision := translateBackendPtr(cfg.visionBackend)
-	cApiAudio := translateBackendPtr(cfg.audioBackend)
+	cAPIBackend := translateBackend(cfg.backend)
+	cAPIVision := translateBackendPtr(cfg.visionBackend)
+	cAPIAudio := translateBackendPtr(cfg.audioBackend)
 
-	if err := Load(cfg.libPath, cApiBackend, cfg.libName); err != nil {
+	if err := Load(cfg.libPath, cAPIBackend, cfg.libName); err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
 
 	var settings EngineSettings
 	var err error
-	if cfg.modelFd != nil {
-		settings, err = NewEngineSettingsFromFd(*cfg.modelFd, cApiBackend, cApiVision, cApiAudio)
+	if cfg.modelFD != nil {
+		settings, err = NewEngineSettingsFromFD(*cfg.modelFD, cAPIBackend, cAPIVision, cAPIAudio)
 	} else {
-		settings, err = NewEngineSettings(cfg.modelPath, cApiBackend, cApiVision, cApiAudio)
+		settings, err = NewEngineSettings(cfg.modelPath, cAPIBackend, cAPIVision, cAPIAudio)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
-	err = applySettings(settings, &cfg)
-	if err != nil {
+	if err = applySettings(settings, &cfg); err != nil {
 		settings.Delete()
 		return nil, fmt.Errorf("litertlm: New: %w", err)
 	}
@@ -119,7 +91,7 @@ func buildClient(cfg clientConfig) (*Client, error) {
 	engine, err := NewEngine(settings)
 	if err != nil {
 		settings.Delete()
-		return nil, diagnoseLoadError(err, cfg)
+		return nil, diagnoseLoadError(err)
 	}
 
 	return &Client{
@@ -129,67 +101,86 @@ func buildClient(cfg clientConfig) (*Client, error) {
 	}, nil
 }
 
-// applySettings funnels the cfg's resolved values through the
-// individual EngineSettings setters. Only setters whose corresponding
-// option was supplied (or that have a non-zero default) actually run,
-// preserving the C-side defaults for everything else.
 func applySettings(s EngineSettings, cfg *clientConfig) error {
 	if cfg.maxTokens > 0 {
-		s.SetMaxNumTokens(cfg.maxTokens)
+		if err := s.SetMaxNumTokens(cfg.maxTokens); err != nil {
+			return err
+		}
 	}
 	if cfg.cacheDir != "" {
-		s.SetCacheDir(cfg.cacheDir)
+		if err := s.SetCacheDir(cfg.cacheDir); err != nil {
+			return err
+		}
 	}
 	if cfg.activationDataType != nil {
-		s.SetActivationDataType(*cfg.activationDataType)
+		if err := s.SetActivationDataType(*cfg.activationDataType); err != nil {
+			return err
+		}
 	}
 	if cfg.prefillChunkSize != nil {
-		s.SetPrefillChunkSize(*cfg.prefillChunkSize)
+		if err := s.SetPrefillChunkSize(*cfg.prefillChunkSize); err != nil {
+			return err
+		}
 	}
 	if cfg.speculativeDecodingEnabled != nil {
-		s.SetEnableSpeculativeDecoding(*cfg.speculativeDecodingEnabled)
+		if err := s.SetEnableSpeculativeDecoding(*cfg.speculativeDecodingEnabled); err != nil {
+			return err
+		}
 	}
 	if cfg.benchmarkEnabled != nil && *cfg.benchmarkEnabled {
-		s.EnableBenchmark()
+		if err := s.EnableBenchmark(); err != nil {
+			return err
+		}
 	}
 	if cfg.parallelSectionLoading != nil {
-		s.SetParallelFileSectionLoading(*cfg.parallelSectionLoading)
+		if err := s.SetParallelFileSectionLoading(*cfg.parallelSectionLoading); err != nil {
+			return err
+		}
 	}
 	if cfg.dispatchLibDir != "" {
-		s.SetLitertDispatchLibDir(cfg.dispatchLibDir)
+		if err := s.SetLitertDispatchLibDir(cfg.dispatchLibDir); err != nil {
+			return err
+		}
 	}
 	if cfg.maxImages != nil {
-		s.SetMaxNumImages(*cfg.maxImages)
+		if err := s.SetMaxNumImages(*cfg.maxImages); err != nil {
+			return err
+		}
 	}
 	if cfg.numThreads != nil {
-		s.SetNumThreads(*cfg.numThreads)
+		if err := s.SetNumThreads(*cfg.numThreads); err != nil {
+			return err
+		}
 	}
 	if cfg.audioNumThreads != nil {
-		s.SetAudioNumThreads(*cfg.audioNumThreads)
+		if err := s.SetAudioNumThreads(*cfg.audioNumThreads); err != nil {
+			return err
+		}
 	}
 	if cfg.loraRank != nil {
-		s.SetLoraRank(*cfg.loraRank)
+		if err := s.SetLoRARank(*cfg.loraRank); err != nil {
+			return err
+		}
 	}
 	if len(cfg.supportedLoraRanks) > 0 {
-		if err := s.SetSupportedLoraRanks(cfg.supportedLoraRanks); err != nil {
+		if err := s.SetSupportedLoRARanks(cfg.supportedLoraRanks); err != nil {
 			return err
 		}
 	}
 	if cfg.audioLoraRank != nil {
-		s.SetAudioLoraRank(*cfg.audioLoraRank)
+		if err := s.SetAudioLoRARank(*cfg.audioLoraRank); err != nil {
+			return err
+		}
 	}
 	if len(cfg.supportedAudioLoraRanks) > 0 {
-		if err := s.SetSupportedAudioLoraRanks(cfg.supportedAudioLoraRanks); err != nil {
+		if err := s.SetSupportedAudioLoRARanks(cfg.supportedAudioLoraRanks); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Close releases the engine and engine-settings handles. Safe to call
-// multiple times. The shared library stays loaded for the life of the
-// process — purego does not expose dlclose, and the C runtime's
-// lifetime is tied to the process anyway.
+// Close releases the engine and engine-settings handles. Safe to call multiple times.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -204,37 +195,57 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// Engine returns the underlying Engine handle for advanced use cases
-// (manual prefill→decode, scoring, token introspection). The handle's
-// lifetime is owned by the Client; do not call Delete on it.
-func (c *Client) Engine() Engine { return c.engine }
-
-// Settings returns the underlying EngineSettings handle. Same lifetime
-// caveat as Engine — do not call Delete.
-func (c *Client) Settings() EngineSettings { return c.settings }
-
-// Tokenize returns the token IDs the model's tokenizer produces for
-// the given text. Useful for budgeting prompts against the engine's
-// max-token limit.
-func (c *Client) Tokenize(text string) ([]int32, error) {
-	return c.engine.Tokenize(text)
+func (c *Client) openEngine() (Engine, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return 0, fmt.Errorf("litertlm: Client is closed")
+	}
+	return c.engine, nil
 }
 
-// TokenLength is a convenience over Tokenize that returns just the
-// token count.
+// Engine returns the underlying Engine handle for advanced use cases.
+// Do not call Delete on it; returns 0 if closed.
+func (c *Client) Engine() Engine {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.engine
+}
+
+// Settings returns the underlying EngineSettings handle.
+// Do not call Delete on it; returns 0 if closed.
+func (c *Client) Settings() EngineSettings {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.settings
+}
+
+// Tokenize returns the token IDs the model's tokenizer produces for text.
+func (c *Client) Tokenize(text string) ([]int32, error) {
+	engine, err := c.openEngine()
+	if err != nil {
+		return nil, err
+	}
+	return engine.Tokenize(text)
+}
+
+// TokenLength returns the token count of text.
 func (c *Client) TokenLength(text string) (int, error) {
-	tokens, err := c.engine.Tokenize(text)
+	tokens, err := c.Tokenize(text)
 	if err != nil {
 		return 0, err
 	}
 	return len(tokens), nil
 }
 
-// resolveRuntimeConfig applies opts to a fresh runtimeConfig, returning the
-// result. Public entry points apply opts here once and pass the
-// resolved cfg into the internal helpers — that lets GenerateData
-// reuse the same cfg without re-applying options that don't matter
-// to the underlying generation path.
+// Capabilities queries the model capabilities and metadata of the client's model file.
+func (c *Client) Capabilities() (*ModelCapabilities, error) {
+	if c.cfg.modelPath == "" {
+		return nil, fmt.Errorf("litertlm: capabilities inspection requires a file path model source")
+	}
+	return InspectModel(c.cfg.modelPath)
+}
+
 func resolveRuntimeConfig(opts []RuntimeOption) runtimeConfig {
 	cfg := runtimeConfig{}
 	for _, opt := range opts {
@@ -243,19 +254,13 @@ func resolveRuntimeConfig(opts []RuntimeOption) runtimeConfig {
 	return cfg
 }
 
-// diagnoseLoadError enriches engine preparation failures with diagnostic advice
-// for GPU memory allocation limits (such as the 2 GB per-allocation limit).
-func diagnoseLoadError(err error, cfg clientConfig) error {
+func diagnoseLoadError(err error) error {
 	if err == nil {
 		return nil
 	}
-	errMsg := err.Error()
-
-	// Intercept engine preparation failures which typically indicate allocation/resource issues
-	if strings.Contains(errMsg, "failed to prepare") {
+	if errors.Is(err, ErrResourceExhausted) || strings.Contains(err.Error(), "failed to prepare") {
 		return fmt.Errorf("litertlm: New: %w (this may indicate a GPU memory allocation issue, such as the 2 GB per-allocation limit on the WebGPU/D3D12 delegate, or insufficient VRAM; consider running on CPU or using a smaller model)", err)
 	}
-
 	return fmt.Errorf("litertlm: New: %w", err)
 }
 
@@ -273,6 +278,5 @@ func translateBackendPtr(b *string) *string {
 	if b == nil {
 		return nil
 	}
-	val := translateBackend(*b)
-	return &val
+	return new(translateBackend(*b))
 }

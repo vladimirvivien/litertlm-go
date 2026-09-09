@@ -7,7 +7,7 @@ matches a reference loaded from disk.
 ## What this example shows
 
 - Loading audio with `litertlm.AudioFromFile` (MIME inferred from
-  extension) or `litertlm.AudioWithMime` (explicit MIME for files
+  extension) or `litertlm.AudioWithMIME` (explicit MIME for files
   whose extension does not match the container).
 - Selecting the audio encoder backend with
   `litertlm.WithAudioBackend(...)` — independent of the text-side
@@ -97,5 +97,5 @@ With `-transcript`:
   step is a normal text generation; the model can be wrong in either
   direction. Treat it as a sanity check, not an evaluation harness.
 - **Why two load paths?** `AudioFromFile` is the common case — MIME
-  is inferred from extension. `AudioWithMime` is for raw bytes or
+  is inferred from extension. `AudioWithMIME` is for raw bytes or
   files whose extension does not match the container.

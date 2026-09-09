@@ -18,17 +18,11 @@ prefill / decode throughput), see
 
 ## Prerequisites
 
-1. LiteRT-LM shared library files staged in `LITERTLM_LIB` with
-   GPU dependencies satisfied:
+1. LiteRT-LM shared library staged in `LITERTLM_LIB` (or fetched with `-get-lib v0.19.1`):
 
-   ```
-   cp ./LiteRT-LM/bazel-bin/c/liblitertlm_c.so                   $LITERTLM_LIB/
-   cp ./LiteRT-LM/prebuilt/libGemmaModelConstraintProvider.so    $LITERTLM_LIB/
-   cp ./LiteRT-LM/prebuilt/libLiteRt.so                          $LITERTLM_LIB/
-   cp ./LiteRT-LM/prebuilt/libLiteRtWebGpuAccelerator.so         $LITERTLM_LIB/
-   cp ./LiteRT-LM/prebuilt/libLiteRtTopKWebGpuSampler.so         $LITERTLM_LIB/
-   # Plus any GPU drivers and GPU framework files your platform requires.
-   ```
+   - Linux: `liblitert-lm.so`
+   - macOS: `liblitert-lm.dylib`
+   - Windows: `litert-lm.dll` plus DirectX Shader Compiler (`dxcompiler.dll`, `dxil.dll`)
 
 2. A `.litertlm` chat-tuned model (e.g. Gemma 4).
 

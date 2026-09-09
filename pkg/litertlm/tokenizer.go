@@ -5,13 +5,11 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/vladimirvivien/litertlm-go/pkg/utils"
+	"github.com/vladimirvivien/litertlm-go/internal/cstr"
 )
 
 // tokenizeResult and detokenizeResult wrap the C API's opaque
-// LiteRtLmTokenizeResult* / LiteRtLmDetokenizeResult* handles. Both are
-// kept unexported — callers see Go-native slices and strings via
-// Engine.Tokenize / Engine.Detokenize.
+// LiteRtLmTokenizeResult* / LiteRtLmDetokenizeResult* handles.
 type (
 	tokenizeResult   uintptr
 	detokenizeResult uintptr
@@ -24,43 +22,41 @@ func (e Engine) Tokenize(text string) ([]int32, error) {
 	if e == 0 {
 		return nil, fmt.Errorf("litertlm: engine_tokenize: invalid engine")
 	}
-	textPtr, err := utils.BytePtrFromString(text)
+	textPtr, err := cstr.BytePtrFromString(text)
 	if err != nil {
 		return nil, err
 	}
 
-	r, err := callForHandle[tokenizeResult](engineTokenizeFunc, "engine_tokenize",
+	r, err := callStatusHandle[tokenizeResult](engineTokenizeFunc, "engine_tokenize",
 		unsafe.Pointer(&e),
 		unsafe.Pointer(&textPtr),
 	)
+	runtime.KeepAlive(textPtr)
 	if err != nil {
 		return nil, err
 	}
 	defer r.delete()
 
-	var n uint64
-	tokenizeResultGetNumTokensFunc.Call(unsafe.Pointer(&n), unsafe.Pointer(&r))
+	n, err := callStatusScalar[uint64](tokenizeResultGetNumTokensFunc, "tokenize_result_get_num_tokens",
+		unsafe.Pointer(&r))
+	if err != nil {
+		return nil, err
+	}
 	if n == 0 {
 		return []int32{}, nil
 	}
 
-	var ptr *int32
-	tokenizeResultGetTokensFunc.Call(unsafe.Pointer(&ptr), unsafe.Pointer(&r))
-	if ptr == nil {
-		return []int32{}, nil
+	ptr, err := callStatusScalar[*int32](tokenizeResultGetTokensFunc, "tokenize_result_get_tokens",
+		unsafe.Pointer(&r))
+	if err != nil {
+		return nil, err
 	}
-	// The C-side pointer is borrowed for the lifetime of the result —
-	// copy into Go memory before defer r.delete() runs.
-	src := unsafe.Slice(ptr, n)
-	out := make([]int32, n)
-	copy(out, src)
-	return out, nil
+	return copyCSlice(ptr, n), nil
 }
 
 // Detokenize reverses Tokenize, decoding ids into a UTF-8 string.
 // LiteRT-LM passes through SentencePiece's internal space marker
-// (U+2581 ▁) without normalising; replace with " " on the Go side
-// if you need plain ASCII spaces.
+// (U+2581 ▁) without normalising.
 func (e Engine) Detokenize(tokens []int32) (string, error) {
 	if e == 0 {
 		return "", fmt.Errorf("litertlm: engine_detokenize: invalid engine")
@@ -72,46 +68,31 @@ func (e Engine) Detokenize(tokens []int32) (string, error) {
 	tokensPtr := unsafe.Pointer(&tokens[0])
 	num := uint64(len(tokens))
 
-	r, err := callForHandle[detokenizeResult](engineDetokenizeFunc, "engine_detokenize",
+	r, err := callStatusHandle[detokenizeResult](engineDetokenizeFunc, "engine_detokenize",
 		unsafe.Pointer(&e),
 		unsafe.Pointer(&tokensPtr),
 		unsafe.Pointer(&num),
 	)
-	// KeepAlive after the FFI call: the C side has already read
-	// through tokensPtr by now, but the explicit reference here
-	// stops the compiler from dropping tokens before this line.
 	runtime.KeepAlive(tokens)
 	if err != nil {
 		return "", err
 	}
 	defer r.delete()
 
-	var strPtr *byte
-	detokenizeResultGetStringFunc.Call(unsafe.Pointer(&strPtr), unsafe.Pointer(&r))
-	if strPtr == nil {
+	s, ok, err := callStatusString(detokenizeResultGetStringFunc, "detokenize_result_get_string",
+		unsafe.Pointer(&r))
+	if err != nil {
+		return "", err
+	}
+	if !ok {
 		return "", nil
 	}
-	// Copy into Go memory so the result outlives defer r.delete().
-	return utils.BytePtrToString(strPtr), nil
+	return s, nil
 }
 
-func (r tokenizeResult) delete() {
-	if r == 0 {
-		return
-	}
-	tokenizeResultDeleteFunc.Call(nil, unsafe.Pointer(&r))
-}
+func (r tokenizeResult) delete()   { deleteHandle(r, tokenizeResultDeleteFunc) }
+func (r detokenizeResult) delete() { deleteHandle(r, detokenizeResultDeleteFunc) }
 
-func (r detokenizeResult) delete() {
-	if r == 0 {
-		return
-	}
-	detokenizeResultDeleteFunc.Call(nil, unsafe.Pointer(&r))
-}
-
-// tokenUnion / tokenUnions wrap the C handles for start/stop token
-// metadata. Both stay unexported — callers see []int32 / [][]int32
-// via Engine.StartTokenIDs / Engine.StopTokenIDs.
 type (
 	tokenUnion  uintptr
 	tokenUnions uintptr
@@ -125,14 +106,16 @@ const (
 
 // StartTokenIDs returns the model's configured start token (BOS) as a
 // slice of token ids. Returns (nil, nil) when no start token is
-// configured. String-form unions are run through Tokenize so callers
-// always see ids.
+// configured.
 func (e Engine) StartTokenIDs() ([]int32, error) {
 	if e == 0 {
 		return nil, fmt.Errorf("litertlm: engine_get_start_token: invalid engine")
 	}
-	var tu tokenUnion
-	engineGetStartTokenFunc.Call(unsafe.Pointer(&tu), unsafe.Pointer(&e))
+	tu, err := callStatusHandle[tokenUnion](engineGetStartTokenFunc, "engine_get_start_token",
+		unsafe.Pointer(&e))
+	if err != nil {
+		return nil, err
+	}
 	if tu == 0 {
 		return nil, nil
 	}
@@ -141,43 +124,45 @@ func (e Engine) StartTokenIDs() ([]int32, error) {
 }
 
 // StopTokenIDs returns the model's configured stop tokens (EOS) as a
-// slice of id sequences — one inner slice per stop sequence. Returns
-// (nil, nil) when no stop tokens are configured. String-form sequences
-// are run through Tokenize.
+// slice of id sequences — one inner slice per stop sequence.
 func (e Engine) StopTokenIDs() ([][]int32, error) {
 	if e == 0 {
 		return nil, fmt.Errorf("litertlm: engine_get_stop_tokens: invalid engine")
 	}
-	var tus tokenUnions
-	engineGetStopTokensFunc.Call(unsafe.Pointer(&tus), unsafe.Pointer(&e))
+	tus, err := callStatusHandle[tokenUnions](engineGetStopTokensFunc, "engine_get_stop_tokens",
+		unsafe.Pointer(&e))
+	if err != nil {
+		return nil, err
+	}
 	if tus == 0 {
 		return nil, nil
 	}
 	defer tus.delete()
 
-	var n uint64
-	tokenUnionsGetNumTokensFunc.Call(unsafe.Pointer(&n), unsafe.Pointer(&tus))
+	n, err := callStatusScalar[uint64](tokenUnionsGetNumTokensFunc, "token_unions_get_num_tokens",
+		unsafe.Pointer(&tus))
+	if err != nil {
+		return nil, err
+	}
 	if n == 0 {
 		return nil, nil
 	}
 
 	out := make([][]int32, 0, n)
-	for i := uint64(0); i < n; i++ {
-		var inner tokenUnion
-		tokenUnionsGetTokenAtFunc.Call(
-			unsafe.Pointer(&inner),
-			unsafe.Pointer(&tus),
-			unsafe.Pointer(new(i)),
-		)
+	for i := range n {
+		idx := i
+		inner, innerErr := callStatusHandle[tokenUnion](tokenUnionsGetTokenAtFunc, "token_unions_get_token_at",
+			unsafe.Pointer(&tus), unsafe.Pointer(&idx))
+		if innerErr != nil {
+			return nil, innerErr
+		}
 		if inner == 0 {
 			continue
 		}
-		// Inner unions are borrowed views into the parent's storage
-		// (see c/engine.cc litert_lm_token_unions_get_token_at) — do
-		// NOT call delete() on them; tus.delete() frees the lot.
-		ids, err := e.tokenUnionToIDs(inner)
-		if err != nil {
-			return nil, err
+		// Inner unions are borrowed views into tus's storage; tus.delete() frees all.
+		ids, idsErr := e.tokenUnionToIDs(inner)
+		if idsErr != nil {
+			return nil, idsErr
 		}
 		out = append(out, ids)
 	}
@@ -187,60 +172,45 @@ func (e Engine) StopTokenIDs() ([][]int32, error) {
 // tokenUnionToIDs reads the union's discriminator and dispatches to
 // either a direct id-array copy or Tokenize for the string form.
 func (e Engine) tokenUnionToIDs(tu tokenUnion) ([]int32, error) {
-	var typ int32
-	tokenUnionGetTypeFunc.Call(unsafe.Pointer(&typ), unsafe.Pointer(&tu))
+	typ, err := callStatusScalar[int32](tokenUnionGetTypeFunc, "token_union_get_type",
+		unsafe.Pointer(&tu))
+	if err != nil {
+		return nil, err
+	}
 
 	switch typ {
 	case tokenUnionTypeIDs:
-		// out_tokens (const int**) and out_num_tokens (size_t*) are
-		// pointer-to-where-C-should-write. The purego FFI layer reads
-		// one level of indirection from the Go-side address, so this
-		// uses `**int32` / `*uint64` storage and passes the *address*
-		// of those — that is what makes C see `&ptr` rather than the
-		// (initially-nil) value of ptr itself.
 		var ptr *int32
 		var n uint64
 		ptrAddr := &ptr
 		nAddr := &n
-		var status int32
-		tokenUnionGetIdsFunc.Call(
-			unsafe.Pointer(&status),
+		err = callStatus(tokenUnionGetIdsFunc, "token_union_get_ids",
 			unsafe.Pointer(&tu),
 			unsafe.Pointer(&ptrAddr),
 			unsafe.Pointer(&nAddr),
 		)
-		if status != 0 || ptr == nil || n == 0 {
-			return []int32{}, nil
+		runtime.KeepAlive(ptrAddr)
+		runtime.KeepAlive(nAddr)
+		if err != nil {
+			return nil, err
 		}
-		// Copy out before the parent union/result is deleted.
-		src := unsafe.Slice(ptr, n)
-		out := make([]int32, n)
-		copy(out, src)
-		return out, nil
+		return copyCSlice(ptr, n), nil
 
 	case tokenUnionTypeString:
-		var sptr *byte
-		tokenUnionGetStringFunc.Call(unsafe.Pointer(&sptr), unsafe.Pointer(&tu))
-		if sptr == nil {
+		s, ok, strErr := callStatusString(tokenUnionGetStringFunc, "token_union_get_string",
+			unsafe.Pointer(&tu))
+		if strErr != nil {
+			return nil, strErr
+		}
+		if !ok {
 			return []int32{}, nil
 		}
-		return e.Tokenize(utils.BytePtrToString(sptr))
+		return e.Tokenize(s)
 
 	default:
 		return nil, fmt.Errorf("litertlm: unknown token_union type %d", typ)
 	}
 }
 
-func (tu tokenUnion) delete() {
-	if tu == 0 {
-		return
-	}
-	tokenUnionDeleteFunc.Call(nil, unsafe.Pointer(&tu))
-}
-
-func (tus tokenUnions) delete() {
-	if tus == 0 {
-		return
-	}
-	tokenUnionsDeleteFunc.Call(nil, unsafe.Pointer(&tus))
-}
+func (tu tokenUnion) delete()   { deleteHandle(tu, tokenUnionDeleteFunc) }
+func (tus tokenUnions) delete() { deleteHandle(tus, tokenUnionsDeleteFunc) }

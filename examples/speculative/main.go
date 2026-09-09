@@ -27,7 +27,7 @@ type runResult struct {
 func main() {
 	model := flag.String("model", "", "path to a .litertlm model that supports speculative decoding (e.g. Gemma 4)")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	prompt := flag.String("prompt", "The capital of France is", "prompt text (completion-style works best with chat-tuned models on the raw Generate path)")
@@ -38,7 +38,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)

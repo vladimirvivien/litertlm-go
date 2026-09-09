@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -35,8 +36,7 @@ type jsonModelConfig struct {
 }
 
 // WithConfigFile reads settings from a LiteRT-LM config.json file and applies them
-// to the client configuration. If modelID is non-empty, any settings defined for that
-// model under the "models" section of the config file will override the "default" section settings.
+// to the client configuration.
 func WithConfigFile(path, modelID string) Option {
 	return func(c *clientConfig) {
 		if c.err != nil {
@@ -49,23 +49,21 @@ func WithConfigFile(path, modelID string) Option {
 		}
 
 		var cf configFile
-		if err := json.Unmarshal(data, &cf); err != nil {
+		if err = json.Unmarshal(data, &cf); err != nil {
 			c.err = fmt.Errorf("parse config file: %w", err)
 			return
 		}
 
-		// 1. Apply global defaults
 		if cf.Default != nil {
-			if err := c.applyModelConfig(cf.Default); err != nil {
+			if err = c.applyModelConfig(cf.Default); err != nil {
 				c.err = err
 				return
 			}
 		}
 
-		// 2. Apply model-specific overrides if modelID is matched
 		if modelID != "" && cf.Models != nil {
 			if mc, ok := cf.Models[modelID]; ok {
-				if err := c.applyModelConfig(mc); err != nil {
+				if err = c.applyModelConfig(mc); err != nil {
 					c.err = err
 					return
 				}
@@ -88,34 +86,28 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 		c.cacheDir = *mc.CacheDir
 	}
 	if mc.SpeculativeDecodingEnabled != nil {
-		on := *mc.SpeculativeDecodingEnabled
-		c.speculativeDecodingEnabled = &on
+		c.speculativeDecodingEnabled = new(*mc.SpeculativeDecodingEnabled)
 	}
 	if mc.ParallelSectionLoading != nil {
-		on := *mc.ParallelSectionLoading
-		c.parallelSectionLoading = &on
+		c.parallelSectionLoading = new(*mc.ParallelSectionLoading)
 	}
 	if mc.NumThreads != nil {
-		n := *mc.NumThreads
-		c.numThreads = &n
+		c.numThreads = new(*mc.NumThreads)
 	}
 	if mc.AudioNumThreads != nil {
-		n := *mc.AudioNumThreads
-		c.audioNumThreads = &n
+		c.audioNumThreads = new(*mc.AudioNumThreads)
 	}
 	if mc.LoraRank != nil {
-		n := *mc.LoraRank
-		c.loraRank = &n
+		c.loraRank = new(*mc.LoraRank)
 	}
 	if len(mc.SupportedLoraRanks) > 0 {
-		c.supportedLoraRanks = mc.SupportedLoraRanks
+		c.supportedLoraRanks = slices.Clone(mc.SupportedLoraRanks)
 	}
 	if mc.AudioLoraRank != nil {
-		n := *mc.AudioLoraRank
-		c.audioLoraRank = &n
+		c.audioLoraRank = new(*mc.AudioLoraRank)
 	}
 	if len(mc.SupportedAudioLoraRanks) > 0 {
-		c.supportedAudioLoraRanks = mc.SupportedAudioLoraRanks
+		c.supportedAudioLoraRanks = slices.Clone(mc.SupportedAudioLoraRanks)
 	}
 	if mc.LibPath != nil {
 		c.libPath = *mc.LibPath
@@ -127,11 +119,9 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 		c.modelPath = *mc.ModelPath
 	}
 
-	// Sampler merging
 	var sampler SamplerParams
 	hasSamplerOpts := false
 
-	// If defaultSampler is already configured, copy it as baseline
 	if c.defaultSampler != nil {
 		sampler = *c.defaultSampler
 		hasSamplerOpts = true
@@ -165,7 +155,7 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 	}
 
 	if hasSamplerOpts {
-		c.defaultSampler = &sampler
+		c.defaultSampler = new(sampler)
 	}
 
 	return nil

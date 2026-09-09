@@ -3,7 +3,6 @@ package litertlm_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -14,14 +13,14 @@ import (
 // TestFetchLib_LiveDownloadAndBind tests fetching and binding against
 // shared libraries.
 func TestFetchLib_LiveDownloadAndBind(t *testing.T) {
-	// If local LITERTLM_LIB exists, test explicit fetch to a temp dir
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
+	// If local LITERTLM_TEST_LIB or LITERTLM_LIB exists, test explicit fetch to a temp dir
 	// and verify that Load binds symbols from that directory.
-	existingLib := os.Getenv("LITERTLM_LIB")
+	existingLib := os.Getenv("LITERTLM_TEST_LIB")
 	if existingLib == "" {
-		defaultInclude := filepath.Join(os.Getenv("USERPROFILE"), "include", "litertlm", "lib")
-		if _, err := os.Stat(defaultInclude); err == nil {
-			existingLib = defaultInclude
-		}
+		existingLib = os.Getenv("LITERTLM_LIB")
 	}
 
 	if existingLib == "" {
@@ -42,12 +41,9 @@ func TestFetchLib_LiveDownloadAndBind(t *testing.T) {
 	}
 
 	// If model is available, test end-to-end inference
-	modelPath := os.Getenv("LITERTLM_MODEL")
+	modelPath := os.Getenv("LITERTLM_TEST_MODEL")
 	if modelPath == "" {
-		defaultModel := `C:\Users\vladi\models\gemma3-1b-it-int4.litertlm`
-		if _, err := os.Stat(defaultModel); err == nil {
-			modelPath = defaultModel
-		}
+		modelPath = os.Getenv("LITERTLM_MODEL")
 	}
 
 	if modelPath != "" {

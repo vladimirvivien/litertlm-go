@@ -16,5 +16,5 @@ go run . -model /path/to/model.litertlm -system "You are a coding assistant." -p
 
 With automatic library and model provisioning:
 ```bash
-go run . -get-lib v0.16.0 -get-model litert-community/gemma3-1b-it-int4
+go run . -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 ```

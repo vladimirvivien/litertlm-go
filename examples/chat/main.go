@@ -20,7 +20,7 @@ func main() {
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries (falls back to LITERTLM_LIB env)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	system := flag.String("system", "You are a friendly assistant.", "system message")
 	prompt := flag.String("prompt", "", "if set, send this single user message instead of the built-in two-turn demo")
 	flag.Parse()
@@ -29,7 +29,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)

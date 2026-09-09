@@ -21,7 +21,7 @@ import (
 //
 // Each loop below crosses the original failure threshold many times.
 // A single error or empty reply means the corruption is back. The fix
-// lives in lazyFun.Call (route sub-register returns through a
+// lives in lazyFun.callErr (route sub-register returns through a
 // register-width buffer), so these guard every narrow-slot binding at
 // once.
 //
@@ -92,33 +92,82 @@ func TestFFIChurn_ChatSendClose(t *testing.T) {
 	}
 }
 
-// TestFFIChurn_ResponseAccessors exercises the Responses accessors with
-// the narrowest return slots — NumCandidates (Sint32), Score's
-// has-predicate (Uint8), TokenLength (Uint8 + Sint32) — directly and
+// TestFFIChurn_ResponseAccessors exercises both high-level Response
+// metadata and the low-level Responses accessors with the narrowest
+// return slots — NumCandidates (Sint32), Score's has-predicate (Uint8),
+// TokenLength (Uint8 + Sint32), and TokenScores — directly and
 // repeatedly.
 func TestFFIChurn_ResponseAccessors(t *testing.T) {
 	client := churnClient(t, litertlm.WithBenchmarkEnabled())
 	ctx := context.Background()
 	const n = 150
-	for i := range n {
-		resp, err := client.GenerateResponse(ctx, "Name one primary color.",
-			litertlm.WithMaxOutputTokens(4))
+
+	t.Run("GenerateResponse", func(t *testing.T) {
+		for i := range n {
+			resp, err := client.GenerateResponse(ctx, "Name one primary color.",
+				litertlm.WithMaxOutputTokens(4))
+			if err != nil {
+				t.Fatalf("GenerateResponse iter %d/%d: %v", i, n, err)
+			}
+			if resp.NumCandidates() < 1 {
+				t.Fatalf("GenerateResponse iter %d/%d: %d candidates (corruption?)", i, n, resp.NumCandidates())
+			}
+			if b := resp.Benchmark(); b != nil {
+				// PrefillTurns / DecodeTurns / per-turn counts are Sint32 returns.
+				_ = b.PrefillTurns + b.DecodeTurns
+			}
+			if resp.Text() == "" {
+				t.Fatalf("GenerateResponse iter %d/%d: empty text", i, n)
+			}
+		}
+	})
+
+	t.Run("LowLevelResponses", func(t *testing.T) {
+		cfg, err := litertlm.NewSessionConfig()
 		if err != nil {
-			t.Fatalf("GenerateResponse iter %d/%d: %v", i, n, err)
+			t.Fatalf("NewSessionConfig: %v", err)
 		}
-		if resp.NumCandidates() < 1 {
-			t.Fatalf("GenerateResponse iter %d/%d: %d candidates (corruption?)", i, n, resp.NumCandidates())
+		defer cfg.Delete()
+		if cfgErr := cfg.SetMaxOutputTokens(4); cfgErr != nil {
+			t.Fatalf("SetMaxOutputTokens: %v", cfgErr)
 		}
-		_, _ = resp.Score(0)       // Uint8 has-predicate + Float value
-		_, _ = resp.TokenLength(0) // Uint8 has-predicate + Sint32 value
-		if b := resp.Benchmark(); b != nil {
-			// PrefillTurns / DecodeTurns / per-turn counts are Sint32 returns.
-			_ = b.PrefillTurns + b.DecodeTurns
+
+		for i := range n {
+			sess, sessErr := client.Engine().NewSession(cfg)
+			if sessErr != nil {
+				t.Fatalf("NewSession iter %d/%d: %v", i, n, sessErr)
+			}
+			in, inErr := litertlm.NewTextInputString("Name one primary color.")
+			if inErr != nil {
+				sess.Delete()
+				t.Fatalf("NewTextInputString iter %d/%d: %v", i, n, inErr)
+			}
+			rawResp, genErr := sess.GenerateContent([]litertlm.InputData{in})
+			if genErr != nil {
+				in.Delete()
+				sess.Delete()
+				t.Fatalf("GenerateContent iter %d/%d: %v", i, n, genErr)
+			}
+			if rawResp.NumCandidates() < 1 {
+				rawResp.Delete()
+				in.Delete()
+				sess.Delete()
+				t.Fatalf("GenerateContent iter %d/%d: %d candidates (corruption?)", i, n, rawResp.NumCandidates())
+			}
+			_, _ = rawResp.Score(0)       // Uint8 has-predicate + Float value
+			_, _ = rawResp.TokenLength(0) // Uint8 has-predicate + Sint32 value
+			_, _ = rawResp.TokenScores(0)
+			if rawResp.Text(0) == "" {
+				rawResp.Delete()
+				in.Delete()
+				sess.Delete()
+				t.Fatalf("GenerateContent iter %d/%d: empty text", i, n)
+			}
+			rawResp.Delete()
+			in.Delete()
+			sess.Delete()
 		}
-		if resp.Text() == "" {
-			t.Fatalf("GenerateResponse iter %d/%d: empty text", i, n)
-		}
-	}
+	})
 }
 
 // TestFFIChurn_Tokenize hammers Tokenize (size_t count + borrowed

@@ -45,7 +45,9 @@ func buildIntegrationConversation(t *testing.T) litertlm.Conversation {
 		t.Fatalf("NewEngineSettings: %v", err)
 	}
 	t.Cleanup(func() { settings.Delete() })
-	settings.SetMaxNumTokens(1024)
+	if err = settings.SetMaxNumTokens(1024); err != nil {
+		t.Fatalf("SetMaxNumTokens: %v", err)
+	}
 
 	engine, err := litertlm.NewEngine(settings)
 	if err != nil {
@@ -58,8 +60,12 @@ func buildIntegrationConversation(t *testing.T) litertlm.Conversation {
 		t.Fatalf("NewSessionConfig: %v", err)
 	}
 	t.Cleanup(func() { sessCfg.Delete() })
-	sessCfg.SetMaxOutputTokens(128)
-	sessCfg.SetApplyPromptTemplate(true)
+	if err = sessCfg.SetMaxOutputTokens(128); err != nil {
+		t.Fatalf("SetMaxOutputTokens: %v", err)
+	}
+	if err = sessCfg.SetApplyPromptTemplate(true); err != nil {
+		t.Fatalf("SetApplyPromptTemplate: %v", err)
+	}
 
 	systemMessageJSON, err := json.Marshal("You are a concise assistant.")
 	if err != nil {
@@ -218,7 +224,7 @@ func TestConversation_TokenCount_Invalid(t *testing.T) {
 	}
 }
 
-func TestClient_WithModelFd(t *testing.T) {
+func TestClient_WithModelFD(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("raw file descriptor model loading is unsupported on Windows due to CRT boundary limits")
 	}
@@ -235,7 +241,7 @@ func TestClient_WithModelFd(t *testing.T) {
 
 	client, err := litertlm.New(context.Background(),
 		litertlm.WithLib(libDir),
-		litertlm.WithModelFd(int(file.Fd())),
+		litertlm.WithModelFD(int(file.Fd())),
 	)
 	if err != nil {
 		_ = file.Close()
@@ -294,15 +300,23 @@ func TestEngineSettings_Options(t *testing.T) {
 	defer settings.Delete()
 
 	// Test threading setters
-	settings.SetNumThreads(4)
-	settings.SetAudioNumThreads(2)
+	if err := settings.SetNumThreads(4); err != nil {
+		t.Fatalf("SetNumThreads: %v", err)
+	}
+	if err := settings.SetAudioNumThreads(2); err != nil {
+		t.Fatalf("SetAudioNumThreads: %v", err)
+	}
 
 	// Test LoRA setters
-	settings.SetLoraRank(8)
-	settings.SetAudioLoraRank(8)
+	if err := settings.SetLoRARank(8); err != nil {
+		t.Fatalf("SetLoRARank: %v", err)
+	}
+	if err := settings.SetAudioLoRARank(8); err != nil {
+		t.Fatalf("SetAudioLoRARank: %v", err)
+	}
 
 	// These might return errors on CPU or on models without audio/vision components.
 	// We check that they call the FFI layer safely without panics.
-	_ = settings.SetSupportedLoraRanks([]int{8, 16})
-	_ = settings.SetSupportedAudioLoraRanks([]int{8, 16})
+	_ = settings.SetSupportedLoRARanks([]int{8, 16})
+	_ = settings.SetSupportedAudioLoRARanks([]int{8, 16})
 }

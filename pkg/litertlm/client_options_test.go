@@ -185,7 +185,7 @@ func TestBuildOptionalArgs_UnsetReturnsZero(t *testing.T) {
 }
 
 func TestBuildOptionalArgs_WithMaxOutputTokens(t *testing.T) {
-	if !realLibraryLoaded {
+	if !rt.isRealLibraryLoaded() {
 		t.Skip("skipping test requiring real library")
 	}
 	cfg := runtimeConfig{maxOutputTokens: 128}
@@ -200,7 +200,7 @@ func TestBuildOptionalArgs_WithMaxOutputTokens(t *testing.T) {
 }
 
 func TestBuildOptionalArgs_WithBudgetAndMaxTokens(t *testing.T) {
-	if !realLibraryLoaded {
+	if !rt.isRealLibraryLoaded() {
 		t.Skip("skipping test requiring real library")
 	}
 	vtb := 256
@@ -219,44 +219,38 @@ func TestBuildOptionalArgs_WithBudgetAndMaxTokens(t *testing.T) {
 }
 
 // TestDiagnoseLoadError verifies that diagnoseLoadError correctly wraps
-// engine preparation failures but leaves other errors as standard New errors.
+// resource/engine preparation failures and leaves other errors unmodified.
 func TestDiagnoseLoadError(t *testing.T) {
 	tests := []struct {
 		name          string
 		err           error
-		backend       string
 		expectContain string
 	}{
 		{
 			name:          "failed to prepare error on GPU",
 			err:           fmt.Errorf("some internal error: failed to prepare model"),
-			backend:       "gpu",
 			expectContain: "GPU memory allocation issue, such as the 2 GB per-allocation limit",
 		},
 		{
-			name:          "failed to prepare error on CPU",
-			err:           fmt.Errorf("some internal error: failed to prepare runner"),
-			backend:       "cpu",
+			name:          "CError ErrResourceExhausted",
+			err:           &CError{Op: "engine_create", Code: StatusResourceExhausted, Message: "out of VRAM"},
 			expectContain: "GPU memory allocation issue, such as the 2 GB per-allocation limit",
 		},
 		{
 			name:          "generic access denied is unmodified",
 			err:           fmt.Errorf("Access is denied"),
-			backend:       "gpu",
 			expectContain: "litertlm: New: Access is denied",
 		},
 		{
 			name:          "unrelated error",
 			err:           fmt.Errorf("file not found"),
-			backend:       "cpu",
 			expectContain: "litertlm: New: file not found",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := clientConfig{backend: tc.backend}
-			got := diagnoseLoadError(tc.err, cfg)
+			got := diagnoseLoadError(tc.err)
 			if got == nil {
 				t.Fatal("expected non-nil error")
 			}
@@ -271,13 +265,13 @@ func TestDiagnoseLoadError(t *testing.T) {
 func TestOption_NewV014Options(t *testing.T) {
 	cfg := clientConfig{}
 
-	if cfg.modelFd != nil || cfg.numThreads != nil || cfg.audioNumThreads != nil || cfg.loraRank != nil || cfg.audioLoraRank != nil {
+	if cfg.modelFD != nil || cfg.numThreads != nil || cfg.audioNumThreads != nil || cfg.loraRank != nil || cfg.audioLoraRank != nil {
 		t.Fatal("new options should default to nil")
 	}
 
-	WithModelFd(10)(&cfg)
-	if cfg.modelFd == nil || *cfg.modelFd != 10 {
-		t.Errorf("modelFd = %v, want 10", cfg.modelFd)
+	WithModelFD(10)(&cfg)
+	if cfg.modelFD == nil || *cfg.modelFD != 10 {
+		t.Errorf("modelFD = %v, want 10", cfg.modelFD)
 	}
 
 	WithNumThreads(4)(&cfg)
@@ -295,9 +289,11 @@ func TestOption_NewV014Options(t *testing.T) {
 		t.Errorf("loraRank = %v, want 8", cfg.loraRank)
 	}
 
-	WithSupportedLoRARanks([]int{8, 16})(&cfg)
+	loraRanks := []int{8, 16}
+	WithSupportedLoRARanks(loraRanks)(&cfg)
+	loraRanks[0] = 999
 	if len(cfg.supportedLoraRanks) != 2 || cfg.supportedLoraRanks[0] != 8 || cfg.supportedLoraRanks[1] != 16 {
-		t.Errorf("supportedLoraRanks = %v, want [8, 16]", cfg.supportedLoraRanks)
+		t.Errorf("supportedLoraRanks = %v, want [8, 16] (must defensively clone caller slice)", cfg.supportedLoraRanks)
 	}
 
 	WithAudioLoRARank(4)(&cfg)
@@ -305,9 +301,11 @@ func TestOption_NewV014Options(t *testing.T) {
 		t.Errorf("audioLoraRank = %v, want 4", cfg.audioLoraRank)
 	}
 
-	WithSupportedAudioLoRARanks([]int{4, 8})(&cfg)
+	audioRanks := []int{4, 8}
+	WithSupportedAudioLoRARanks(audioRanks)(&cfg)
+	audioRanks[0] = 999
 	if len(cfg.supportedAudioLoraRanks) != 2 || cfg.supportedAudioLoraRanks[0] != 4 || cfg.supportedAudioLoraRanks[1] != 8 {
-		t.Errorf("supportedAudioLoraRanks = %v, want [4, 8]", cfg.supportedAudioLoraRanks)
+		t.Errorf("supportedAudioLoraRanks = %v, want [4, 8] (must defensively clone caller slice)", cfg.supportedAudioLoraRanks)
 	}
 }
 

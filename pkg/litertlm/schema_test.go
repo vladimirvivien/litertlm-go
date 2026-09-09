@@ -49,6 +49,7 @@ type schemaWithBool struct {
 }
 
 func TestShapeOf_Table(t *testing.T) {
+	_ = schemaUnexported{private: "used"}
 	tests := []struct {
 		name string
 		typ  reflect.Type

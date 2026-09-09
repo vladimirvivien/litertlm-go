@@ -1,9 +1,6 @@
 package litertlm
 
-import (
-	"time"
-	"unsafe"
-)
+import "time"
 
 // Benchmark is a pure-Go snapshot of a BenchmarkInfo handle. Time
 // fields use time.Duration; per-turn slices are sized from the
@@ -55,106 +52,45 @@ func seconds(s float64) time.Duration {
 }
 
 // Delete releases a BenchmarkInfo handle.
-func (b BenchmarkInfo) Delete() {
-	if b == 0 {
-		return
-	}
-	benchmarkInfoDeleteFunc.Call(nil, unsafe.Pointer(&b))
-}
+func (b BenchmarkInfo) Delete() { deleteHandle(b, benchmarkInfoDeleteFunc) }
 
 // TimeToFirstToken returns the prefill + first decode time, in seconds. Per
 // the C-header contract, this does NOT include one-time initialisation.
 func (b BenchmarkInfo) TimeToFirstToken() float64 {
-	if b == 0 {
-		return 0
-	}
-	var v float64
-	benchmarkInfoGetTimeToFirstTokenFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return v
+	return getHandleScalar[BenchmarkInfo, float64](b, benchmarkInfoGetTimeToFirstTokenFunc, "benchmark_info_get_time_to_first_token", 0)
 }
 
-// TotalInitTime returns total engine initialisation time, in seconds.
+// TotalInitTime returns engine initialisation time, in seconds.
 func (b BenchmarkInfo) TotalInitTime() float64 {
-	if b == 0 {
-		return 0
-	}
-	var v float64
-	benchmarkInfoGetTotalInitTimeInSecondFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return v
+	return getHandleScalar[BenchmarkInfo, float64](b, benchmarkInfoGetTotalInitTimeInSecondFunc, "benchmark_info_get_total_init_time_in_second", 0)
 }
 
 // NumPrefillTurns returns the number of recorded prefill turns.
 func (b BenchmarkInfo) NumPrefillTurns() int {
-	if b == 0 {
-		return 0
-	}
-	var v int32
-	benchmarkInfoGetNumPrefillTurnsFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return int(v)
+	return int(getHandleScalar[BenchmarkInfo, uint64](b, benchmarkInfoGetNumPrefillTurnsFunc, "benchmark_info_get_num_prefill_turns", 0))
 }
 
 // NumDecodeTurns returns the number of recorded decode turns.
 func (b BenchmarkInfo) NumDecodeTurns() int {
-	if b == 0 {
-		return 0
-	}
-	var v int32
-	benchmarkInfoGetNumDecodeTurnsFunc.Call(unsafe.Pointer(&v), unsafe.Pointer(&b))
-	return int(v)
+	return int(getHandleScalar[BenchmarkInfo, uint64](b, benchmarkInfoGetNumDecodeTurnsFunc, "benchmark_info_get_num_decode_turns", 0))
 }
 
 // PrefillTokenCount returns the prefill token count at turn i.
 func (b BenchmarkInfo) PrefillTokenCount(i int) int {
-	if b == 0 {
-		return 0
-	}
-	var v int32
-	benchmarkInfoGetPrefillTokenCountAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&b),
-		unsafe.Pointer(new(int32(i))),
-	)
-	return int(v)
+	return int(getHandleScalarAt[BenchmarkInfo, uint64](b, i, benchmarkInfoGetPrefillTokenCountAtFunc, "benchmark_info_get_prefill_token_count_at", 0))
 }
 
 // DecodeTokenCount returns the decode token count at turn i.
 func (b BenchmarkInfo) DecodeTokenCount(i int) int {
-	if b == 0 {
-		return 0
-	}
-	var v int32
-	benchmarkInfoGetDecodeTokenCountAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&b),
-		unsafe.Pointer(new(int32(i))),
-	)
-	return int(v)
+	return int(getHandleScalarAt[BenchmarkInfo, uint64](b, i, benchmarkInfoGetDecodeTokenCountAtFunc, "benchmark_info_get_decode_token_count_at", 0))
 }
 
 // PrefillTokensPerSec returns prefill throughput at turn i, in tokens/sec.
 func (b BenchmarkInfo) PrefillTokensPerSec(i int) float64 {
-	if b == 0 {
-		return 0
-	}
-	var v float64
-	benchmarkInfoGetPrefillTokensPerSecAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&b),
-		unsafe.Pointer(new(int32(i))),
-	)
-	return v
+	return getHandleScalarAt[BenchmarkInfo, float64](b, i, benchmarkInfoGetPrefillTokensPerSecAtFunc, "benchmark_info_get_prefill_tokens_per_sec_at", 0)
 }
 
 // DecodeTokensPerSec returns decode throughput at turn i, in tokens/sec.
 func (b BenchmarkInfo) DecodeTokensPerSec(i int) float64 {
-	if b == 0 {
-		return 0
-	}
-	var v float64
-	benchmarkInfoGetDecodeTokensPerSecAtFunc.Call(
-		unsafe.Pointer(&v),
-		unsafe.Pointer(&b),
-		unsafe.Pointer(new(int32(i))),
-	)
-	return v
+	return getHandleScalarAt[BenchmarkInfo, float64](b, i, benchmarkInfoGetDecodeTokensPerSecAtFunc, "benchmark_info_get_decode_tokens_per_sec_at", 0)
 }

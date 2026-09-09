@@ -15,8 +15,8 @@ func TestText(t *testing.T) {
 	if p.text != "hello" {
 		t.Errorf("text = %q, want hello", p.text)
 	}
-	if p.Mime() != "" {
-		t.Errorf("Mime() = %q, want empty for text", p.Mime())
+	if p.MIME() != "" {
+		t.Errorf("MIME() = %q, want empty for text", p.MIME())
 	}
 }
 
@@ -29,15 +29,15 @@ func TestImage(t *testing.T) {
 	if !bytes.Equal(p.data, jpeg) {
 		t.Errorf("data mismatch")
 	}
-	if p.Mime() != "" {
-		t.Errorf("Mime() = %q, want empty for bare Image", p.Mime())
+	if p.MIME() != "" {
+		t.Errorf("MIME() = %q, want empty for bare Image", p.MIME())
 	}
 }
 
-func TestImageWithMime(t *testing.T) {
-	p := ImageWithMime([]byte{0xFF}, "image/jpeg")
-	if p.Mime() != "image/jpeg" {
-		t.Errorf("Mime() = %q, want image/jpeg", p.Mime())
+func TestImageWithMIME(t *testing.T) {
+	p := ImageWithMIME([]byte{0xFF}, "image/jpeg")
+	if p.MIME() != "image/jpeg" {
+		t.Errorf("MIME() = %q, want image/jpeg", p.MIME())
 	}
 }
 
@@ -45,7 +45,7 @@ func TestImageFromFile(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct {
 		ext      string
-		wantMime string
+		wantMIME string
 	}{
 		{".jpg", "image/jpeg"},
 		{".JPG", "image/jpeg"},
@@ -64,8 +64,8 @@ func TestImageFromFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ImageFromFile: %v", err)
 			}
-			if p.Mime() != tc.wantMime {
-				t.Errorf("Mime() = %q, want %q", p.Mime(), tc.wantMime)
+			if p.MIME() != tc.wantMIME {
+				t.Errorf("MIME() = %q, want %q", p.MIME(), tc.wantMIME)
 			}
 			if !bytes.Equal(p.data, payload) {
 				t.Errorf("payload mismatch")
@@ -102,110 +102,7 @@ func TestAudioFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AudioFromFile: %v", err)
 	}
-	if p.Mime() != "audio/wav" {
-		t.Errorf("Mime() = %q, want audio/wav", p.Mime())
-	}
-}
-
-func TestPartsToInputs_TextOnly(t *testing.T) {
-	if !realLibraryLoaded {
-		t.Skip("C library not loaded")
-	}
-	parts := []Part{Text("hello"), Text("world")}
-	inputs, err := partsToInputs(parts)
-	if err != nil {
-		t.Fatalf("partsToInputs failed: %v", err)
-	}
-	defer func() {
-		for _, in := range inputs {
-			in.Delete()
-		}
-	}()
-	if len(inputs) != 2 {
-		t.Fatalf("len = %d, want 2", len(inputs))
-	}
-	for i, in := range inputs {
-		if in == 0 {
-			t.Errorf("inputs[%d] is zero", i)
-		}
-	}
-}
-
-func TestPartsToInputs_ImageEmitsEndMarker(t *testing.T) {
-	if !realLibraryLoaded {
-		t.Skip("C library not loaded")
-	}
-	parts := []Part{Image([]byte{0xFF, 0xD8})}
-	inputs, err := partsToInputs(parts)
-	if err != nil {
-		t.Fatalf("partsToInputs failed: %v", err)
-	}
-	defer func() {
-		for _, in := range inputs {
-			in.Delete()
-		}
-	}()
-	if len(inputs) != 2 {
-		t.Fatalf("len = %d, want 2 (image + end)", len(inputs))
-	}
-}
-
-func TestPartsToInputs_AudioEmitsEndMarker(t *testing.T) {
-	if !realLibraryLoaded {
-		t.Skip("C library not loaded")
-	}
-	parts := []Part{Audio([]byte("riff"))}
-	inputs, err := partsToInputs(parts)
-	if err != nil {
-		t.Fatalf("partsToInputs failed: %v", err)
-	}
-	defer func() {
-		for _, in := range inputs {
-			in.Delete()
-		}
-	}()
-	if len(inputs) != 2 {
-		t.Fatalf("len = %d, want 2 (audio + end)", len(inputs))
-	}
-}
-
-func TestPartsToInputs_MixedOrderPreserved(t *testing.T) {
-	if !realLibraryLoaded {
-		t.Skip("C library not loaded")
-	}
-	parts := []Part{
-		Image([]byte{0xFF}),
-		Text("describe"),
-		Audio([]byte("riff")),
-	}
-	inputs, err := partsToInputs(parts)
-	if err != nil {
-		t.Fatalf("partsToInputs failed: %v", err)
-	}
-	defer func() {
-		for _, in := range inputs {
-			in.Delete()
-		}
-	}()
-	if len(inputs) != 5 {
-		t.Fatalf("len = %d, want 5", len(inputs))
-	}
-}
-
-func TestPartsToInputs_Empty(t *testing.T) {
-	if !realLibraryLoaded {
-		t.Skip("C library not loaded")
-	}
-	inputs, err := partsToInputs(nil)
-	if err != nil {
-		t.Fatalf("partsToInputs failed: %v", err)
-	}
-	defer func() {
-		for _, in := range inputs {
-			in.Delete()
-		}
-	}()
-	if len(inputs) != 0 {
-		t.Errorf("nil parts: len = %d, want 0", len(inputs))
+	if p.MIME() != "audio/wav" {
+		t.Errorf("MIME() = %q, want audio/wav", p.MIME())
 	}
 }

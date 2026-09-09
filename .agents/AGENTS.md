@@ -11,11 +11,11 @@
 * **Local Context**: In hello-world or quickstart tutorials where the reader is instructed to create a script file locally, all subsequent shell commands showing execution output must run against the local file path (e.g., `./hello.star` or `kite run ./hello.star`) rather than repository-relative directories (e.g., `./examples/core/hello.star`) to prevent logical disconnects.
 
 ## 3. Go Code Hygiene & CI Pre-Flight Checks
-* **Mandatory Verification Suite**: Always run the complete Go code hygiene and pre-flight suite after making any code changes before completing a turn to guarantee remote CI passes:
+* **Mandatory Verification Suite**: Always run the complete Go code hygiene and pre-flight suite after making any code changes before completing a turn to guarantee remote CI passes across Go versions:
   1. `go fix ./...` (apply standard AST modernizations such as `errors.AsType`, typed atomics, etc.)
   2. `go fmt ./...`
-  3. `gofmt -l .` (verify zero formatting differences or trailing whitespace/newline issues)
-  4. `go vet ./...`
-  5. `go test -race ./...` (ensure data-race freedom and 100% test pass rate)
-  6. `golangci-lint run ./...` (ensure 0 lint/shadowing/error-return warnings)
+  3. `gofmt -s -l .` (verify zero formatting differences or trailing whitespace/newline issues)
+  4. `go vet ./...` (perform standard compiler static analysis for common bugs, shadow variables, and correctness)
+  5. `staticcheck ./...` (perform advanced static analysis without toolchain version fragility)
+  6. `go test -race ./...` (ensure data-race freedom and 100% test pass rate)
 * **Verify Clean Working Tree**: Always inspect working copy status (`jj status` / `jj diff`) to confirm that all automatic modifications made by `go fix` and `go fmt` are captured in `@` so remote CI (`git diff --exit-code`) passes cleanly.

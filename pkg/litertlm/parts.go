@@ -11,8 +11,8 @@ import (
 
 // Part is one piece of multimodal input to GenerateMulti /
 // GenerateMultiStream / GenerateMultiResponse / GenerateDataMulti.
-// Construct via Text, Image, ImageWithMime, ImageFromFile, Audio,
-// AudioWithMime, or AudioFromFile.
+// Construct via Text, Image, ImageWithMIME, ImageFromFile, Audio,
+// AudioWithMIME, or AudioFromFile.
 type Part struct {
 	kind partKind
 	text string
@@ -33,42 +33,39 @@ func Text(s string) Part {
 	return Part{kind: partText, text: s}
 }
 
-// Image returns an image Part wrapping b. The MIME type is left
-// empty; pass ImageWithMime when the caller knows the format, or
-// ImageFromFile to derive it from a file extension.
+// Image returns an image Part wrapping b with no MIME metadata.
+// Caller must treat b as read-only after constructing the Part.
 func Image(b []byte) Part {
 	return Part{kind: partImage, data: b}
 }
 
-// ImageWithMime returns an image Part wrapping b with an explicit
-// MIME type (e.g. "image/jpeg", "image/png", "image/webp"). The MIME
-// type is metadata for caller introspection; the C side accepts the
-// raw bytes regardless.
-func ImageWithMime(b []byte, mime string) Part {
+// ImageWithMIME returns an image Part wrapping b with an explicit
+// MIME type (e.g. "image/jpeg", "image/png", "image/webp").
+// Caller must treat b as read-only after constructing the Part.
+func ImageWithMIME(b []byte, mime string) Part {
 	return Part{kind: partImage, data: b, mime: mime}
 }
 
 // ImageFromFile reads the file at path and returns an image Part.
-// MIME is derived from the file extension; unknown extensions yield
-// an empty MIME and the bytes are still wrapped (the C side will
-// surface its own error if the format is unsupported).
+// MIME is derived from the file extension.
 func ImageFromFile(path string) (Part, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return Part{}, fmt.Errorf("litertlm: ImageFromFile: %w", err)
 	}
-	return ImageWithMime(b, mimeForExt(filepath.Ext(path), imageMimeByExt)), nil
+	return ImageWithMIME(b, mimeForExt(filepath.Ext(path), imageMimeByExt)), nil
 }
 
-// Audio returns an audio Part wrapping b. The MIME type is left
-// empty; pass AudioWithMime or AudioFromFile to set it.
+// Audio returns an audio Part wrapping b with no MIME metadata.
+// Caller must treat b as read-only after constructing the Part.
 func Audio(b []byte) Part {
 	return Part{kind: partAudio, data: b}
 }
 
-// AudioWithMime returns an audio Part wrapping b with an explicit
+// AudioWithMIME returns an audio Part wrapping b with an explicit
 // MIME type (e.g. "audio/wav", "audio/mpeg", "audio/ogg").
-func AudioWithMime(b []byte, mime string) Part {
+// Caller must treat b as read-only after constructing the Part.
+func AudioWithMIME(b []byte, mime string) Part {
 	return Part{kind: partAudio, data: b, mime: mime}
 }
 
@@ -79,12 +76,12 @@ func AudioFromFile(path string) (Part, error) {
 	if err != nil {
 		return Part{}, fmt.Errorf("litertlm: AudioFromFile: %w", err)
 	}
-	return AudioWithMime(b, mimeForExt(filepath.Ext(path), audioMimeByExt)), nil
+	return AudioWithMIME(b, mimeForExt(filepath.Ext(path), audioMimeByExt)), nil
 }
 
-// Mime returns the MIME type recorded on the Part. Empty for text
-// parts and for binary parts constructed without a MIME.
-func (p Part) Mime() string { return p.mime }
+// MIME returns the MIME type recorded on the Part. Empty for text
+// parts and for binary parts constructed without a MIME type.
+func (p Part) MIME() string { return p.mime }
 
 // TextContent returns the text payload of a text Part. Empty string
 // when the Part holds image or audio bytes; use IsText to disambiguate.
@@ -104,9 +101,6 @@ func (p Part) IsImage() bool { return p.kind == partImage }
 // IsAudio reports whether the Part holds audio bytes.
 func (p Part) IsAudio() bool { return p.kind == partAudio }
 
-// imageMimeByExt covers the formats LiteRT-LM's vision pipeline is
-// known to accept. Unknown extensions return "" — the C side will
-// fail on the actual call if the format truly isn't supported.
 var imageMimeByExt = map[string]string{
 	".jpg":  "image/jpeg",
 	".jpeg": "image/jpeg",
@@ -129,11 +123,6 @@ func mimeForExt(ext string, table map[string]string) string {
 	return table[strings.ToLower(ext)]
 }
 
-// renderPartsContent builds the content array the C side expects for
-// a message: a list of typed entries, one per Part. Image and audio
-// bytes are base64-encoded into a "blob" field; text becomes a "text"
-// field. Used by both the current-turn multimodal path and the
-// initial-history encoder.
 func renderPartsContent(parts []Part) []map[string]any {
 	content := make([]map[string]any, 0, len(parts))
 	for _, p := range parts {
@@ -158,8 +147,6 @@ func renderPartsContent(parts []Part) []map[string]any {
 	return content
 }
 
-// partsToConversationMessage builds the JSON user-message envelope
-// the Conversation API expects for multimodal turns.
 func partsToConversationMessage(parts []Part) (string, error) {
 	msg := map[string]any{
 		"role":    "user",
@@ -172,79 +159,18 @@ func partsToConversationMessage(parts []Part) (string, error) {
 	return string(b), nil
 }
 
-// assistantText extracts the first text-typed content item from the
-// assistant reply envelope returned by Conversation.SendMessage:
-// `{"role":"assistant","content":[{"type":"text","text":"..."}]}`.
+// assistantText extracts and concatenates all text-typed content items from the
+// assistant reply envelope returned by Conversation.SendMessage.
 func assistantText(envelope string) (string, error) {
 	var env struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
+		Content []replyContentPart `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(envelope), &env); err != nil {
 		return "", fmt.Errorf("litertlm: parse assistant envelope: %w", err)
 	}
-	for _, p := range env.Content {
-		if p.Type == "text" {
-			return p.Text, nil
-		}
+	text, ok := concatTextParts(env.Content)
+	if !ok {
+		return "", fmt.Errorf("litertlm: no text part in assistant reply: %s", envelope)
 	}
-	return "", fmt.Errorf("litertlm: no text part in assistant reply: %s", envelope)
-}
-
-// partsToInputs converts a high-level []Part to the low-level
-// []InputData expected by Session.GenerateContent and
-// Session.GenerateContentStreamCh. Image and audio parts emit their
-// terminating End-marker automatically.
-func partsToInputs(parts []Part) ([]InputData, error) {
-	out := make([]InputData, 0, len(parts)*2)
-	for _, p := range parts {
-		switch p.kind {
-		case partText:
-			in, err := NewTextInputString(p.text)
-			if err != nil {
-				for _, prev := range out {
-					prev.Delete()
-				}
-				return nil, err
-			}
-			out = append(out, in)
-		case partImage:
-			in1, err := NewBinaryInput(InputImage, p.data)
-			if err != nil {
-				for _, prev := range out {
-					prev.Delete()
-				}
-				return nil, err
-			}
-			in2, err := NewBinaryInput(InputImageEnd, nil)
-			if err != nil {
-				in1.Delete()
-				for _, prev := range out {
-					prev.Delete()
-				}
-				return nil, err
-			}
-			out = append(out, in1, in2)
-		case partAudio:
-			in1, err := NewBinaryInput(InputAudio, p.data)
-			if err != nil {
-				for _, prev := range out {
-					prev.Delete()
-				}
-				return nil, err
-			}
-			in2, err := NewBinaryInput(InputAudioEnd, nil)
-			if err != nil {
-				in1.Delete()
-				for _, prev := range out {
-					prev.Delete()
-				}
-				return nil, err
-			}
-			out = append(out, in1, in2)
-		}
-	}
-	return out, nil
+	return text, nil
 }

@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-// touchLib creates an empty file at GetLibraryFilename(dir, libName)
+// touchLib creates an empty file at LibraryFilename(dir, libName)
 // so Find sees the candidate as resolved.
 func touchLib(t *testing.T, dir, libName string) string {
 	t.Helper()
-	full := GetLibraryFilename(dir, libName)
+	full := LibraryFilename(dir, libName)
 	if err := os.WriteFile(full, []byte{}, 0o600); err != nil {
 		t.Fatalf("write fixture lib: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestFind_AllMiss(t *testing.T) {
 		t.Fatal("expected error on all-miss")
 	}
 	for _, dir := range []string{dir1, dir2} {
-		want := GetLibraryFilename(dir, "litertlm_c_cpu")
+		want := LibraryFilename(dir, "litertlm_c_cpu")
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name candidate %q", err, want)
 		}

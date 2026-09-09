@@ -40,8 +40,12 @@ type ConversationConfig uintptr
 // knobs passed to Conversation.SendMessage / SendMessageStream.
 type OptionalArgs uintptr
 
-// JsonResponse wraps a LiteRtLmJsonResponse* returned by Conversation calls.
-type JsonResponse uintptr
+// JSONResponse wraps a LiteRtLmJsonResponse* returned by Conversation calls.
+type JSONResponse uintptr
 
 // InputData wraps a LiteRtLmInputData* opaque pointer representing input content.
 type InputData uintptr
+
+// LoadedFile wraps a LiteRtLmLoadedFile* opaque pointer representing a model
+// file opened for capability inspection.
+type LoadedFile uintptr

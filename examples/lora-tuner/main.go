@@ -14,7 +14,7 @@ import (
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding the LiteRT-LM shared libraries")
 	flag.Parse()
@@ -23,7 +23,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -69,12 +69,15 @@ func main() {
 	// 2. Configure LoRA ranks
 	// Set the current base rank
 	fmt.Println("Configuring LoRA Rank to 8...")
-	settings.SetLoraRank(8)
+	if err = settings.SetLoRARank(8); err != nil {
+		fmt.Fprintf(os.Stderr, "SetLoRARank: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Declare all supported adapter ranks (e.g. models can load adapters with rank 8 or 16)
 	fmt.Println("Declaring supported ranks [8, 16]...")
-	if loraErr := settings.SetSupportedLoraRanks([]int{8, 16}); loraErr != nil {
-		fmt.Fprintf(os.Stderr, "SetSupportedLoraRanks: %v\n", loraErr)
+	if loraErr := settings.SetSupportedLoRARanks([]int{8, 16}); loraErr != nil {
+		fmt.Fprintf(os.Stderr, "SetSupportedLoRARanks: %v\n", loraErr)
 		// Note: Will log warnings or return error codes on CPU/unsupported models
 	}
 

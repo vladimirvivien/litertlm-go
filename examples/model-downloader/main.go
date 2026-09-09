@@ -16,7 +16,7 @@ import (
 func main() {
 	modelID := flag.String("model", "litert-community/gemma3-1b-it-int4", "Hugging Face model ID or direct HTTP(S) URL")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	destDir := flag.String("dir", "", "local directory to cache downloaded models (optional)")
 	token := flag.String("token", "", "Hugging Face auth token for gated models (optional, falls back to HF_TOKEN env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
@@ -28,7 +28,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -85,10 +85,10 @@ func main() {
 	fmt.Printf("\nModel ready at: %s\n\n", modelPath)
 
 	// 2. Automatically fetch C-API libraries if LITERTLM_LIB is not provided
-	if *libPath == "" {
-		stagedLib, errLib := litertlm.FetchLib("", "", "v0.16.0")
+	if resolvedLib == "" {
+		stagedLib, errLib := litertlm.FetchLib(ctx, "", "", "")
 		if errLib == nil {
-			*libPath = stagedLib
+			resolvedLib = stagedLib
 		}
 	}
 

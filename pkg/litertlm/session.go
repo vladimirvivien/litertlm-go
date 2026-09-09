@@ -5,100 +5,59 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/vladimirvivien/litertlm-go/pkg/utils"
+	"github.com/vladimirvivien/litertlm-go/internal/cstr"
 )
 
 // NewSessionConfig creates a fresh SessionConfig with C-side defaults.
 // Caller must Delete() once the consuming Session has been created (the
 // C API copies the relevant fields out).
 func NewSessionConfig() (SessionConfig, error) {
-	return callForHandle[SessionConfig](sessionConfigCreateFunc, "session_config_create")
+	return callStatusHandle[SessionConfig](sessionConfigCreateFunc, "session_config_create")
 }
 
 // Delete releases a SessionConfig handle.
-func (c SessionConfig) Delete() {
-	if c == 0 {
-		return
-	}
-	sessionConfigDeleteFunc.Call(nil, unsafe.Pointer(&c))
-}
+func (c SessionConfig) Delete() { deleteHandle(c, sessionConfigDeleteFunc) }
 
 // SetMaxOutputTokens caps the output tokens produced per decode step.
-func (c SessionConfig) SetMaxOutputTokens(n int) {
-	if c == 0 {
-		return
-	}
-	sessionConfigSetMaxOutputTokensFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(new(int32(n))))
+func (c SessionConfig) SetMaxOutputTokens(n int) error {
+	return setHandleScalar(c, "session config", sessionConfigSetMaxOutputTokensFunc, "session_config_set_max_output_tokens", int32(n))
 }
 
 // SetApplyPromptTemplate toggles whether session-level inputs run through
 // the model's prompt template before reaching the engine.
-func (c SessionConfig) SetApplyPromptTemplate(on bool) {
-	if c == 0 {
-		return
-	}
-	var v uint8
-	if on {
-		v = 1
-	}
-	sessionConfigSetApplyPromptTemplateFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(&v))
+func (c SessionConfig) SetApplyPromptTemplate(on bool) error {
+	return setHandleBool(c, "session config", sessionConfigSetApplyPromptTemplateFunc, "session_config_set_apply_prompt_template", on)
 }
 
 // SetSamplerParams attaches sampler parameters to the session config.
-func (c SessionConfig) SetSamplerParams(p SamplerParams) {
+func (c SessionConfig) SetSamplerParams(p SamplerParams) error {
 	if c == 0 {
-		return
+		return fmt.Errorf("litertlm: set_sampler_params: invalid session config")
 	}
-	pPtr := unsafe.Pointer(&p)
-	sessionConfigSetSamplerParamsFunc.Call(nil, unsafe.Pointer(&c), unsafe.Pointer(&pPtr))
-	// KeepAlive after Call ensures the compiler doesn't drop p before the
-	// C side has finished reading through pPtr.
-	runtime.KeepAlive(p)
-}
-
-// SetLoraPath sets the path to the text LoRA weights file for this session.
-func (c SessionConfig) SetLoraPath(path string) error {
-	if c == 0 {
-		return fmt.Errorf("litertlm: set_lora_path: invalid session config")
-	}
-	cStr, err := utils.BytePtrFromString(path)
+	h, err := newSamplerParamsHandle(p)
 	if err != nil {
 		return err
 	}
-	var res int32
-	sessionConfigSetLoraPathFunc.Call(unsafe.Pointer(&res), unsafe.Pointer(&c), unsafe.Pointer(&cStr))
-	runtime.KeepAlive(cStr)
-	if res != 0 {
-		return fmt.Errorf("litertlm: set_lora_path: failed with code %d", res)
-	}
-	return nil
+	defer h.delete()
+
+	err = callStatus(sessionConfigSetSamplerParamsFunc, "session_config_set_sampler_params",
+		unsafe.Pointer(&c), unsafe.Pointer(&h))
+	runtime.KeepAlive(h)
+	return err
 }
 
-// SetAudioLoraPath sets the path to the audio LoRA weights file for this session.
-func (c SessionConfig) SetAudioLoraPath(path string) error {
-	if c == 0 {
-		return fmt.Errorf("litertlm: set_audio_lora_path: invalid session config")
-	}
-	cStr, err := utils.BytePtrFromString(path)
-	if err != nil {
-		return err
-	}
-	var res int32
-	sessionConfigSetAudioLoraPathFunc.Call(unsafe.Pointer(&res), unsafe.Pointer(&c), unsafe.Pointer(&cStr))
-	runtime.KeepAlive(cStr)
-	if res != 0 {
-		return fmt.Errorf("litertlm: set_audio_lora_path: failed with code %d", res)
-	}
-	return nil
+// SetLoRAPath sets the path to the text LoRA weights file for this session.
+func (c SessionConfig) SetLoRAPath(path string) error {
+	return setHandleString(c, "session config", sessionConfigSetLoraPathFunc, "session_config_set_lora_path", path)
+}
+
+// SetAudioLoRAPath sets the path to the audio LoRA weights file for this session.
+func (c SessionConfig) SetAudioLoRAPath(path string) error {
+	return setHandleString(c, "session config", sessionConfigSetAudioLoraPathFunc, "session_config_set_audio_lora_path", path)
 }
 
 // Delete releases a Session handle.
-func (s Session) Delete() {
-	if s == 0 {
-		return
-	}
-	sessionDeleteFunc.Call(nil, unsafe.Pointer(&s))
-}
+func (s Session) Delete() { deleteHandle(s, sessionDeleteFunc) }
 
 // GenerateContent runs synchronous inference for the given multimodal
 // inputs. Caller must Delete() the returned Responses.
@@ -110,14 +69,11 @@ func (s Session) GenerateContent(inputs []InputData) (Responses, error) {
 		return 0, fmt.Errorf("litertlm: generate_content: no inputs")
 	}
 
-	ptrs := make([]uintptr, len(inputs))
-	for i, in := range inputs {
-		ptrs[i] = uintptr(in)
-	}
+	ptrs := handlePtrs(inputs)
 	inputsPtr := unsafe.Pointer(&ptrs[0])
 	n := uint64(len(inputs))
 
-	r, err := callForHandle[Responses](sessionGenerateContentFunc, "generate_content",
+	r, err := callStatusHandle[Responses](sessionGenerateContentFunc, "session_generate_content",
 		unsafe.Pointer(&s),
 		unsafe.Pointer(&inputsPtr),
 		unsafe.Pointer(&n),
@@ -133,7 +89,7 @@ func (s Session) BenchmarkInfo() (BenchmarkInfo, error) {
 	if s == 0 {
 		return 0, fmt.Errorf("litertlm: benchmark_info: invalid session")
 	}
-	return callForHandle[BenchmarkInfo](sessionGetBenchmarkInfoFunc,
+	return callStatusHandle[BenchmarkInfo](sessionGetBenchmarkInfoFunc,
 		"session_get_benchmark_info", unsafe.Pointer(&s))
 }
 
@@ -143,7 +99,8 @@ func (s Session) Cancel() {
 	if s == 0 {
 		return
 	}
-	sessionCancelProcessFunc.Call(nil, unsafe.Pointer(&s))
+	var status int32
+	_ = sessionCancelProcessFunc.callErr(unsafe.Pointer(&status), unsafe.Pointer(&s))
 }
 
 // RunPrefill adds inputs to the session's context as the prompt phase.
@@ -157,25 +114,17 @@ func (s Session) RunPrefill(inputs []InputData) error {
 		return fmt.Errorf("litertlm: session_run_prefill: no inputs")
 	}
 
-	ptrs := make([]uintptr, len(inputs))
-	for i, in := range inputs {
-		ptrs[i] = uintptr(in)
-	}
+	ptrs := handlePtrs(inputs)
 	inputsPtr := unsafe.Pointer(&ptrs[0])
 	n := uint64(len(inputs))
 
-	var status int32
-	sessionRunPrefillFunc.Call(
-		unsafe.Pointer(&status),
+	err := callStatus(sessionRunPrefillFunc, "session_run_prefill",
 		unsafe.Pointer(&s),
 		unsafe.Pointer(&inputsPtr),
 		unsafe.Pointer(&n),
 	)
 	runtime.KeepAlive(ptrs)
-	if status != 0 {
-		return fmt.Errorf("litertlm: session_run_prefill failed (code=%d)", status)
-	}
-	return nil
+	return err
 }
 
 // RunDecode performs the decode phase against context that's been
@@ -184,7 +133,7 @@ func (s Session) RunDecode() (Responses, error) {
 	if s == 0 {
 		return 0, fmt.Errorf("litertlm: session_run_decode: invalid session")
 	}
-	return callForHandle[Responses](sessionRunDecodeFunc, "session_run_decode",
+	return callStatusHandle[Responses](sessionRunDecodeFunc, "session_run_decode",
 		unsafe.Pointer(&s))
 }
 
@@ -192,10 +141,6 @@ func (s Session) RunDecode() (Responses, error) {
 // prompt. storeTokenLengths attaches the per-target tokenized length
 // to the returned Responses (read via Responses.TokenLength). Caller
 // must Delete() the result.
-//
-// The current CPU engine refuses len(targets) > 1 with
-// INVALID_ARGUMENT; pass exactly one candidate per call until the
-// upstream limit is relaxed.
 func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses, error) {
 	if s == 0 {
 		return 0, fmt.Errorf("litertlm: session_run_text_scoring: invalid session")
@@ -204,10 +149,9 @@ func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses
 		return 0, fmt.Errorf("litertlm: session_run_text_scoring: no targets")
 	}
 
-	// Build a contiguous []*byte so &ptrs[0] gives C its const char**.
 	ptrs := make([]*byte, len(targets))
 	for i, t := range targets {
-		p, err := utils.BytePtrFromString(t)
+		p, err := cstr.BytePtrFromString(t)
 		if err != nil {
 			return 0, err
 		}
@@ -220,13 +164,12 @@ func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses
 		enable = 1
 	}
 
-	r, err := callForHandle[Responses](sessionRunTextScoringFunc, "session_run_text_scoring",
+	r, err := callStatusHandle[Responses](sessionRunTextScoringFunc, "session_run_text_scoring",
 		unsafe.Pointer(&s),
 		unsafe.Pointer(&arrPtr),
 		unsafe.Pointer(&num),
 		unsafe.Pointer(&enable),
 	)
-	// Hold the per-target byte buffers alive across the FFI call.
 	runtime.KeepAlive(ptrs)
 	return r, err
 }

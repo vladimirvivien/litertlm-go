@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // chunk envelopes for the streaming tests
@@ -210,5 +213,65 @@ func TestStream_ToolCallChunkHasTextToo(t *testing.T) {
 func streamIter(ch *Chat, transport chatTransport, msgJSON string) func(yield func(Chunk, error) bool) {
 	return func(yield func(Chunk, error) bool) {
 		ch.streamWithDispatch(context.Background(), transport, msgJSON, runtimeConfig{}, yield)
+	}
+}
+
+type cancelDrainTransport struct {
+	cancelled atomic.Bool
+	drained   chan struct{}
+	mu        sync.Mutex
+	sent      int
+}
+
+func (f *cancelDrainTransport) SendMessage(string, string, OptionalArgs) (string, error) {
+	return "", nil
+}
+
+func (f *cancelDrainTransport) Cancel() { f.cancelled.Store(true) }
+
+func (f *cancelDrainTransport) SendMessageStreamCh(string, string, OptionalArgs) <-chan StreamChunk {
+	ch := make(chan StreamChunk)
+	go func() {
+		defer close(ch)
+		defer close(f.drained)
+		for range 50 {
+			if f.cancelled.Load() {
+				ch <- StreamChunk{Final: true}
+				return
+			}
+			ch <- textChunk("tok ", false)
+			f.mu.Lock()
+			f.sent++
+			f.mu.Unlock()
+		}
+		ch <- StreamChunk{Final: true}
+	}()
+	return ch
+}
+
+func TestStream_EarlyBreakCancelsAndDrains(t *testing.T) {
+	transport := &cancelDrainTransport{drained: make(chan struct{})}
+	ch := &Chat{conv: Conversation(1)}
+
+	count := 0
+	for chunk, err := range streamIter(ch, transport, `{}`) {
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chunk.Text != "" {
+			count++
+			break
+		}
+	}
+	if count != 1 {
+		t.Fatalf("yielded %d chunks, want 1", count)
+	}
+	if !transport.cancelled.Load() {
+		t.Error("expected transport.Cancel() on early break")
+	}
+	select {
+	case <-transport.drained:
+	case <-time.After(time.Second):
+		t.Fatal("producer goroutine did not drain/exit after early break")
 	}
 }

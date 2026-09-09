@@ -6,27 +6,56 @@ import "github.com/jupiterrider/ffi"
 // platforms this is a 64-bit unsigned integer.
 var ffiTypeSizeT = ffi.TypeUint64
 
-// Every exported litert_lm_* function in c/engine.h has a package-level
-// *lazyFun declared here. Each one resolves its C symbol against
-// libHandle on first Call, panicking with the symbol name if the
-// loaded library doesn't export it. Adding a new binding is a single
-// newLazyFun(...) line — no loadFuncs entry, no Load-time failure if
-// the user's library predates the symbol.
+// Every exported litert_lm_* function in the LiteRT-LM C API (1.0.0+) has a
+// package-level *lazyFun declared here. Each one resolves its C symbol against
+// libHandle on first Call, panicking with the symbol name if the loaded
+// library doesn't export it.
 
 var (
+	// ---- API Version & Error Reporter ----
+	getLastErrorMessageFunc = newLazyFun(
+		"litert_lm_get_last_error_message",
+		&ffi.TypePointer)
+	clearLastErrorFunc = newLazyFun(
+		"litert_lm_clear_last_error",
+		&ffi.TypeVoid)
+
+	// ---- Sampler Params ----
+	samplerParamsCreateFunc = newLazyFun(
+		"litert_lm_sampler_params_create",
+		&ffi.TypeSint32,
+		&ffi.TypeSint32,  // type
+		&ffi.TypePointer, // out_params
+	)
+	samplerParamsDeleteFunc = newLazyFun(
+		"litert_lm_sampler_params_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	samplerParamsSetTopKFunc = newLazyFun(
+		"litert_lm_sampler_params_set_top_k",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	samplerParamsSetTopPFunc = newLazyFun(
+		"litert_lm_sampler_params_set_top_p",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+	samplerParamsSetTemperatureFunc = newLazyFun(
+		"litert_lm_sampler_params_set_temperature",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+	samplerParamsSetSeedFunc = newLazyFun(
+		"litert_lm_sampler_params_set_seed",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+
 	// ---- Session config ----
 	sessionConfigCreateFunc = newLazyFun(
 		"litert_lm_session_config_create",
-		&ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	sessionConfigSetMaxOutputTokensFunc = newLazyFun(
 		"litert_lm_session_config_set_max_output_tokens",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	sessionConfigSetSamplerParamsFunc = newLazyFun(
 		"litert_lm_session_config_set_sampler_params",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionConfigSetApplyPromptTemplateFunc = newLazyFun(
 		"litert_lm_session_config_set_apply_prompt_template",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
 	sessionConfigSetLoraPathFunc = newLazyFun(
 		"litert_lm_session_config_set_lora_path",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
@@ -38,55 +67,54 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 
 	// ---- Conversation config ----
-	// create() takes no args; fields are populated via per-field setters.
 	conversationConfigCreateFunc = newLazyFun(
 		"litert_lm_conversation_config_create",
-		&ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	conversationConfigSetSessionConfigFunc = newLazyFun(
 		"litert_lm_conversation_config_set_session_config",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypePointer, // session_config
 	)
 	conversationConfigSetSystemMessageFunc = newLazyFun(
 		"litert_lm_conversation_config_set_system_message",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypePointer, // system_message_json (const char*)
 	)
 	conversationConfigSetToolsFunc = newLazyFun(
 		"litert_lm_conversation_config_set_tools",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypePointer, // tools_json (const char*)
 	)
 	conversationConfigSetMessagesFunc = newLazyFun(
 		"litert_lm_conversation_config_set_messages",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypePointer, // messages_json (const char*)
 	)
 	conversationConfigSetEnableConstrainedDecodingFunc = newLazyFun(
 		"litert_lm_conversation_config_set_enable_constrained_decoding",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypeUint8,   // enable_constrained_decoding (bool)
 	)
 	conversationConfigSetExtraContextFunc = newLazyFun(
 		"litert_lm_conversation_config_set_extra_context",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypePointer, // extra_context_json (const char*)
 	)
 	conversationConfigSetFilterChannelContentFromKVCacheFunc = newLazyFun(
 		"litert_lm_conversation_config_set_filter_channel_content_from_kv_cache",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypeUint8,   // filter_channel_content_from_kv_cache (bool)
 	)
 	conversationConfigSetStreamToolCallsFunc = newLazyFun(
 		"litert_lm_conversation_config_set_stream_tool_calls",
-		&ffi.TypeVoid,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // config
 		&ffi.TypeUint8,   // stream_tool_calls (bool)
 		&ffi.TypePointer, // channel_name (const char*)
@@ -98,90 +126,92 @@ var (
 	// ---- ConversationOptionalArgs ----
 	conversationOptionalArgsCreateFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_create",
-		&ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	conversationOptionalArgsDeleteFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	conversationOptionalArgsSetVisualTokenBudgetFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_set_visual_token_budget",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	conversationOptionalArgsSetMaxOutputTokensFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_set_max_output_tokens",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 
 	// ---- Logging ----
 	setMinLogLevelFunc = newLazyFun(
 		"litert_lm_set_min_log_level",
-		&ffi.TypeVoid, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypeSint32)
 
 	// ---- Engine settings ----
 	engineSettingsCreateFunc = newLazyFun(
 		"litert_lm_engine_settings_create",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // model_path
 		&ffi.TypePointer, // backend
 		&ffi.TypePointer, // vision_backend (nullable)
 		&ffi.TypePointer, // audio_backend (nullable)
+		&ffi.TypePointer, // out_settings
 	)
 	engineSettingsDeleteFunc = newLazyFun(
 		"litert_lm_engine_settings_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	engineSettingsSetMaxNumTokensFunc = newLazyFun(
 		"litert_lm_engine_settings_set_max_num_tokens",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetParallelFileSectionLoadingFunc = newLazyFun(
 		"litert_lm_engine_settings_set_parallel_file_section_loading",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
 	engineSettingsSetCacheDirFunc = newLazyFun(
 		"litert_lm_engine_settings_set_cache_dir",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	engineSettingsSetActivationDataTypeFunc = newLazyFun(
 		"litert_lm_engine_settings_set_activation_data_type",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetPrefillChunkSizeFunc = newLazyFun(
 		"litert_lm_engine_settings_set_prefill_chunk_size",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsEnableBenchmarkFunc = newLazyFun(
 		"litert_lm_engine_settings_enable_benchmark",
-		&ffi.TypeVoid, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	engineSettingsSetNumPrefillTokensFunc = newLazyFun(
 		"litert_lm_engine_settings_set_num_prefill_tokens",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetNumDecodeTokensFunc = newLazyFun(
 		"litert_lm_engine_settings_set_num_decode_tokens",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetEnableSpeculativeDecodingFunc = newLazyFun(
 		"litert_lm_engine_settings_set_enable_speculative_decoding",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeUint8)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
 	engineSettingsSetMaxNumImagesFunc = newLazyFun(
 		"litert_lm_engine_settings_set_max_num_images",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetLitertDispatchLibDirFunc = newLazyFun(
 		"litert_lm_engine_settings_set_litert_dispatch_lib_dir",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	engineSettingsCreateFromRawFileDescriptorFunc = newLazyFun(
 		"litert_lm_engine_settings_create_from_raw_file_descriptor",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypeSint32,  // fd
 		&ffi.TypePointer, // backend
 		&ffi.TypePointer, // vision_backend
 		&ffi.TypePointer, // audio_backend
+		&ffi.TypePointer, // out_settings
 	)
 	engineSettingsSetNumThreadsFunc = newLazyFun(
 		"litert_lm_engine_settings_set_num_threads",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetAudioNumThreadsFunc = newLazyFun(
 		"litert_lm_engine_settings_set_audio_num_threads",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetLoraRankFunc = newLazyFun(
 		"litert_lm_engine_settings_set_lora_rank",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetSupportedLoraRanksFunc = newLazyFun(
 		"litert_lm_engine_settings_set_supported_lora_ranks",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
 	engineSettingsSetAudioLoraRankFunc = newLazyFun(
 		"litert_lm_engine_settings_set_audio_lora_rank",
-		&ffi.TypeVoid, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	engineSettingsSetSupportedAudioLoraRanksFunc = newLazyFun(
 		"litert_lm_engine_settings_set_supported_audio_lora_ranks",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
@@ -189,21 +219,22 @@ var (
 	// ---- Engine ----
 	engineCreateFunc = newLazyFun(
 		"litert_lm_engine_create",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	engineDeleteFunc = newLazyFun(
 		"litert_lm_engine_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	engineCreateSessionFunc = newLazyFun(
 		"litert_lm_engine_create_session",
-		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Input Data ----
 	inputDataCreateFunc = newLazyFun(
 		"litert_lm_input_data_create",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypeSint32,  // type
 		&ffi.TypePointer, // data
 		&ffiTypeSizeT,    // size
+		&ffi.TypePointer, // out_input_data
 	)
 	inputDataDeleteFunc = newLazyFun(
 		"litert_lm_input_data_delete",
@@ -217,10 +248,11 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 	sessionGenerateContentFunc = newLazyFun(
 		"litert_lm_session_generate_content",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // session
 		&ffi.TypePointer, // inputs
 		&ffiTypeSizeT,    // num_inputs
+		&ffi.TypePointer, // out_responses
 	)
 	sessionGenerateContentStreamFunc = newLazyFun(
 		"litert_lm_session_generate_content_stream",
@@ -233,10 +265,10 @@ var (
 	)
 	sessionGetBenchmarkInfoFunc = newLazyFun(
 		"litert_lm_session_get_benchmark_info",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionCancelProcessFunc = newLazyFun(
 		"litert_lm_session_cancel_process",
-		&ffi.TypeVoid, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	sessionRunPrefillFunc = newLazyFun(
 		"litert_lm_session_run_prefill",
 		&ffi.TypeSint32,
@@ -246,15 +278,27 @@ var (
 	)
 	sessionRunDecodeFunc = newLazyFun(
 		"litert_lm_session_run_decode",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionRunTextScoringFunc = newLazyFun(
 		"litert_lm_session_run_text_scoring",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // session
 		&ffi.TypePointer, // target_text (const char**)
 		&ffiTypeSizeT,    // num_targets
 		&ffi.TypeUint8,   // store_token_lengths
+		&ffi.TypePointer, // out_responses
 	)
+
+	// ---- Stream Chunk ----
+	streamChunkGetTextFunc = newLazyFun(
+		"litert_lm_stream_chunk_get_text",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	streamChunkIsFinalFunc = newLazyFun(
+		"litert_lm_stream_chunk_is_final",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	streamChunkGetErrorFunc = newLazyFun(
+		"litert_lm_stream_chunk_get_error",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Responses ----
 	responsesDeleteFunc = newLazyFun(
@@ -262,31 +306,31 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 	responsesGetNumCandidatesFunc = newLazyFun(
 		"litert_lm_responses_get_num_candidates",
-		&ffi.TypeSint32, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	responsesGetResponseTextAtFunc = newLazyFun(
 		"litert_lm_responses_get_response_text_at",
-		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesHasScoreAtFunc = newLazyFun(
 		"litert_lm_responses_has_score_at",
-		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesGetScoreAtFunc = newLazyFun(
 		"litert_lm_responses_get_score_at",
-		&ffi.TypeFloat, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesHasTokenLengthAtFunc = newLazyFun(
 		"litert_lm_responses_has_token_length_at",
-		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesHasTokenScoresAtFunc = newLazyFun(
 		"litert_lm_responses_has_token_scores_at",
-		&ffi.TypeUint8, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesGetNumTokenScoresAtFunc = newLazyFun(
 		"litert_lm_responses_get_num_token_scores_at",
-		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesGetTokenScoresAtFunc = newLazyFun(
 		"litert_lm_responses_get_token_scores_at",
-		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	responsesGetTokenLengthAtFunc = newLazyFun(
 		"litert_lm_responses_get_token_length_at",
-		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 
 	// ---- Benchmark info ----
 	benchmarkInfoDeleteFunc = newLazyFun(
@@ -294,46 +338,47 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 	benchmarkInfoGetTimeToFirstTokenFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_time_to_first_token",
-		&ffi.TypeDouble, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	benchmarkInfoGetTotalInitTimeInSecondFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_total_init_time_in_second",
-		&ffi.TypeDouble, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	benchmarkInfoGetNumPrefillTurnsFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_num_prefill_turns",
-		&ffi.TypeSint32, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	benchmarkInfoGetNumDecodeTurnsFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_num_decode_turns",
-		&ffi.TypeSint32, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	benchmarkInfoGetPrefillTokenCountAtFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_prefill_token_count_at",
-		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	benchmarkInfoGetDecodeTokenCountAtFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_decode_token_count_at",
-		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	benchmarkInfoGetPrefillTokensPerSecAtFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_prefill_tokens_per_sec_at",
-		&ffi.TypeDouble, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 	benchmarkInfoGetDecodeTokensPerSecAtFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_decode_tokens_per_sec_at",
-		&ffi.TypeDouble, &ffi.TypePointer, &ffi.TypeSint32)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
 
 	// ---- Conversation ----
 	conversationCreateFunc = newLazyFun(
 		"litert_lm_conversation_create",
-		&ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
 	conversationDeleteFunc = newLazyFun(
 		"litert_lm_conversation_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	conversationCloneFunc = newLazyFun(
 		"litert_lm_conversation_clone",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	conversationSendMessageFunc = newLazyFun(
 		"litert_lm_conversation_send_message",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // conversation
 		&ffi.TypePointer, // message_json
 		&ffi.TypePointer, // extra_context
 		&ffi.TypePointer, // optional_args
+		&ffi.TypePointer, // out_response
 	)
 	conversationSendMessageStreamFunc = newLazyFun(
 		"litert_lm_conversation_send_message_stream",
@@ -347,24 +392,26 @@ var (
 	)
 	conversationCancelProcessFunc = newLazyFun(
 		"litert_lm_conversation_cancel_process",
-		&ffi.TypeVoid, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer)
 	conversationRenderMessageToStringFunc = newLazyFun(
 		"litert_lm_conversation_render_message_to_string",
-		&ffi.TypePointer, // returned const char*
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // conversation
 		&ffi.TypePointer, // message_json
+		&ffi.TypePointer, // out_text
 	)
 	conversationRenderPrefaceToStringFunc = newLazyFun(
 		"litert_lm_conversation_render_preface_to_string",
-		&ffi.TypePointer, // returned const char*
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // conversation
+		&ffi.TypePointer, // out_text
 	)
 	conversationGetBenchmarkInfoFunc = newLazyFun(
 		"litert_lm_conversation_get_benchmark_info",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	conversationGetTokenCountFunc = newLazyFun(
 		"litert_lm_conversation_get_token_count",
-		&ffi.TypeSint32, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- JSON response ----
 	jsonResponseDeleteFunc = newLazyFun(
@@ -372,54 +419,56 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 	jsonResponseGetStringFunc = newLazyFun(
 		"litert_lm_json_response_get_string",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Tokenizer ----
 	engineTokenizeFunc = newLazyFun(
 		"litert_lm_engine_tokenize",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // engine
 		&ffi.TypePointer, // text (const char*)
+		&ffi.TypePointer, // out_result
 	)
 	tokenizeResultDeleteFunc = newLazyFun(
 		"litert_lm_tokenize_result_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	tokenizeResultGetTokensFunc = newLazyFun(
 		"litert_lm_tokenize_result_get_tokens",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	tokenizeResultGetNumTokensFunc = newLazyFun(
 		"litert_lm_tokenize_result_get_num_tokens",
-		&ffiTypeSizeT, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	engineDetokenizeFunc = newLazyFun(
 		"litert_lm_engine_detokenize",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // engine
 		&ffi.TypePointer, // tokens (const int*)
 		&ffiTypeSizeT,    // num_tokens
+		&ffi.TypePointer, // out_result
 	)
 	detokenizeResultDeleteFunc = newLazyFun(
 		"litert_lm_detokenize_result_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	detokenizeResultGetStringFunc = newLazyFun(
 		"litert_lm_detokenize_result_get_string",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Token unions / start+stop tokens ----
 	engineGetStartTokenFunc = newLazyFun(
 		"litert_lm_engine_get_start_token",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	engineGetStopTokensFunc = newLazyFun(
 		"litert_lm_engine_get_stop_tokens",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	tokenUnionDeleteFunc = newLazyFun(
 		"litert_lm_token_union_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
 	tokenUnionGetTypeFunc = newLazyFun(
 		"litert_lm_token_union_get_type",
-		&ffi.TypeSint32, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	tokenUnionGetStringFunc = newLazyFun(
 		"litert_lm_token_union_get_string",
-		&ffi.TypePointer, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	tokenUnionGetIdsFunc = newLazyFun(
 		"litert_lm_token_union_get_ids",
 		&ffi.TypeSint32,
@@ -432,23 +481,89 @@ var (
 		&ffi.TypeVoid, &ffi.TypePointer)
 	tokenUnionsGetNumTokensFunc = newLazyFun(
 		"litert_lm_token_unions_get_num_tokens",
-		&ffiTypeSizeT, &ffi.TypePointer)
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	tokenUnionsGetTokenAtFunc = newLazyFun(
 		"litert_lm_token_unions_get_token_at",
-		&ffi.TypePointer,
+		&ffi.TypeSint32,
 		&ffi.TypePointer, // tokens
 		&ffiTypeSizeT,    // index
+		&ffi.TypePointer, // out_token
+	)
+
+	// ---- Model capabilities / LoadedFile ----
+	loadedFileCreateFunc = newLazyFun(
+		"litert_lm_loaded_file_create",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // litertlm_path (const char*)
+		&ffi.TypePointer, // out_loaded_file
+	)
+	loadedFileDeleteFunc = newLazyFun(
+		"litert_lm_loaded_file_delete",
+		&ffi.TypeVoid,
+		&ffi.TypePointer, // loaded_file
+	)
+	loadedFileHasSpeculativeDecodingSupportFunc = newLazyFun(
+		"litert_lm_loaded_file_has_speculative_decoding_support",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_supported
+	)
+	loadedFileSupportsThinkingFunc = newLazyFun(
+		"litert_lm_loaded_file_supports_thinking",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_supported
+	)
+	loadedFileSupportsFunctionCallingFunc = newLazyFun(
+		"litert_lm_loaded_file_supports_function_calling",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_supported
+	)
+	loadedFileSamplerTypeFunc = newLazyFun(
+		"litert_lm_loaded_file_sampler_type",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_sampler_type
+	)
+	loadedFileSamplerTemperatureFunc = newLazyFun(
+		"litert_lm_loaded_file_sampler_temperature",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_temperature
+	)
+	loadedFileSamplerTopKFunc = newLazyFun(
+		"litert_lm_loaded_file_sampler_top_k",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_top_k
+	)
+	loadedFileSamplerTopPFunc = newLazyFun(
+		"litert_lm_loaded_file_sampler_top_p",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_top_p
+	)
+	loadedFileSupportsInputModalityFunc = newLazyFun(
+		"litert_lm_loaded_file_supports_input_modality",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypeSint32,  // modality (LiteRtLmModality)
+		&ffi.TypePointer, // out_supported
+	)
+	loadedFileMaxVisionTokenBudgetFunc = newLazyFun(
+		"litert_lm_loaded_file_max_vision_token_budget",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_budget
 	)
 )
 
-var realLibraryLoaded bool
-
 // loadFuncs stashes the opened library so lazyFun can resolve symbols
 // against it on first call. Symbol lookup itself happens lazily —
-// missing symbols don't fail Load, they panic (with the symbol name)
-// only when their wrapper is actually invoked.
+// missing symbols return StatusUnimplemented errors when their wrapper is
+// actually invoked.
 func loadFuncs(lib ffi.Lib) error {
-	libHandle = lib
-	realLibraryLoaded = true
+	rt.setMainLib(lib, true)
 	return nil
 }

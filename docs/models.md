@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Verified Model Architectures (LiteRT-LM v0.16.0)
+## 1. Verified Model Architectures (LiteRT-LM v0.19.1)
 
 The test battery ([`pkg/litertlm/model_matrix_test.go`](file:///C:/Users/vladi/DEV/litertlm-go/pkg/litertlm/model_matrix_test.go)) validates chat generation, tokenization round-trips, and streaming coherence across both CPU and GPU backends.
 

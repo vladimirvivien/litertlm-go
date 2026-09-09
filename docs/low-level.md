@@ -25,7 +25,7 @@ Common reasons to drop down:
 
 | High-level                            | Low-level equivalent                                                                                                       |
 |---------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
-| `litertlm.New(ctx, opts...)`          | `Load` + `NewEngineSettings` / `NewEngineSettingsFromFd` + setters + `NewEngine`                                           |
+| `litertlm.New(ctx, opts...)`          | `Load` + `NewEngineSettings` / `NewEngineSettingsFromFD` + setters + `NewEngine`                                           |
 | `client.Close()`                      | `engine.Delete()` + `settings.Delete()`                                                                                    |
 | `client.Generate(ctx, prompt)`        | `engine.NewSession(0)` + `session.GenerateContent([]InputData{NewTextInputString(prompt)})` + `resp.Text(0)` + `Delete`s   |
 | `client.GenerateStream(ctx, prompt)`  | `session.GenerateContentStreamCh(...)` channel                                                                             |
@@ -41,7 +41,7 @@ Common reasons to drop down:
 
 The low-level API surfaces every C handle as a `uintptr` value type
 (`Engine`, `Session`, `EngineSettings`, `Conversation`, `Responses`,
-`BenchmarkInfo`, `JsonResponse`, `InputData`, …). Each has a `.Delete()` method.
+`BenchmarkInfo`, `JSONResponse`, `InputData`, …). Each has a `.Delete()` method.
 
 **Rules of thumb:**
 
@@ -54,12 +54,19 @@ The low-level API surfaces every C handle as a `uintptr` value type
 ### Explicit prefill → decode
 
 ```go
-session, _ := engine.NewSession(0)
+session, err := engine.NewSession(0)
+if err != nil {
+    return err
+}
 defer session.Delete()
 
-if err := session.RunPrefill([]litertlm.InputData{
-    litertlm.NewTextInputString("The capital of France is"),
-}); err != nil {
+in, err := litertlm.NewTextInputString("The capital of France is")
+if err != nil {
+    return err
+}
+defer in.Delete()
+
+if err := session.RunPrefill([]litertlm.InputData{in}); err != nil {
     return err
 }
 
@@ -80,7 +87,9 @@ See [`examples/prefill-decode/`](https://github.com/vladimirvivien/litertlm-go/t
 session, _ := engine.NewSession(0)
 defer session.Delete()
 
-session.RunPrefill([]litertlm.InputData{litertlm.NewTextInputString(prompt)})
+in, _ := litertlm.NewTextInputString(prompt)
+defer in.Delete()
+_ = session.RunPrefill([]litertlm.InputData{in})
 
 resp, _ := session.ScoreTexts([]string{" Paris."}, true)
 defer resp.Delete()

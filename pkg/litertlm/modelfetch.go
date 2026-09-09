@@ -14,15 +14,16 @@ type ModelProgressFunc = modelfetch.ProgressFunc
 
 // ModelFetchOption aliases for convenience.
 var (
-	WithModelDir       = modelfetch.WithDir
-	WithModelFilename  = modelfetch.WithFilename
-	WithModelVariant   = modelfetch.WithVariant
-	WithModelGPU       = modelfetch.WithGPU
-	WithModelCPU       = modelfetch.WithCPU
-	WithModelAuthToken = modelfetch.WithAuthToken
-	WithModelProgress  = modelfetch.WithProgress
-	WithModelTimeout   = modelfetch.WithTimeout
-	WithModelSHA256    = modelfetch.WithSHA256
+	WithModelDir        = modelfetch.WithDir
+	WithModelFilename   = modelfetch.WithFilename
+	WithModelVariant    = modelfetch.WithVariant
+	WithModelGPU        = modelfetch.WithGPU
+	WithModelCPU        = modelfetch.WithCPU
+	WithModelAuthToken  = modelfetch.WithAuthToken
+	WithModelProgress   = modelfetch.WithProgress
+	WithModelTimeout    = modelfetch.WithTimeout
+	WithModelHTTPClient = modelfetch.WithHTTPClient
+	WithModelSHA256     = modelfetch.WithSHA256
 )
 
 // FetchModel resolves and downloads a .litertlm model artifact from a direct URL or

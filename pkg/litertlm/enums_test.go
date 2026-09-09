@@ -90,3 +90,41 @@ func TestLogLevel_String(t *testing.T) {
 		}
 	}
 }
+
+func TestModalityValues(t *testing.T) {
+	tests := []struct {
+		name string
+		got  Modality
+		want int32
+	}{
+		{"ModalityText", ModalityText, 0},
+		{"ModalityVision", ModalityVision, 1},
+		{"ModalityAudio", ModalityAudio, 2},
+		{"ModalityVideo", ModalityVideo, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if int32(tt.got) != tt.want {
+				t.Errorf("%s = %d, want %d", tt.name, tt.got, tt.want)
+			}
+		})
+	}
+}
+
+func TestModality_String(t *testing.T) {
+	cases := []struct {
+		got  Modality
+		want string
+	}{
+		{ModalityText, "Text"},
+		{ModalityVision, "Vision"},
+		{ModalityAudio, "Audio"},
+		{ModalityVideo, "Video"},
+		{Modality(99), "Modality(99)"},
+	}
+	for _, c := range cases {
+		if got := c.got.String(); got != c.want {
+			t.Errorf("Modality(%d).String() = %q, want %q", c.got, got, c.want)
+		}
+	}
+}

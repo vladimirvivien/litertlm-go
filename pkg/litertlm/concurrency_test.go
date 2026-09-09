@@ -3,7 +3,6 @@ package litertlm_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -11,18 +10,18 @@ import (
 )
 
 func getLocalLibDir() string {
-	libDir := os.Getenv("LITERTLM_LIB")
-	if libDir != "" {
-		return libDir
-	}
-	defaultInclude := filepath.Join(os.Getenv("USERPROFILE"), "include", "litertlm", "lib")
-	if _, err := os.Stat(defaultInclude); err == nil {
-		return defaultInclude
+	for _, env := range []string{"LITERTLM_TEST_LIB", "LITERTLM_LIB"} {
+		if libDir := os.Getenv(env); libDir != "" {
+			return libDir
+		}
 	}
 	return ""
 }
 
 func TestConcurrent_Load(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 	libDir := getLocalLibDir()
 	if libDir == "" {
 		t.Skip("skipping concurrent load test: no local prebuilt library directory found")
@@ -48,6 +47,9 @@ func TestConcurrent_Load(t *testing.T) {
 }
 
 func TestConcurrent_SessionConfig(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 	libDir := getLocalLibDir()
 	if libDir == "" {
 		t.Skip("skipping concurrent SessionConfig test: no local prebuilt library directory found")
@@ -67,23 +69,27 @@ func TestConcurrent_SessionConfig(t *testing.T) {
 			}
 			defer cfg.Delete()
 
-			cfg.SetMaxOutputTokens(64)
-			cfg.SetApplyPromptTemplate(true)
-			_ = cfg.SetLoraPath("nonexistent.lora")
-			_ = cfg.SetAudioLoraPath("nonexistent_audio.lora")
+			if err := cfg.SetMaxOutputTokens(64); err != nil {
+				t.Errorf("SetMaxOutputTokens: %v", err)
+			}
+			if err := cfg.SetApplyPromptTemplate(true); err != nil {
+				t.Errorf("SetApplyPromptTemplate: %v", err)
+			}
+			_ = cfg.SetLoRAPath("nonexistent.lora")
+			_ = cfg.SetAudioLoRAPath("nonexistent_audio.lora")
 		})
 	}
 	wg.Wait()
 }
 
 func TestConcurrent_ClientLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in -short mode")
+	}
 	libDir := getLocalLibDir()
-	modelPath := os.Getenv("LITERTLM_MODEL")
+	modelPath := os.Getenv("LITERTLM_TEST_MODEL")
 	if modelPath == "" {
-		defaultModel := filepath.Join(os.Getenv("USERPROFILE"), "models", "gemma3-1b-it-int4.litertlm")
-		if _, err := os.Stat(defaultModel); err == nil {
-			modelPath = defaultModel
-		}
+		modelPath = os.Getenv("LITERTLM_MODEL")
 	}
 	if libDir == "" || modelPath == "" {
 		t.Skip("skipping live concurrent Client test: library or model path not found")

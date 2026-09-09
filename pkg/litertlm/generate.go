@@ -12,8 +12,7 @@ type Chunk struct {
 	Final bool
 }
 
-// Generate runs synchronous inference for prompt and returns the first
-// candidate's text.
+// Generate runs synchronous inference for prompt and returns the assistant text.
 func (c *Client) Generate(ctx context.Context, prompt string, opts ...RuntimeOption) (string, error) {
 	return c.generateMulti(ctx, []Part{Text(prompt)}, resolveRuntimeConfig(opts))
 }
@@ -83,27 +82,31 @@ func (c *Client) openConversation(cfg runtimeConfig) (Conversation, Conversation
 			return 0, 0, err
 		}
 		if cfg.maxOutputTokens > 0 {
-			sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens)
+			if err = sessCfg.SetMaxOutputTokens(cfg.maxOutputTokens); err != nil {
+				sessCfg.Delete()
+				return 0, 0, err
+			}
 		}
 		if sampler != nil {
-			sessCfg.SetSamplerParams(*sampler)
+			if err = sessCfg.SetSamplerParams(*sampler); err != nil {
+				sessCfg.Delete()
+				return 0, 0, err
+			}
 		}
 	}
 
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
+	engine, err := c.openEngine()
+	if err != nil {
 		sessCfg.Delete()
-		return 0, 0, fmt.Errorf("litertlm: Client is closed")
+		return 0, 0, err
 	}
-	convCfg, err := NewConversationConfig(c.engine, sessCfg, "", "", "", false)
-	c.mu.Unlock()
+	convCfg, err := NewConversationConfig(engine, sessCfg, "", "", "", false)
 	sessCfg.Delete()
 	if err != nil {
 		return 0, 0, err
 	}
 
-	conv, err := c.engine.NewConversation(convCfg)
+	conv, err := engine.NewConversation(convCfg)
 	if err != nil {
 		convCfg.Delete()
 		return 0, 0, err
@@ -127,7 +130,9 @@ func (c *Client) generateMultiStream(ctx context.Context, parts []Part, cfg runt
 	return c.streamConversation(ctx, parts, cfg)
 }
 
-// streamConversation drives a Conversation streaming send.
+// streamConversation drives a Conversation streaming send. On early break, it
+// cancels the native stream and drains remaining chunks so conv.Delete() never
+// races an active C++ callback.
 func (c *Client) streamConversation(ctx context.Context, parts []Part, cfg runtimeConfig) iter.Seq2[Chunk, error] {
 	return func(yield func(Chunk, error) bool) {
 		conv, convCfg, err := c.openConversation(cfg)
@@ -147,21 +152,27 @@ func (c *Client) streamConversation(ctx context.Context, parts []Part, cfg runti
 			return
 		}
 
-		for sc := range conv.SendMessageStreamCh(msgJSON, "", OptionalArgs(0)) {
-			ch := Chunk{Text: extractStreamChunkText(sc.Text), Final: sc.Final}
-			if !yield(ch, sc.Err) {
-				return
+		ch := conv.SendMessageStreamCh(msgJSON, "", OptionalArgs(0))
+		broken := false
+		for sc := range ch {
+			if broken {
+				continue
+			}
+			chOut := Chunk{Text: extractStreamChunkText(sc.Text), Final: sc.Final}
+			if !yield(chOut, sc.Err) {
+				broken = true
+				conv.Cancel()
+				continue
 			}
 			if sc.Err != nil {
-				return
+				broken = true
 			}
 		}
 	}
 }
 
-// GenerateResponse is the rich-output sibling of Generate. The
-// returned *Response exposes per-candidate text plus score and
-// token-length accessors.
+// GenerateResponse is the rich-output sibling of Generate, wrapping the
+// output text and optional captured benchmark metrics.
 func (c *Client) GenerateResponse(ctx context.Context, prompt string, opts ...RuntimeOption) (*Response, error) {
 	return c.generateMultiResponse(ctx, []Part{Text(prompt)}, resolveRuntimeConfig(opts))
 }

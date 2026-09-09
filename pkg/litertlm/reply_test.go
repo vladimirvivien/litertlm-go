@@ -1,6 +1,8 @@
 package litertlm
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestReply_TextOnly covers the simple chat-reply shape:
 //
@@ -123,5 +125,52 @@ func TestReply_NilMethods(t *testing.T) {
 	}
 	if r.Raw() != "" {
 		t.Errorf("nil.Raw() should be empty")
+	}
+}
+
+func TestReply_ToolCallsDefensiveCopy(t *testing.T) {
+	raw := `{"role":"assistant","tool_calls":[
+		{"type":"function","function":{"name":"calc","arguments":{"nested":{"x":"orig"}}}}
+	]}`
+	r, err := parseReply(raw)
+	if err != nil {
+		t.Fatalf("parseReply: %v", err)
+	}
+	calls := r.ToolCalls()
+	calls[0].Function.Name = "mutated"
+	calls[0].Function.Arguments["nested"].(map[string]any)["x"] = "mutated"
+
+	again := r.ToolCalls()
+	if again[0].Function.Name != "calc" {
+		t.Errorf("ToolCalls mutation leaked to Name: %q", again[0].Function.Name)
+	}
+	if got := again[0].Function.Arguments["nested"].(map[string]any)["x"]; got != "orig" {
+		t.Errorf("ToolCalls nested mutation leaked: %v", got)
+	}
+}
+
+func TestAssistantText_MultiPart(t *testing.T) {
+	env := `{"role":"assistant","content":[
+		{"type":"image"},
+		{"type":"text","text":"Hello, "},
+		{"type":"text","text":"world!"}
+	]}`
+	got, err := assistantText(env)
+	if err != nil {
+		t.Fatalf("assistantText: %v", err)
+	}
+	if got != "Hello, world!" {
+		t.Errorf("assistantText = %q, want %q", got, "Hello, world!")
+	}
+}
+
+func BenchmarkConcatTextParts(b *testing.B) {
+	parts := []replyContentPart{{Type: "text", Text: "token"}}
+	b.ReportAllocs()
+	for b.Loop() {
+		s, ok := concatTextParts(parts)
+		if !ok || s == "" {
+			b.Fatal("unexpected empty")
+		}
 	}
 }

@@ -1,15 +1,15 @@
-//go:build windows
+//go:build unix
 
-package utils
+package cstr
 
-import "golang.org/x/sys/windows"
+import "golang.org/x/sys/unix"
 
 // BytePtrFromString converts a Go string to a C-style null-terminated byte pointer.
 func BytePtrFromString(s string) (*byte, error) {
-	return windows.BytePtrFromString(s)
+	return unix.BytePtrFromString(s)
 }
 
 // BytePtrToString converts a C-style null-terminated byte pointer to a Go string.
 func BytePtrToString(p *byte) string {
-	return windows.BytePtrToString(p)
+	return unix.BytePtrToString(p)
 }

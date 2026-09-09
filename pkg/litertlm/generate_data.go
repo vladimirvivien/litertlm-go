@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 )
 
 // GenerateData[T] / GenerateDataMulti[T] route structured output
@@ -197,33 +198,23 @@ func (e *GenerateDataError) Unwrap() error {
 	return e.Err
 }
 
-// injectSchema returns a copy of parts with instruction prepended to
-// the LAST text Part. When no text part exists, Text(instruction) is
-// appended at the end (works for image/audio-only inputs).
-//
-// The caller's slice is never mutated.
 func injectSchema(parts []Part, instruction string) []Part {
-	out := append([]Part(nil), parts...)
-	for i := len(out) - 1; i >= 0; i-- {
-		if out[i].kind == partText {
-			out[i].text = instruction + "\n\n" + out[i].text
-			return out
-		}
-	}
-	return append(out, Text(instruction))
+	return prependToLastTextPart(parts, instruction, "\n\n")
 }
 
-// augmentForToolUse returns a copy of parts with captureDirective
-// prepended to the LAST text Part, mirroring injectSchema's placement
-// rules so the directive lands close to the user's content. Appended
-// as a new Text part when none exists.
 func augmentForToolUse(parts []Part) []Part {
-	out := append([]Part(nil), parts...)
+	return prependToLastTextPart(parts, captureDirective, "")
+}
+
+// prependToLastTextPart returns a copy of parts with prefix+sep prepended to
+// the last text Part, or appends Text(prefix) when no text Part exists.
+func prependToLastTextPart(parts []Part, prefix, sep string) []Part {
+	out := slices.Clone(parts)
 	for i := len(out) - 1; i >= 0; i-- {
 		if out[i].kind == partText {
-			out[i].text = captureDirective + out[i].text
+			out[i].text = prefix + sep + out[i].text
 			return out
 		}
 	}
-	return append(out, Text(captureDirective))
+	return append(out, Text(prefix))
 }

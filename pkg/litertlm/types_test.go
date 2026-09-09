@@ -24,7 +24,7 @@ func TestHandleTypesAreUintptr(t *testing.T) {
 		{"BenchmarkInfo", unsafe.Sizeof(BenchmarkInfo(0)), uintptr(BenchmarkInfo(0))},
 		{"Conversation", unsafe.Sizeof(Conversation(0)), uintptr(Conversation(0))},
 		{"ConversationConfig", unsafe.Sizeof(ConversationConfig(0)), uintptr(ConversationConfig(0))},
-		{"JsonResponse", unsafe.Sizeof(JsonResponse(0)), uintptr(JsonResponse(0))},
+		{"JSONResponse", unsafe.Sizeof(JSONResponse(0)), uintptr(JSONResponse(0))},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) {

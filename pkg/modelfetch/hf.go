@@ -3,7 +3,7 @@ package modelfetch
 import (
 	"fmt"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -33,14 +33,14 @@ func ResolveModelIdentifierWithVariant(raw string, variant string) (ResolvedTarg
 		if err != nil {
 			return ResolvedTarget{}, fmt.Errorf("modelfetch: invalid URL %q: %w", raw, err)
 		}
-		filename := filepath.Base(parsed.Path)
+		filename := path.Base(parsed.Path)
 		if filename == "" || filename == "/" || filename == "." {
 			filename = "model.litertlm"
 		}
 
-		if strings.ToLower(variant) == "gpu" && !strings.Contains(filename, "-gpu") && strings.HasSuffix(filename, ".litertlm") {
+		if strings.EqualFold(variant, "gpu") && !strings.Contains(filename, "-gpu") && strings.HasSuffix(filename, ".litertlm") {
 			filename = strings.TrimSuffix(filename, ".litertlm") + "-gpu.litertlm"
-			dir := filepath.ToSlash(filepath.Dir(parsed.Path))
+			dir := path.Dir(parsed.Path)
 			if dir == "." || dir == "/" {
 				parsed.Path = "/" + filename
 			} else {
@@ -58,9 +58,9 @@ func ResolveModelIdentifierWithVariant(raw string, variant string) (ResolvedTarg
 	clean := strings.TrimPrefix(raw, "hf:")
 
 	// 3. Check for colon-delimited format: repo:filename or repo:variant (e.g. repo:gpu or repo:model.litertlm)
-	if parts := strings.Split(clean, ":"); len(parts) == 2 {
-		repoPart := strings.Trim(parts[0], "/")
-		spec := strings.TrimSpace(parts[1])
+	if before, after, ok := strings.Cut(clean, ":"); ok && !strings.Contains(after, ":") {
+		repoPart := strings.Trim(before, "/")
+		spec := strings.TrimSpace(after)
 		if repoPart != "" && spec != "" {
 			// If spec is a variant keyword like "gpu", "cpu", "web"
 			switch strings.ToLower(spec) {
@@ -156,10 +156,10 @@ func resolveOwnerRepo(owner, rawModel string, variant string) (ResolvedTarget, e
 	}
 
 	filename := baseFile
-	if strings.ToLower(effectiveVariant) == "gpu" && !strings.HasSuffix(filename, "-gpu") {
+	if strings.EqualFold(effectiveVariant, "gpu") && !strings.HasSuffix(filename, "-gpu") {
 		filename += "-gpu"
 	}
-	if strings.ToLower(effectiveVariant) == "web" && !strings.HasSuffix(filename, "-web") {
+	if strings.EqualFold(effectiveVariant, "web") && !strings.HasSuffix(filename, "-web") {
 		filename += "-web"
 	}
 	filename += ".litertlm"

@@ -51,7 +51,7 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Fetch prebuilt shared libraries automatically (cached locally)
-	libDir, err := litertlm.FetchLib(runtime.GOOS, runtime.GOARCH, "v0.16.0")
+	libDir, err := litertlm.FetchLib(ctx, runtime.GOOS, runtime.GOARCH, "v0.19.1")
 	if err != nil {
 		log.Fatalf("FetchLib failed: %v", err)
 	}
@@ -101,7 +101,7 @@ LITERTLM_MODEL=/abs/path/to/gemma3-1b-it-int4.litertlm \
 * **Windows Manual Staging & DXC Setup:** [`LITERTLM-BUILD-WINDOWS.md`](./LITERTLM-BUILD-WINDOWS.md)
 
 > [!NOTE]
-> Minimum supported upstream C-API runtime: **LiteRT-LM v0.16.0**.
+> Minimum supported upstream C-API runtime: **LiteRT-LM v0.19.1** (C API `1.0.0`).
 
 ---
 
@@ -111,16 +111,16 @@ Every example in `examples/` supports automated provisioning flags for zero-conf
 
 ```bash
 # Automatically fetch dependencies and run
-go run ./examples/hello -get-lib v0.16.0 -get-model litert-community/gemma3-1b-it-int4
+go run ./examples/hello -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 
 # Multi-turn chat with a persistent bot:
-go run ./examples/bot -get-lib v0.16.0 -get-model litert-community/gemma3-1b-it-int4
+go run ./examples/bot -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 
 # Automated tool-calling with reflection:
-go run ./examples/autotool -get-lib v0.16.0 -get-model litert-community/gemma3-1b-it-int4
+go run ./examples/autotool -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 ```
 
-See [`examples/README.md`](./examples/README.md) for the complete index of 37 runnable examples.
+See [`examples/README.md`](./examples/README.md) for the complete index of 38 runnable examples.
 
 ### Multimodal Demo
 

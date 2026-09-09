@@ -32,7 +32,7 @@ const defaultExtraContext = `{
 func main() {
 	model := flag.String("model", "", "path to .litertlm model file (required)")
 	getModel := flag.String("get-model", "", "download model from Hugging Face or URL if set (e.g. litert-community/gemma3-1b-it-int4)")
-	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.16.0)")
+	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
 	systemPrompt := flag.String("system", defaultSystemPrompt, "system prompt (bare content; gets JSON-encoded into the conversation config)")
@@ -50,7 +50,7 @@ func main() {
 
 	resolvedLib := *libPath
 	if *getLib != "" {
-		staged, err := litertlm.FetchLib("", "", *getLib)
+		staged, err := litertlm.FetchLib(ctx, "", "", *getLib)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "fetch library: %v\n", err)
 			os.Exit(1)
@@ -90,8 +90,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer settings.Delete()
-	settings.SetMaxNumTokens(*maxTokens)
-	settings.EnableBenchmark()
+	if err = settings.SetMaxNumTokens(*maxTokens); err != nil {
+		fmt.Fprintf(os.Stderr, "set max tokens: %v\n", err)
+		os.Exit(1)
+	}
+	if err = settings.EnableBenchmark(); err != nil {
+		fmt.Fprintf(os.Stderr, "enable benchmark: %v\n", err)
+		os.Exit(1)
+	}
 
 	engine, err := litertlm.NewEngine(settings)
 	if err != nil {
@@ -115,13 +121,22 @@ func main() {
 	// fails conversation_create. Skip SetSamplerParams when the caller
 	// did not opt into an explicit sampler.
 	if sampler, ok := buildSampler(*temperature, *topP, *seed); ok {
-		sessCfg.SetSamplerParams(sampler)
+		if err = sessCfg.SetSamplerParams(sampler); err != nil {
+			fmt.Fprintf(os.Stderr, "set sampler params: %v\n", err)
+			os.Exit(1)
+		}
 	}
-	sessCfg.SetMaxOutputTokens(*maxOutputTokens)
+	if err = sessCfg.SetMaxOutputTokens(*maxOutputTokens); err != nil {
+		fmt.Fprintf(os.Stderr, "set max output tokens: %v\n", err)
+		os.Exit(1)
+	}
 	// Required for multi-turn chat: wraps each turn in the model's
 	// start/end markers. With it off, the Conversation degenerates
 	// into raw completion.
-	sessCfg.SetApplyPromptTemplate(true)
+	if err = sessCfg.SetApplyPromptTemplate(true); err != nil {
+		fmt.Fprintf(os.Stderr, "set apply prompt template: %v\n", err)
+		os.Exit(1)
+	}
 
 	// ---- ConversationConfig --------------------------------------------
 	// systemMessage is bare content (a JSON-encoded string), not a

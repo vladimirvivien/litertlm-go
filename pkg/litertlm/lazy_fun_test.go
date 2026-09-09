@@ -18,7 +18,7 @@ func withStubPrep(t *testing.T, stub func(name string, ret *ffi.Type, args ...*f
 	t.Cleanup(func() { prepSymbol = prev })
 }
 
-func TestLazyFun_PanicsWithSymbolName(t *testing.T) {
+func TestLazyFun_MissingSymbolReturnsCError(t *testing.T) {
 	wantErr := errors.New("symbol not found")
 	withStubPrep(t, func(name string, ret *ffi.Type, args ...*ffi.Type) (ffi.Fun, error) {
 		return ffi.Fun{}, wantErr
@@ -26,27 +26,23 @@ func TestLazyFun_PanicsWithSymbolName(t *testing.T) {
 
 	f := newLazyFun("litert_lm_definitely_missing", &ffi.TypeVoid)
 
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected panic, got none")
-		}
-		err, ok := r.(error)
-		if !ok {
-			t.Fatalf("panic should carry an error, got %T (%v)", r, r)
-		}
-		msg := err.Error()
-		if !strings.Contains(msg, "litert_lm_definitely_missing") {
-			t.Errorf("panic message must name the missing symbol, got: %q", msg)
-		}
-		if !strings.Contains(msg, "litertlm:") {
-			t.Errorf("panic message should be prefixed `litertlm:`, got: %q", msg)
-		}
-		if !errors.Is(err, wantErr) {
-			t.Errorf("panic error should wrap underlying Prep error, got: %q", msg)
-		}
-	}()
-	f.Call(nil)
+	err := f.callErr(nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrUnimplemented) {
+		t.Errorf("errors.Is(err, ErrUnimplemented) = false; got %v", err)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Errorf("errors.Is(err, wantErr) = false; got %v", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "litert_lm_definitely_missing") {
+		t.Errorf("error message must name the missing symbol, got: %q", msg)
+	}
+	if !strings.Contains(msg, "litertlm:") {
+		t.Errorf("error message should be prefixed `litertlm:`, got: %q", msg)
+	}
 }
 
 func TestLazyFun_StickyAndPrepCalledOnce(t *testing.T) {
@@ -58,23 +54,13 @@ func TestLazyFun_StickyAndPrepCalledOnce(t *testing.T) {
 
 	f := newLazyFun("litert_lm_definitely_missing_2", &ffi.TypeVoid)
 
-	callExpectingPanic := func() (panicked bool) {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-			}
-		}()
-		f.Call(nil)
-		return false
+	if err := f.callErr(nil); !errors.Is(err, ErrUnimplemented) {
+		t.Fatalf("first call: got %v, want ErrUnimplemented", err)
 	}
-
-	if !callExpectingPanic() {
-		t.Fatal("first call: expected panic")
-	}
-	if !callExpectingPanic() {
-		t.Fatal("second call: expected panic (recorded error must be sticky)")
+	if err := f.callErr(nil); !errors.Is(err, ErrUnimplemented) {
+		t.Fatalf("second call: got %v, want sticky ErrUnimplemented", err)
 	}
 	if got := prepCalls.Load(); got != 1 {
-		t.Errorf("prepSymbol should be invoked exactly once across two Calls (sync.Once), got %d", got)
+		t.Errorf("prepSymbol should be invoked exactly once across two calls (sync.Once), got %d", got)
 	}
 }

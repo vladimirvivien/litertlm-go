@@ -2,18 +2,29 @@ package litertlm
 
 import "testing"
 
-// TestResponse_NilSafe covers the defensive paths in every accessor:
-// callers should never see a panic for a nil *Response or one whose
-// handle is zero. Pure-Go (no FFI required).
-func TestResponse_NilSafe(t *testing.T) {
-	var r *Response
-	checkZero(t, r, "nil")
+func TestResponse_Accessors(t *testing.T) {
+	var nilResp *Response
+	checkEmptyResponse(t, nilResp, "nil")
 
-	r = &Response{} // explicit zero handle
-	checkZero(t, r, "zero handle")
+	empty := &Response{}
+	checkEmptyResponse(t, empty, "empty")
+
+	r := newTextResponse("hello")
+	if r.Text() != "hello" {
+		t.Errorf("Text = %q, want hello", r.Text())
+	}
+	if r.NumCandidates() != 1 {
+		t.Errorf("NumCandidates = %d, want 1", r.NumCandidates())
+	}
+	if r.Candidate(0) != "hello" {
+		t.Errorf("Candidate(0) = %q, want hello", r.Candidate(0))
+	}
+	if r.Candidate(1) != "" {
+		t.Errorf("Candidate(1) = %q, want empty", r.Candidate(1))
+	}
 }
 
-func checkZero(t *testing.T, r *Response, label string) {
+func checkEmptyResponse(t *testing.T, r *Response, label string) {
 	t.Helper()
 	if r.Text() != "" {
 		t.Errorf("%s: Text = %q, want empty", label, r.Text())
@@ -23,11 +34,5 @@ func checkZero(t *testing.T, r *Response, label string) {
 	}
 	if r.Candidate(0) != "" {
 		t.Errorf("%s: Candidate(0) = %q, want empty", label, r.Candidate(0))
-	}
-	if v, ok := r.Score(0); v != 0 || ok {
-		t.Errorf("%s: Score(0) = (%v, %v), want (0, false)", label, v, ok)
-	}
-	if v, ok := r.TokenLength(0); v != 0 || ok {
-		t.Errorf("%s: TokenLength(0) = (%v, %v), want (0, false)", label, v, ok)
 	}
 }
