@@ -159,7 +159,7 @@ LITERTLM_MODEL=~/models/gemma3-1b-it-int4.litertlm \
 On Windows (PowerShell):
 ```powershell
 $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
-$Env:LITERTLM_MODEL = "C:\models\gemma3-1b-it-int4.litertlm"
+$Env:LITERTLM_MODEL = "$Env:USERPROFILE\models\gemma3-1b-it-int4.litertlm"
 go run main.go
 ```
 
@@ -177,10 +177,39 @@ Ocean breathes its peace now.
 
 ---
 
+## 5. Inspecting Model Capabilities & Runtime Version
+
+Before initializing a full inference engine, inspect a `.litertlm` artifact with `litertlm.InspectModel` to discover supported input modalities, thinking support, function calling, speculative decoding support, and default sampler settings without allocating KV caches or weights. You can also query the loaded runtime version with `litertlm.APIVersion()`:
+
+```go
+if err := litertlm.Load(os.Getenv("LITERTLM_LIB"), "cpu", ""); err != nil {
+	log.Fatal(err)
+}
+maj, min, pat, err := litertlm.APIVersion()
+if err != nil {
+	log.Fatal(err)
+}
+caps, err := litertlm.InspectModel(os.Getenv("LITERTLM_MODEL"))
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("C API %d.%d.%d | vision=%v audio=%v thinking=%v tools=%v spec=%v\n",
+	maj, min, pat,
+	caps.SupportsVision(), caps.SupportsAudio(),
+	caps.SupportsThinking, caps.SupportsFunctionCalling, caps.SupportsSpeculativeDecoding,
+)
+```
+
+See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities) for a runnable inspector program.
+
+---
+
 ## Next Steps
 
+* **Client options & configuration** → [Client Guide](client.md)
 * **Multi-turn chat & conversations** → [Chat Guide](chat.md)
 * **Automated tool and function calling** → [Tools Guide](tools.md)
 * **Structured JSON decoding** → [Structured Output Guide](structured-output.md)
 * **Model scaling and memory sizing** → [Supported Models](models.md)
 * **Low-level C-API control** → [Low-Level API](low-level.md)
+* **Common runtime issues** → [Troubleshooting](troubleshooting.md)

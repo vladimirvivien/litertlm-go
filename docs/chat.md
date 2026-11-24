@@ -28,15 +28,18 @@ Call `Close()` on the returned `*Chat` when done.
 
 Chat configuration:
 
-| Option                          | Effect                                                                                          |
-|---------------------------------|-------------------------------------------------------------------------------------------------|
-| `WithSystemPrompt(s)`           | The system instructions. Pass just the text — the library handles the message wrapping automatically. |
-| `WithTool(defs ...)`            | Registers one or more tools the model can call. Mix hand-built (`RawTool`) and typed (`ManagedTool`) tools. |
-| `WithInitialMessages(msgs)`     | Pre-seeds the conversation history with prior turns (supports both text and multimodal parts). |
-| `WithConstrainedDecoding(on)`   | Toggles constrained-decoding mode. |
-| `WithExtraContext(json)`        | Adds optional extra context (in JSON format) to the conversation preface. |
+| Option                                  | Effect                                                                                          |
+|-----------------------------------------|-------------------------------------------------------------------------------------------------|
+| `WithSystemPrompt(s)`                   | The system instructions. Pass just the text — the library handles the message envelope automatically. |
+| `WithTool(defs ...)`                    | Registers one or more tools the model can call. Mix hand-built (`RawTool`) and typed (`ManagedTool`) tools. |
+| `WithInitialMessages(msgs)`             | Pre-seeds the conversation history with prior turns (supports both text and multimodal parts). |
+| `WithConstrainedDecoding(on)`           | Enables constrained-decoding mode for schema/regex grammars or `ToolChoice`. |
+| `WithConstraintProvider(provider)`      | Selects the constraint grammar provider (`ConstraintProviderLLGuidance` or `ConstraintProviderNone`). |
+| `WithPromptTemplate(tmpl)`              | Overrides the model's default chat prompt template. |
+| `WithThinking(cfg)`                     | Sets conversation-wide thinking mode and token budget (`ThinkingConfig{Enabled, TokenBudget}`). |
+| `WithExtraContext(json)`                | Adds optional extra context (in JSON format) to the conversation preface. |
 | `WithFilterChannelContentFromKVCache(on)` | Excludes model reasoning-channel tokens from the KV cache to conserve cache space. |
-| `WithMaxToolHops(n)`            | Caps the auto-dispatch tool execution loop iterations (defaults to 5). |
+| `WithMaxToolHops(n)`                    | Caps the auto-dispatch tool execution loop iterations (defaults to 5). |
 
 ## `Send(ctx, message)` and `Reply`
 
@@ -172,7 +175,71 @@ reply, err := chat.Send(ctx, "Write a long story",
 )
 ```
 
-`WithSampler` is not per-call on Chat — it applies at `NewChat` time on the Client's session config.
+`WithTurnThinking(cfg)` toggles reasoning or adjusts the thinking token budget on a single turn. Pass `TokenBudget: 0` to keep the C-side unlimited (`-1`) default, or pass a positive budget:
+
+```go
+reply, err := chat.Send(ctx, "Compare merge sort and quicksort.",
+    litertlm.WithTurnThinking(litertlm.ThinkingConfig{Enabled: true, TokenBudget: 256}),
+)
+```
+
+See [`examples/thinking/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/thinking).
+
+`WithConstraint(typ, pattern)` enforces a `ConstraintJSONSchema` or `ConstraintRegex` grammar for a single turn. Open the chat with `WithConstrainedDecoding(true)` (and optionally `WithConstraintProvider(ConstraintProviderLLGuidance)`):
+
+```go
+chat, err := client.NewChat(ctx,
+    litertlm.WithConstrainedDecoding(true),
+    litertlm.WithConstraintProvider(litertlm.ConstraintProviderLLGuidance),
+)
+reply, err := chat.Send(ctx, "Return Ada Lovelace's birth year as JSON.",
+    litertlm.WithConstraint(litertlm.ConstraintJSONSchema, `{"type":"object","properties":{"year":{"type":"integer"}},"required":["year"]}`),
+)
+```
+
+Constrained decoding requires a `.litertlm` model with embedded constraint-provider metadata. See [`examples/constrained-json/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/constrained-json).
+
+`WithToolChoice(choice)` enforces per-turn tool selection under constrained decoding (`ToolChoiceAuto()`, `ToolChoiceNone()`, `ToolChoiceRequired()`, `ToolChoiceFunction(name)`, `ToolChoiceAllowedTools(mode, names...)`, `ToolChoiceRawJSON(raw)`). Requires LiteRT-LM C API `1.1+`; returns `ErrUnimplemented` on C API `1.0.0`. See [Tools → Controlling Tool Selection](tools.md#controlling-tool-selection-withtoolchoice) and [`examples/tool-choice/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/tool-choice).
+
+`WithRepetitionPenalty(cfg)`, `WithNoRepeatNgram(cfg)`, and `WithSuppressTokens(tokenIDs...)` adjust output logits per turn to curb loops or forbid specific token IDs:
+
+```go
+reply, err := chat.Send(ctx, prompt,
+    litertlm.WithRepetitionPenalty(litertlm.RepetitionPenaltyConfig{
+        RepetitionPenalty: 1.15,
+        PresencePenalty:   0.2,
+        WindowSize:        64,
+    }),
+    litertlm.WithNoRepeatNgram(litertlm.NoRepeatNgramConfig{NgramSize: 4, WindowSize: 64}),
+    litertlm.WithSuppressTokens(badTokenID),
+)
+```
+
+See [`examples/logit-penalties/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/logit-penalties).
+
+`WithSampler` is not per-call on Chat — configure the sampler with `WithDefaultSampler` on `Client` before opening the chat.
+
+## Branching Conversations (`Chat.Clone`)
+
+Use `Chat.Clone()` to fork an active conversation in O(1) without re-prefilling its system prompt, tool definitions, or earlier turns. Each cloned `*Chat` carries its own KV cache and can diverge independently; keep the parent `*Chat` open until all clones finish and call `Close()` on each clone:
+
+```go
+chat, err := client.NewChat(ctx, litertlm.WithSystemPrompt("You are concise."))
+defer chat.Close()
+
+_, _ = chat.Send(ctx, "Context: Go was designed at Google in 2007.")
+
+branch, err := chat.Clone()
+if err != nil {
+    return err
+}
+defer branch.Close()
+
+r1, _ := chat.Send(ctx, "Who created Go?")
+r2, _ := branch.Send(ctx, "What year did design start?")
+```
+
+See [`examples/clone/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/clone).
 
 ## Template Preface Rendering
 
@@ -277,18 +344,26 @@ n, err := chat.TokenCount() // tokens in the KV cache
 ```
 
 It does not require `WithBenchmarkEnabled`. For a per-turn prefill /
-decode breakdown, read `Conversation.BenchmarkInfo()` instead (that
-path does require benchmark collection).
-
-Requires LiteRT-LM v0.13.1 or newer.
+decode breakdown and reported KV-cache capacity (`MaxNumTokens`), read
+`Conversation.BenchmarkInfo()` instead (requires `WithBenchmarkEnabled()`).
 
 ## See also
 
 - [Tools guide](tools.md) — full reference for `RawTool`,
   `ManagedTool`, `RegisterTool`, schema reflection, the dispatch
-  loop, `WithMaxToolHops`, and `ToolPolicy`.
+  loop, `WithMaxToolHops`, `WithToolChoice`, and `ToolPolicy`.
 - [`examples/chat/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/chat)
   — minimal multi-turn demo.
+- [`examples/clone/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/clone)
+  — KV-cache branching with `Chat.Clone`.
+- [`examples/thinking/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/thinking)
+  — per-chat and per-turn reasoning controls.
+- [`examples/constrained-json/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/constrained-json)
+  — grammar-constrained JSON Schema and regex output.
+- [`examples/logit-penalties/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/logit-penalties)
+  — repetition penalties, n-gram blocking, and token suppression.
+- [`examples/tool-choice/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/tool-choice)
+  — OpenAI-compatible `ToolChoice` policies (C API `1.1+`).
 - [`examples/autotool/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/autotool)
   — typed tool registration with auto-dispatch.
 - [`examples/conversation/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/conversation)

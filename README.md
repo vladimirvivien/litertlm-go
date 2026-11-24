@@ -12,14 +12,16 @@ A high-performance Go binding for Google's [LiteRT-LM](https://github.com/google
 
 ## 🔥 Features 
 
-* 📦 **Automated Provisioning** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`FetchLib`) and `.litertlm` models from Hugging Face (`FetchModel`) directly in Go.
+* 📦 **Automated Provisioning** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`FetchLib`, including Windows DXC binaries) and `.litertlm` models from Hugging Face (`FetchModel`) directly in Go.
+* 🔬 **Model Inspection & Structured Diagnostics** — Inspect `.litertlm` modalities, thinking support, function calling, and sampler defaults without booting an engine (`InspectModel`), and match native C errors with `StatusCode` sentinels and thread-local messages (`*CError`, `APIVersion`).
 * ⚙️ **Centralized Configuration** — Load engine and sampler configurations from a shared `config.json` profile file (`WithConfigFile`).
-* 💬 **Stateful Chat & Conversations** — Multi-turn chat orchestration with system prompts, transcript seeding, KV cache management, and branching (`Chat.Clone`).
+* 💬 **Stateful Chat & Conversations** — Multi-turn chat orchestration with system prompts, custom prompt templates (`WithPromptTemplate`), thinking budgets (`ThinkingConfig`), transcript seeding, KV-cache channel filtering, and branching (`Chat.Clone`).
+* 🎯 **Constrained Decoding & Logit Controls** — Enforce JSON Schema or regex grammars (`WithConstraint`, `ConstraintProviderLLGuidance`), apply repetition/presence/frequency penalties, block repeated n-grams, and suppress specific token IDs.
 * 🖼️ **Multimodal Inputs** — Process text, image, and audio inputs in any order using a unified Go interface.
-* 🛠️ **Automated Tool Calling** — Register Go functions as tools with automatic dispatch, streaming tool calls, and error recovery policies.
-* 🎯 **Structured JSON Output** — Extract model outputs directly into Go structs with type-safe generic helpers (`GenerateData[T]`, `GenerateDataMulti[T]`).
-* ⚡ **Hardware Acceleration** — Run on CPU, GPU (WebGPU/Direct3D 12/Metal), or NPU with multi-token speculative decoding.
-* 🔍 **Low-Level Control** — Access the full LiteRT-LM C-API when you need custom inference loops, scoring, template introspection, or file-descriptor loading.
+* 🛠️ **Automated Tool Calling** — Register Go functions as tools with automatic dispatch, streaming tool calls, per-tool error recovery policies, and OpenAI-style `ToolChoice` policies (C API `1.1+`).
+* 📐 **Structured JSON Output** — Extract model outputs directly into Go structs with type-safe generic helpers (`GenerateData[T]`, `GenerateDataMulti[T]`).
+* ⚡ **Hardware Acceleration & Speculative Decoding** — Run on CPU (XNNPACK / YNNPACK), GPU (WebGPU / Direct3D 12 / Metal), or NPU with configurable speculative decoding (`Off`, `On`, `Adaptive`).
+* 🔍 **Low-Level Control** — Access the LiteRT-LM C API for custom prefill/decode loops, KV-cache checkpoints and rewinding, session cloning, async decode, scoring, tokenization, and file-descriptor loading.
 
 ---
 
@@ -33,7 +35,7 @@ go get github.com/vladimirvivien/litertlm-go@latest
 
 ## Quickstart (with Automated Provisioning)
 
-Here is how simple it is to get started with `litertlm-go`. Start by programmatically download LiteRT-LM libraries and model artifacts directly in your Go application:
+Download the native LiteRT-LM libraries and model artifact directly in Go:
 
 ```go
 package main
@@ -110,13 +112,19 @@ LITERTLM_MODEL=/abs/path/to/gemma3-1b-it-int4.litertlm \
 Every example in `examples/` supports automated provisioning flags for zero-configuration execution:
 
 ```bash
-# Automatically fetch dependencies and run
+# Automatically fetch dependencies and run:
 go run ./examples/hello -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 
-# Multi-turn chat with a persistent bot:
-go run ./examples/bot -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
+# Inspect model modalities, thinking, tool calling, and sampler defaults:
+go run ./examples/capabilities -get-lib v0.19.1 -get-model litert-community/gemma-4-E2B-it
 
-# Automated tool-calling with reflection:
+# Enforce JSON Schema output with grammar-constrained decoding:
+go run ./examples/constrained-json -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
+
+# Multi-branch KV-cache checkpoints, rewinding, and session cloning:
+go run ./examples/checkpoints -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
+
+# Automated tool-calling with Go struct reflection:
 go run ./examples/autotool -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 ```
 
@@ -132,13 +140,14 @@ See [`examples/README.md`](./examples/README.md) for the complete index of 43 ru
 
 ## Documentation
 
-* [Getting Started](https://vladimirvivien.github.io/litertlm-go/getting-started/) — Installation and provisioning workflows
-* [Client Guide](https://vladimirvivien.github.io/litertlm-go/client/) — Client configuration, unary generation, and options
-* [Chat Guide](https://vladimirvivien.github.io/litertlm-go/chat/) — Multi-turn dialogue, system prompts, and tool calling
-* [Structured Output](https://vladimirvivien.github.io/litertlm-go/structured-output/) — JSON extraction via `GenerateData[T]`
-* [Low-Level API](https://vladimirvivien.github.io/litertlm-go/low-level/) — Custom inference, scoring, and memory management
-* [Supported Models](https://vladimirvivien.github.io/litertlm-go/docs/models.md) — Model support matrix and hardware accelerator backends
-* [Troubleshooting](https://vladimirvivien.github.io/litertlm-go/troubleshooting/) — Debugging loader, memory, and acceleration issues
+* [Getting Started](https://vladimirvivien.github.io/litertlm-go/getting-started/) — Installation, provisioning workflows, and model inspection
+* [Client Guide](https://vladimirvivien.github.io/litertlm-go/client/) — Client configuration, profiles, errors, unary generation, and options
+* [Chat Guide](https://vladimirvivien.github.io/litertlm-go/chat/) — Multi-turn dialogue, thinking, constraints, logit penalties, and cloning
+* [Tools Guide](https://vladimirvivien.github.io/litertlm-go/tools/) — Typed and raw tools, dispatch policies, and tool selection
+* [Structured Output](https://vladimirvivien.github.io/litertlm-go/structured-output/) — JSON extraction via `GenerateData[T]` and grammar constraints
+* [Low-Level API](https://vladimirvivien.github.io/litertlm-go/low-level/) — Prefill/decode, checkpoints, cloning, scoring, and handle lifetimes
+* [Supported Models](https://vladimirvivien.github.io/litertlm-go/models/) — Model support matrix, memory sizing, and tuning
+* [Troubleshooting](https://vladimirvivien.github.io/litertlm-go/troubleshooting/) — Debugging loader, constraints, sampler, and acceleration issues
 
 ---
 

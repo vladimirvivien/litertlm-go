@@ -71,12 +71,18 @@ FFI failures, model crashes) propagate immediately.
 
 ## Options
 
-| Option                     | Effect                                                                                |
-|----------------------------|---------------------------------------------------------------------------------------|
-| `WithRetries(n)`           | Max retry attempts on parse failure. Default 0 (one total attempt).                   |
-| `WithSchemaInstruction(s)` | Override the fallback path's default preamble. `s` is a Printf format string with one `%s`. |
-| `WithMaxOutputTokens(n)`   | Cap output tokens on the fallback path.                                               |
-| `WithSampler(p)`           | Override the Client's default sampler on the fallback path.                           |
+`GenerateData[T]` and `GenerateDataMulti[T]` accept any `RuntimeOption` (forwarding sampling, thinking, and penalty options to the underlying turns):
+
+| Option                        | Effect                                                                                   |
+|-------------------------------|------------------------------------------------------------------------------------------|
+| `WithRetries(n)`              | Max retry attempts on parse failure. Default 0 (one total attempt).                      |
+| `WithSchemaInstruction(s)`    | Override the fallback path's default preamble. `s` is a Printf format string with one `%s`. |
+| `WithMaxOutputTokens(n)`      | Cap output tokens on the fallback path.                                                  |
+| `WithSampler(p)`              | Override the Client's default sampler on the fallback path.                              |
+| `WithTurnThinking(cfg)`       | Override reasoning behavior and token budget for the generation call.                    |
+| `WithRepetitionPenalty(cfg)`  | Apply repetition/presence/frequency penalties during generation.                         |
+| `WithNoRepeatNgram(cfg)`      | Ban repeating n-grams during generation.                                                 |
+| `WithSuppressTokens(ids...)`  | Ban listed token IDs during generation.                                                  |
 
 ## Error handling
 
@@ -138,12 +144,35 @@ mutated.
 `GenerateData[T]` is the text-only convenience over
 `GenerateDataMulti[T]`.
 
+## Grammar-constrained JSON (`WithConstraint`)
+
+When working inside a `Chat` or `Client.Generate` call with a model that embeds constraint-provider metadata (such as Gemma 3 1B, Gemma 4 E2B, or Qwen 3 0.6B), you can enforce exact JSON Schema or regular-expression syntax at decode time instead of relying on post-generation parsing:
+
+```go
+chat, err := client.NewChat(ctx,
+    litertlm.WithConstrainedDecoding(true),
+    litertlm.WithConstraintProvider(litertlm.ConstraintProviderLLGuidance),
+)
+if err != nil {
+    return err
+}
+defer chat.Close()
+
+reply, err := chat.Send(ctx, "Extract Ada Lovelace's name and age as JSON.",
+    litertlm.WithConstraint(litertlm.ConstraintJSONSchema, `{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"]}`),
+)
+```
+
+Models without embedded constraint-provider metadata fail `NewChat` with `Failed to create GemmaModelConstraintProvider`. For portable struct extraction across any model, use `GenerateData[T]`. See [`examples/constrained-json/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/constrained-json).
+
 ## See also
 
 - [`examples/structured/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/structured)
   — text-only Recipe extraction.
 - [`examples/extract/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/extract)
   — image-to-JSON extraction with `GenerateDataMulti`.
+- [`examples/constrained-json/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/constrained-json)
+  — grammar-constrained JSON Schema and regex decoding.
 - [Client](client.md#multimodal-inputs) — the underlying multimodal API.
 - [Tools](tools.md) — `RegisterTool` / `WithTool` for user-defined
   tool dispatch (the same machinery the primary path uses).

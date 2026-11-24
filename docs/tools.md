@@ -238,12 +238,40 @@ stream with an error.
 Streaming methods ignore `WithReturnToolRequests` — manual handling
 of tool calls requires a `*Reply`, so use `Send` for that flow.
 
+## Controlling Tool Selection (`WithToolChoice`)
+
+Per-turn tool choice constrains whether the model calls any tool, avoids calling tools, or calls a specific named function. Pass `WithConstrainedDecoding(true)` at `NewChat` time and pass `WithToolChoice(...)` on `Chat.Send` or `Chat.SendStream`:
+
+| Constructor | Policy |
+|---|---|
+| `ToolChoiceAuto()` | Model decides whether to invoke a tool or respond with text. |
+| `ToolChoiceNone()` | Prevents tool calls on the turn. |
+| `ToolChoiceRequired()` | Forces at least one tool call from the registered tools. |
+| `ToolChoiceFunction(name)` | Forces invocation of the named function. |
+| `ToolChoiceAllowedTools(mode, names...)` | Restricts callable tools to `names` under `"auto"` or `"required"` mode. |
+| `ToolChoiceRawJSON(rawJSON)` | Supplies an OpenAI `tool_choice` JSON payload verbatim. |
+
+```go
+reply, err := chat.Send(ctx, "Check the weather in Boston.",
+    litertlm.WithToolChoice(litertlm.ToolChoiceFunction("get_weather")),
+)
+if errors.Is(err, litertlm.ErrUnimplemented) {
+    // Loaded LiteRT-LM library does not expose C API 1.1+ tool_choice.
+}
+```
+
+`WithToolChoice` requires LiteRT-LM C API `1.1+`; against C API `1.0.0`, the call fails cleanly with a `*CError` wrapping `ErrUnimplemented`. See [`examples/tool-choice/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/tool-choice).
+
 ## See also
 
 - [`examples/autotool/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/autotool)
   — auto-dispatch with a typed handler.
 - [`examples/conversation/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/conversation)
   — manual dispatch with `NewRawTool` + `SendToolResult`.
+- [`examples/tool-choice/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/tool-choice)
+  — per-turn tool selection policies (C API `1.1+`).
+- [`examples/tool-policy/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/tool-policy)
+  — `ToolPolicyReturnOnError` vs `ToolPolicyInformOnError`.
 - [Chat](chat.md) — the multi-turn `Chat` API; tool registration is
   one of its options.
 - [Structured output](structured-output.md) — `GenerateData[T]` and

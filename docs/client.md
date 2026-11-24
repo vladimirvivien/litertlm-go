@@ -32,9 +32,10 @@ Use functional options to specify environment and inference engine settings.
 | Option                  | Effect                                                                |
 |-------------------------|-----------------------------------------------------------------------|
 | `WithLib(dir)`          | Directory holding `litert-lm.*` (or legacy `liblitertlm_c*.*`). Empty → `$LITERTLM_LIB`. |
+| `WithLibName(name)`     | Override main shared library short-name (default `"litert-lm"`). Empty → `$LITERTLM_LIB_NAME`. |
 | `WithModel(path)`       | Path to a `.litertlm` file. Empty → `$LITERTLM_MODEL`.                |
 | `WithModelFD(fd)`       | Raw file descriptor of the model file (unsupported on Windows).       |
-| `WithBackend(b)`        | `"cpu"` (default) or `"gpu"`.                                         |
+| `WithBackend(b)`        | `"cpu"` (default), `"gpu"` (`"apple"` / `"metal"` normalize to `"gpu"`), or `"ynnpack"` (sets CPU + enables YNNPACK delegation when `WithYNNPACK` is unset). |
 | `WithVisionBackend(b)`  | Optional extra backend for vision inputs.                             |
 | `WithAudioBackend(b)`   | Optional extra backend for audio inputs.                              |
 
@@ -46,9 +47,19 @@ Use functional options to specify environment and inference engine settings.
 | `WithCacheDir(dir)`                       | Engine artefact cache. Propagated to vision and audio executors.          |
 | `WithActivationDataType(t)`               | 0=F32, 1=F16, 2=I16, 3=I8.                                                |
 | `WithPrefillChunkSize(n)`                 | CPU-backend prefill chunk size for dynamic models.                        |
-| `WithSpeculativeDecodingEnabled(on)`      | Toggle multi-token-prediction speculative decoding (Gemma 4 supported). See [`examples/speculative/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/speculative) for a side-by-side throughput comparison. |
+| `WithSpeculativeDecoding(cfg)`            | Configure `SpeculativeDecodingConfig{Mode, Lenience}` (`SpeculativeDecodingOff`, `SpeculativeDecodingOn`, `SpeculativeDecodingAdaptive`). Nonzero `Lenience` requires a runtime exporting `litert_lm_speculative_decoding_config_set_lenience`. |
+| `WithSpeculativeDecodingEnabled(on)`      | Boolean toggle for multi-token speculative decoding (ignored when `WithSpeculativeDecoding` is set). See [`examples/speculative/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/speculative). |
 | `WithBenchmarkEnabled()`                  | Turn on benchmark collection. Read per-call metrics via `Response.Benchmark()`. |
 | `WithParallelSectionLoading(on)`          | Parallel deserialization of `.litertlm` container sections. Defaults to true. |
+| `WithYNNPACK(on)`                         | Enable YNNPACK CPU delegation before XNNPACK.                             |
+| `WithMaxVisionTokensPerImage(n)`          | Cap vision tokens generated per image.                                    |
+| `WithMaxImages(n)`                        | Cap image inputs per call on legacy backends.                             |
+| `WithMetalResidencySet(on)`               | Enable Metal residency sets on Apple GPU backends.                        |
+| `WithGPUDecodeStepsPerSync(n)`            | Configure decode steps between GPU synchronizations.                      |
+| `WithGPUWaitForWeightUploads(on)`         | Wait for weight uploads to complete during GPU initialization.            |
+| `WithRingbuffersLocalAttention(on)`       | Store local attention KV caches in ringbuffers.                           |
+| `WithSingleThreadedExecution(on)`         | Run session execution on caller-driven threads rather than background workers. |
+| `WithSelectedSignatures(signatures...)`   | Restrict the main executor to named model signatures (requires C API `1.1+`; returns `ErrUnimplemented` on `1.0.0`). |
 | `WithDispatchLibDir(dir)`                 | LiteRT dispatch library directory for the NPU backend.                    |
 | `WithNumThreads(n)`                       | Set the number of threads for the CPU backend.                            |
 | `WithAudioNumThreads(n)`                  | Set the number of threads for the audio CPU backend.                      |
@@ -56,7 +67,7 @@ Use functional options to specify environment and inference engine settings.
 | `WithSupportedLoRARanks(ranks)`           | Set the supported startup LoRA ranks for the engine.                      |
 | `WithAudioLoRARank(rank)`                 | Set the startup audio LoRA rank for the engine.                           |
 | `WithSupportedAudioLoRARanks(ranks)`      | Set the supported startup audio LoRA ranks for the engine.                |
-| `WithConfigFile(path, profile)`          | Load engine and sampler configurations from a centralized `config.json` file. |
+| `WithConfigFile(path, profile)`           | Load engine and sampler settings from a centralized `config.json` profile file. |
 
 ### Logging
 
@@ -70,6 +81,33 @@ Use functional options to specify environment and inference engine settings.
 |---------------------------------|-------------------------------------------------------|
 | `WithDefaultSampler(p)`         | Sampler used for every `Generate` unless overridden per-call by `WithSampler`. |
 
+### Centralized configuration (`WithConfigFile`)
+
+Store engine, speculative decoding, acceleration, thread-count, LoRA, and default sampler settings in a JSON file with a `"default"` block and per-model overrides under `"models"`. Load a profile with `litertlm.WithConfigFile("config.json", "model-profile")`; explicit Go options applied after `WithConfigFile` override profile fields.
+
+Supported keys inside each model entry include:
+`backend`, `max_tokens`, `cache_dir`, `speculative_decoding_enabled`, `speculative_decoding_mode` (`"off"` | `"on"` | `"adaptive"`), `speculative_decoding_lenience`, `parallel_section_loading`, `enable_ynnpack`, `max_vision_tokens_per_image`, `metal_residency_set`, `gpu_decode_steps_per_sync`, `gpu_wait_for_weight_uploads`, `use_ringbuffers_local_attention`, `single_threaded_execution`, `selected_signatures`, `num_threads`, `audio_num_threads`, `lora_rank`, `supported_lora_ranks`, `audio_lora_rank`, `supported_audio_lora_ranks`, `sampler_type` (`"top_k"` | `"top_p"` | `"greedy"`), `temperature`, `top_k`, `top_p`, `seed`, `lib_path`, `lib_name`, and `model_path`.
+
+See [`examples/config-file/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/config-file).
+
+## Model capabilities, runtime version, and errors
+
+Query a `.litertlm` file's capabilities without initializing an engine using `litertlm.InspectModel(path)`, or query the client's backing model with `client.Capabilities()` (when loaded by file path):
+
+```go
+caps, err := client.Capabilities()
+if err != nil {
+    return err
+}
+fmt.Printf("modalities=%v thinking=%v tools=%v speculative=%v\n",
+    caps.SupportedModalities, caps.SupportsThinking,
+    caps.SupportsFunctionCalling, caps.SupportsSpeculativeDecoding)
+```
+
+`ModelCapabilities` also exposes convenience predicates: `SupportsText()`, `SupportsVision()`, `SupportsAudio()`, and `SupportsVideo()`. See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities).
+
+Inspect the loaded C API version at runtime with `litertlm.APIVersion()`. Native runtime failures return a `*litertlm.CError` carrying the failing `Op`, canonical `StatusCode`, and thread-local C++ diagnostic `Message`. Match conditions portably with `errors.Is` against sentinel errors (`ErrCancelled`, `ErrInvalidArgument`, `ErrNotFound`, `ErrResourceExhausted`, `ErrFailedPrecondition`, `ErrUnimplemented`, `ErrInternal`, etc.) or extract details via `errors.As`.
+
 ## Client methods
 ### `Generate(ctx, prompt, opts...)`
 
@@ -78,17 +116,22 @@ Synchronous one-shot inference. Returns the first candidate's text.
 Per-call options are `RuntimeOption` values, shared with `GenerateData`
 and `Chat.Send*`:
 
-| Option                          | Effect                                                |
-|---------------------------------|-------------------------------------------------------|
-| `WithMaxOutputTokens(n)`        | Cap output tokens for this call.                      |
-| `WithSampler(p)`                | Override the Client's default sampler.                |
+| Option                        | Effect                                                |
+|-------------------------------|-------------------------------------------------------|
+| `WithMaxOutputTokens(n)`      | Cap output tokens for this call.                      |
+| `WithSampler(p)`              | Override the Client's default sampler.                |
+| `WithTurnThinking(cfg)`       | Override thinking mode and token budget for the call. |
+| `WithConstraint(typ, pattern)`| Apply a `ConstraintRegex` or `ConstraintJSONSchema` grammar. |
+| `WithRepetitionPenalty(cfg)`  | Apply repetition, presence, and frequency penalties.  |
+| `WithNoRepeatNgram(cfg)`      | Ban repeating token n-grams within a history window.  |
+| `WithSuppressTokens(ids...)`  | Ban listed token IDs from being sampled.              |
 
 
 ```go
 text, err := client.Generate(ctx, "The capital of France is")
 ```
 
-`ctx` cancellation is propagated to `Session.Cancel` internally, so
+`ctx` cancellation is propagated to `Conversation.Cancel` internally, so
 `context.WithTimeout` and `context.WithCancel` apply:
 
 ```go
@@ -137,7 +180,7 @@ if err != nil { return err }
 fmt.Println(resp.Text())          // Generated reply text
 fmt.Println(resp.NumCandidates()) // Number of candidates present (1 when non-empty)
 if b := resp.Benchmark(); b != nil {
-    fmt.Printf("decode=%.1f tok/s\n", b.DecodeTokensPerSec)
+    fmt.Printf("kv_cap=%d decode=%.1f tok/s\n", b.MaxNumTokens, b.DecodeTokensPerSec)
 }
 ```
 

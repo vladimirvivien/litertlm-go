@@ -6,7 +6,7 @@
 
 ## 1. Verified Model Architectures (LiteRT-LM v0.19.1)
 
-The test battery ([`pkg/litertlm/model_matrix_test.go`](file:///C:/Users/vladi/DEV/litertlm-go/pkg/litertlm/model_matrix_test.go)) validates chat generation, tokenization round-trips, and streaming coherence across both CPU and GPU backends.
+The test battery ([`pkg/litertlm/model_matrix_test.go`](https://github.com/vladimirvivien/litertlm-go/blob/main/pkg/litertlm/model_matrix_test.go)) validates chat generation, tokenization round-trips, and streaming coherence across both CPU and GPU backends.
 
 | Model Family | Target Processors | Parameter Range | CPU Backend | GPU Backend (Metal / WebGPU / D3D12) |
 |---|---|:---:|:---:|:---:|
@@ -84,6 +84,26 @@ client, err := litertlm.New(ctx,
     litertlm.WithParallelSectionLoading(true),
 )
 ```
+
+### Speculative Decoding (`WithSpeculativeDecoding`)
+For models bundled with speculative decoding drafters (such as Gemma 4 E4B), configure multi-token draft speculation with `SpeculativeDecodingOff`, `SpeculativeDecodingOn`, or `SpeculativeDecodingAdaptive`:
+
+```go
+client, err := litertlm.New(ctx,
+    litertlm.WithModel("gemma-4-E4B-it.litertlm"),
+    litertlm.WithSpeculativeDecoding(litertlm.SpeculativeDecodingConfig{
+        Mode: litertlm.SpeculativeDecodingAdaptive,
+    }),
+)
+```
+
+Leave `Lenience` at `0` for lossless acceptance; nonzero `Lenience` values in `(0, 1]` require a native library exporting `litert_lm_speculative_decoding_config_set_lenience`. See [`examples/speculative/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/speculative).
+
+### YNNPACK & Ringbuffer Local Attention
+On supported CPU targets, enable YNNPACK delegation with `WithYNNPACK(true)` (or `WithBackend("ynnpack")`). For models supporting sliding-window/local-attention ringbuffers, pass `WithRingbuffersLocalAttention(true)` to store local attention KV state in ringbuffers.
+
+### Capability Inspection (`InspectModel`)
+Query model support flags (`SupportsSpeculativeDecoding`, `SupportsThinking`, `SupportsFunctionCalling`, supported modalities, and default sampler fields) directly from `.litertlm` metadata with `litertlm.InspectModel(path)` before initializing an engine. See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities).
 
 ### GPU Buffer Sizing & Allocations
 On GPU backends using WebGPU / Direct3D 12, individual buffer allocations are subject to driver and API limits (typically ~2 GB per single buffer allocation). 

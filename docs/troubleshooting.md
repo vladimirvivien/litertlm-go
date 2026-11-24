@@ -33,13 +33,12 @@ Override it with `WithLibName("...")` or `LITERTLM_LIB_NAME`.
 
 ---
 
-## Garbage or repetitive output from `Generate` / `GenerateStream`
+## Garbage or repetitive output from low-level `Session` APIs
 
-**Symptom.** `Generate` (or `GenerateStream`, or `GenerateMulti`)
-returns one of:
+**Symptom.** Low-level `Session.GenerateContent` or `Session.RunPrefill` / `Session.RunDecode` returns one of:
 
 - An empty string, or `resp.Text(0) == ""`.
-- A single token repeated until `-max` is hit
+- A single token repeated until max output tokens is reached
   (`0000000000…`, `\n\n\n…`, `<bos><bos>…`).
 - A short hallucinated phrase repeated
   (`**{sea}** **{sea}** **{sea}**`).
@@ -47,21 +46,15 @@ returns one of:
   (`Marco who set out one morning to catch fish. Marco who set out
   one morning to catch fish. …`).
 
-**Cause.** Chat-tuned models (Gemma instruct, Llama-Instruct, …) were
-fine-tuned with the model's chat template wrapping every conversation
-(e.g. Gemma 4:
-`<bos><start_of_turn>user\n…<end_of_turn>\n<start_of_turn>model\n`).
-The raw `Generate` / `GenerateStream` / `GenerateMulti` paths send
-your prompt to the model **as-is** — the chat template is *not*
-applied. Without the framing tokens the model has no idea it's
-supposed to answer a user, and degenerates: empty, a stuck token, or a
-repetition trap. Larger chat-tuned models (Gemma 4 E4B) tend to fall
-into loops; smaller ones (Gemma 4 E2B) sometimes manage to extend
-completion-style prompts but still fail on bare instructions.
+**Cause.** Chat-tuned models (Gemma instruct, Qwen, Llama-Instruct, …) are
+fine-tuned with a chat template wrapping every conversation turn
+(for example, Gemma's `<|turn>user\n…<turn|>\n<|turn>model\n`).
+Raw `Session.GenerateContent` and `Session.RunPrefill` / `Session.RunDecode`
+forward your prompt bytes **as-is** unless `SessionConfig.SetApplyPromptTemplate(true)`
+and a model template handle are active. Without template framing, chat-tuned
+models frequently emit an immediate end-of-turn token or degenerate into repetition loops.
 
-**Fix.** Use the high-level [`Chat`](chat.md) API. Both
-`Chat.Send` and `Chat.SendStream` apply the model's chat template
-before each turn:
+**Fix.** Use the high-level [`Client.Generate`](client.md#generatectx-prompt-opts), [`Client.GenerateStream`](client.md#generatestreamctx-prompt-opts), or [`Chat`](chat.md) APIs. Both `Client.Generate*` and `Chat.Send*` open a `Conversation` under the hood, applying the model's chat template automatically:
 
 ```go
 chat, _ := client.NewChat(ctx, litertlm.WithSystemPrompt("You are a friendly assistant."))
@@ -69,27 +62,11 @@ defer chat.Close()
 
 reply, _ := chat.Send(ctx, "Explain why the sky is blue.")
 fmt.Println(reply.Text())
-
-// streaming form:
-for chunk, err := range chat.SendStream(ctx, "Explain why the sky is blue.") {
-    if err != nil { /* … */ }
-    fmt.Print(chunk.Text)
-}
 ```
 
-The `Conversation` low-level API also applies the chat template.
+To curb repetition loops during open-ended generation, apply per-turn logit penalties with `WithRepetitionPenalty` and `WithNoRepeatNgram` (see [`examples/logit-penalties/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/logit-penalties)).
 
-If you genuinely need the raw `Generate` path (e.g. base model, or
-pure text completion), pick a *completion-style* prompt the model can
-extend rather than an instruction:
-
-- `"The capital of France is"`
-- `"Once upon a time in a small village by the sea, "`
-- `"To install Go on Linux: 1)"`
-
-Even then, expect chat-tuned E4B-class models to drift into loops on
-long generations — the chat-templated path is the supported one for
-chat-tuned models.
+When driving raw `Session` prefill/decode directly without a template, supply *completion-style* prefixes the base distribution can extend (`"The capital of France is"`) or branch from checkpoints built with `SaveCheckpoint` / `RewindToCheckpoint`.
 
 ---
 
@@ -138,12 +115,12 @@ running:
 
     ```powershell
     $Env:LLVM_PROFILE_FILE = "NUL"
-    $Env:LITERTLM_LIB = "C:\path\to\lib"
+    $Env:LITERTLM_LIB = "$Env:USERPROFILE\litertlm\lib"
     go run main.go
     ```
 ---
 
-## `engine_create` returns nil with `DYNAMIC_UPDATE_SLICE` errors
+## `engine_create` fails with `DYNAMIC_UPDATE_SLICE` errors
 
 **Symptom.** `litertlm.New` (or low-level `NewEngine`) errors during
 construction; the C-side log mentions `DYNAMIC_UPDATE_SLICE`.
@@ -156,14 +133,20 @@ defaults to 4096, which works for every Gemma 4 variant.
 
 ---
 
-## `ErrUnimplemented`: `missing C symbol "..." in loaded library`
+## `ErrUnimplemented`: `missing C symbol` or API minor-version mismatch
 
 **Symptom.** A call into the Go API returns an error wrapping
 `litertlm.ErrUnimplemented` (`*litertlm.CError` with `Code: StatusUnimplemented`):
 
-```
+```text
 litertlm: missing C symbol "litert_lm_session_config_set_apply_prompt_template"
 in loaded library (refresh prebuilt LiteRT-LM libs)
+```
+
+Or for features gated behind a newer C API minor version:
+
+```text
+litertlm: version_check: requires LiteRT-LM C API 1.1+, loaded library is 1.0.0 (Unimplemented)
 ```
 
 `litertlm.Load` validates the major C API version (`1.x`) and returns
@@ -172,12 +155,33 @@ version-specific symbols fail with `ErrUnimplemented` when invoked
 against a build that does not export them.
 
 **Cause.** The LiteRT-LM library staged in `$LITERTLM_LIB` does not
-export the named C API symbol — typically because it predates the
-requested C API minor version.
+export the requested symbol or reports an earlier C API minor version. Features requiring `1.1+` include `WithSelectedSignatures` / `EngineSettings.SetSelectedSignatures` and `WithToolChoice` / `OptionalArgs.SetToolChoice`. Speculative decoding `Lenience != 0` also requires a runtime exporting `litert_lm_speculative_decoding_config_set_lenience`.
 
-**Fix.** Re-stage the prebuilt LiteRT-LM libraries from a current
-upstream release (`v0.19.1` or newer) per
-[`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md).
+**Fix.** Match error handling with `errors.Is(err, litertlm.ErrUnimplemented)`, leave optional fields at their defaults (`Lenience: 0`), or stage a newer LiteRT-LM shared library release (minimum supported base is `v0.19.1` per [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)).
+
+---
+
+## `Failed to create GemmaModelConstraintProvider`
+
+**Symptom.** Opening a chat with `WithConstrainedDecoding(true)` (or `WithConstraintProvider(...)`) fails during `NewChat`:
+
+```text
+litertlm: NewChat: litertlm: conversation_create: INTERNAL: Failed to create GemmaModelConstraintProvider. (Internal)
+```
+
+**Cause.** Grammar-constrained decoding requires constraint-provider metadata embedded inside the `.litertlm` model file. Compact models without embedded constraint-provider metadata (for example, `gemma3-270m-it-q8.litertlm`) cannot initialize a constraint provider.
+
+**Fix.** Use a model containing constraint metadata (such as `gemma3-1b-it-int4`, `gemma-4-E2B-it`, or `Qwen3-0.6B`) for grammar constraints, or use [`GenerateData[T]`](structured-output.md) without `WithConstrainedDecoding(true)`.
+
+---
+
+## `UNIMPLEMENTED: Sampler type: 3 not implemented yet`
+
+**Symptom.** Creating a session or conversation with `SamplerGreedy` (`SamplerType = 3`, returned by `DefaultSamplerParams()`) fails on CPU with `StatusUnimplemented`.
+
+**Cause.** Greedy sampler type `3` is not implemented on the CPU executor in LiteRT-LM `v0.19.1`.
+
+**Fix.** Use `SamplerTopP` with `Temperature: 0` for deterministic sampling (`litertlm.SamplerParams{Type: litertlm.SamplerTopP, TopK: 40, TopP: 0.95, Temperature: 0, Seed: 1}`), or omit `SetSamplerParams` / `WithDefaultSampler` to use the model's built-in sampler configuration.
 
 ---
 
@@ -223,9 +227,9 @@ n := int(reply.ToolCalls()[0].Function.Arguments["count"].(float64))
 ## `conversation_send_message failed` on Qwen3 multi-turn
 
 **Symptom.** `Chat.Send` (or low-level `Conversation.SendMessage`)
-returns `litertlm: send: litertlm: conversation_send_message failed`
-on the second turn of a Qwen3 conversation. `RenderMessage` on the
-same turn returns `C side returned NULL`.
+returns an error wrapping `*CError` on `conversation_send_message`
+on the second turn of a Qwen3 conversation, and `RenderMessage` on
+the same turn fails in `conversation_render_message_to_string`.
 
 **Cause.** Qwen3's Jinja chat template calls
 `reasoning_content.strip('\n')` when rendering the prior assistant
