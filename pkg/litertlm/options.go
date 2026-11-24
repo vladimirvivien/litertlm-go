@@ -24,8 +24,17 @@ type clientConfig struct {
 	prefillChunkSize   *int
 
 	speculativeDecodingEnabled *bool
+	speculativeDecoding        *SpeculativeDecodingConfig
 	benchmarkEnabled           *bool
 	parallelSectionLoading     *bool
+	enableYNNPACK              *bool
+	maxVisionTokensPerImage    *int
+	metalResidencySet          *bool
+	gpuDecodeStepsPerSync      *int
+	gpuWaitForWeightUploads    *bool
+	useRingbuffersLocalAttn    *bool
+	singleThreadedExecution    *bool
+	selectedSignatures         []string
 
 	dispatchLibDir string
 
@@ -55,6 +64,14 @@ type runtimeConfig struct {
 
 	returnToolRequests bool
 	maxConcurrentTools int
+
+	thinking          *ThinkingConfig
+	constraintType    ConstraintType
+	constraintPattern string
+	toolChoice        ToolChoice
+	repetitionPenalty *RepetitionPenaltyConfig
+	noRepeatNgram     *NoRepeatNgramConfig
+	suppressTokens    *SuppressTokensConfig
 }
 
 // WithLib sets the directory holding the LiteRT-LM shared libraries.
@@ -113,6 +130,53 @@ func WithPrefillChunkSize(n int) Option {
 // WithSpeculativeDecodingEnabled toggles speculative (multi-token prediction) decoding.
 func WithSpeculativeDecodingEnabled(on bool) Option {
 	return func(c *clientConfig) { c.speculativeDecodingEnabled = new(on) }
+}
+
+// WithSpeculativeDecoding configures engine-wide speculative decoding mode and lenience.
+func WithSpeculativeDecoding(cfg SpeculativeDecodingConfig) Option {
+	return func(c *clientConfig) { c.speculativeDecoding = new(cfg) }
+}
+
+// WithYNNPACK toggles YNNPACK CPU delegation before XNNPACK.
+func WithYNNPACK(on bool) Option {
+	return func(c *clientConfig) { c.enableYNNPACK = new(on) }
+}
+
+// WithMaxVisionTokensPerImage caps vision tokens generated per image.
+func WithMaxVisionTokensPerImage(n int) Option {
+	return func(c *clientConfig) { c.maxVisionTokensPerImage = new(n) }
+}
+
+// WithMetalResidencySet toggles Metal residency sets on Apple GPU backends.
+func WithMetalResidencySet(on bool) Option {
+	return func(c *clientConfig) { c.metalResidencySet = new(on) }
+}
+
+// WithGPUDecodeStepsPerSync configures decode steps between GPU syncs.
+func WithGPUDecodeStepsPerSync(n int) Option {
+	return func(c *clientConfig) { c.gpuDecodeStepsPerSync = new(n) }
+}
+
+// WithGPUWaitForWeightUploads configures whether GPU initialization waits for weight uploads.
+func WithGPUWaitForWeightUploads(on bool) Option {
+	return func(c *clientConfig) { c.gpuWaitForWeightUploads = new(on) }
+}
+
+// WithRingbuffersLocalAttention toggles ringbuffer KV cache storage for local attention layers.
+func WithRingbuffersLocalAttention(on bool) Option {
+	return func(c *clientConfig) { c.useRingbuffersLocalAttn = new(on) }
+}
+
+// WithSingleThreadedExecution configures caller-driven single-threaded session execution.
+func WithSingleThreadedExecution(on bool) Option {
+	return func(c *clientConfig) { c.singleThreadedExecution = new(on) }
+}
+
+// WithSelectedSignatures restricts the main executor to the listed model signatures
+// (requires LiteRT-LM C API 1.1.0+).
+func WithSelectedSignatures(signatures ...string) Option {
+	cloned := slices.Clone(signatures)
+	return func(c *clientConfig) { c.selectedSignatures = cloned }
 }
 
 // WithBenchmarkEnabled turns on benchmark collection.
@@ -211,4 +275,41 @@ func WithReturnToolRequests(on bool) RuntimeOption {
 // WithMaxConcurrentTools caps concurrent tool handler dispatch per reply.
 func WithMaxConcurrentTools(n int) RuntimeOption {
 	return func(c *runtimeConfig) { c.maxConcurrentTools = n }
+}
+
+// WithTurnThinking overrides the conversation thinking config for a single turn.
+func WithTurnThinking(cfg ThinkingConfig) RuntimeOption {
+	return func(c *runtimeConfig) { c.thinking = new(cfg) }
+}
+
+// WithConstraint applies a grammar constraint (regex or JSON schema) for a single turn.
+func WithConstraint(typ ConstraintType, pattern string) RuntimeOption {
+	return func(c *runtimeConfig) {
+		c.constraintType = typ
+		c.constraintPattern = pattern
+	}
+}
+
+// WithToolChoice configures per-turn tool choice policy under constrained decoding
+// (requires LiteRT-LM C API 1.1.0+).
+func WithToolChoice(choice ToolChoice) RuntimeOption {
+	return func(c *runtimeConfig) { c.toolChoice = choice }
+}
+
+// WithRepetitionPenalty applies multiplicative/subtractive repetition penalties for a single turn.
+func WithRepetitionPenalty(cfg RepetitionPenaltyConfig) RuntimeOption {
+	return func(c *runtimeConfig) { c.repetitionPenalty = new(cfg) }
+}
+
+// WithNoRepeatNgram bans repeating token n-grams for a single turn.
+func WithNoRepeatNgram(cfg NoRepeatNgramConfig) RuntimeOption {
+	return func(c *runtimeConfig) { c.noRepeatNgram = new(cfg) }
+}
+
+// WithSuppressTokens bans the specified token IDs from being sampled for a single turn.
+func WithSuppressTokens(tokenIDs ...int) RuntimeOption {
+	cloned := slices.Clone(tokenIDs)
+	return func(c *runtimeConfig) {
+		c.suppressTokens = &SuppressTokensConfig{TokenIDs: cloned}
+	}
 }

@@ -122,8 +122,56 @@ func applySettings(s EngineSettings, cfg *clientConfig) error {
 			return err
 		}
 	}
-	if cfg.speculativeDecodingEnabled != nil {
+	if cfg.speculativeDecoding != nil {
+		if err := s.SetSpeculativeDecodingConfig(*cfg.speculativeDecoding); err != nil {
+			return err
+		}
+	} else if cfg.speculativeDecodingEnabled != nil {
 		if err := s.SetEnableSpeculativeDecoding(*cfg.speculativeDecodingEnabled); err != nil {
+			return err
+		}
+	}
+	if cfg.enableYNNPACK != nil {
+		if err := s.SetEnableYNNPACK(*cfg.enableYNNPACK); err != nil {
+			return err
+		}
+	} else if cfg.backend == "ynnpack" {
+		if err := s.SetEnableYNNPACK(true); err != nil {
+			return err
+		}
+	}
+	if cfg.maxVisionTokensPerImage != nil {
+		if err := s.SetMaxVisionTokensPerImage(*cfg.maxVisionTokensPerImage); err != nil {
+			return err
+		}
+	}
+	if cfg.metalResidencySet != nil {
+		if err := s.SetGPUEnableMetalResidencySet(*cfg.metalResidencySet); err != nil {
+			return err
+		}
+	}
+	if cfg.gpuDecodeStepsPerSync != nil {
+		if err := s.SetGPUDecodeStepsPerSync(*cfg.gpuDecodeStepsPerSync); err != nil {
+			return err
+		}
+	}
+	if cfg.gpuWaitForWeightUploads != nil {
+		if err := s.SetGPUWaitForWeightUploads(*cfg.gpuWaitForWeightUploads); err != nil {
+			return err
+		}
+	}
+	if cfg.useRingbuffersLocalAttn != nil {
+		if err := s.SetUseRingbuffersLocalAttention(*cfg.useRingbuffersLocalAttn); err != nil {
+			return err
+		}
+	}
+	if cfg.singleThreadedExecution != nil {
+		if err := s.SetSingleThreadedExecution(*cfg.singleThreadedExecution); err != nil {
+			return err
+		}
+	}
+	if len(cfg.selectedSignatures) > 0 {
+		if err := s.SetSelectedSignatures(cfg.selectedSignatures); err != nil {
 			return err
 		}
 	}
@@ -262,6 +310,10 @@ func diagnoseLoadError(err error) error {
 		return fmt.Errorf("litertlm: New: %w (this may indicate a GPU memory allocation issue, such as the 2 GB per-allocation limit on the WebGPU/D3D12 delegate, or insufficient VRAM; consider running on CPU or using a smaller model)", err)
 	}
 	return fmt.Errorf("litertlm: New: %w", err)
+}
+
+func (c *Client) singleThreaded() bool {
+	return c.cfg.singleThreadedExecution != nil && *c.cfg.singleThreadedExecution
 }
 
 func translateBackend(b string) string {

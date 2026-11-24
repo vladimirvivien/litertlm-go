@@ -88,3 +88,69 @@ func (m Modality) String() string {
 		return "Modality(" + strconv.Itoa(int(m)) + ")"
 	}
 }
+
+// SpeculativeDecodingMode mirrors `LiteRtLmSpeculativeDecodingMode` in c/engine.h.
+type SpeculativeDecodingMode int32
+
+const (
+	SpeculativeDecodingOff      SpeculativeDecodingMode = 0
+	SpeculativeDecodingOn       SpeculativeDecodingMode = 1
+	SpeculativeDecodingAdaptive SpeculativeDecodingMode = 2
+)
+
+// String returns the human-readable name of the speculative decoding mode.
+func (m SpeculativeDecodingMode) String() string {
+	switch m {
+	case SpeculativeDecodingOff:
+		return "Off"
+	case SpeculativeDecodingOn:
+		return "On"
+	case SpeculativeDecodingAdaptive:
+		return "Adaptive"
+	default:
+		return "SpeculativeDecodingMode(" + strconv.Itoa(int(m)) + ")"
+	}
+}
+
+// ConstraintType mirrors `LiteRtLmConstraintType` in c/conversation.h.
+type ConstraintType int32
+
+const (
+	ConstraintNone       ConstraintType = 0
+	ConstraintRegex      ConstraintType = 1
+	ConstraintJSONSchema ConstraintType = 2
+)
+
+// String returns the human-readable name of the constraint type.
+func (c ConstraintType) String() string {
+	switch c {
+	case ConstraintNone:
+		return "None"
+	case ConstraintRegex:
+		return "Regex"
+	case ConstraintJSONSchema:
+		return "JsonSchema"
+	default:
+		return "ConstraintType(" + strconv.Itoa(int(c)) + ")"
+	}
+}
+
+// ConstraintProviderType mirrors `LiteRtLmConstraintProviderType` in c/conversation.h.
+type ConstraintProviderType int32
+
+const (
+	ConstraintProviderNone       ConstraintProviderType = 0
+	ConstraintProviderLLGuidance ConstraintProviderType = 1
+)
+
+// String returns the human-readable name of the constraint provider type.
+func (c ConstraintProviderType) String() string {
+	switch c {
+	case ConstraintProviderNone:
+		return "None"
+	case ConstraintProviderLLGuidance:
+		return "LlGuidance"
+	default:
+		return "ConstraintProviderType(" + strconv.Itoa(int(c)) + ")"
+	}
+}

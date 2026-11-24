@@ -14,25 +14,35 @@ type configFile struct {
 }
 
 type jsonModelConfig struct {
-	Backend                    *string  `json:"backend,omitempty"`
-	MaxTokens                  *int     `json:"max_tokens,omitempty"`
-	CacheDir                   *string  `json:"cache_dir,omitempty"`
-	SpeculativeDecodingEnabled *bool    `json:"speculative_decoding_enabled,omitempty"`
-	ParallelSectionLoading     *bool    `json:"parallel_section_loading,omitempty"`
-	NumThreads                 *int     `json:"num_threads,omitempty"`
-	AudioNumThreads            *int     `json:"audio_num_threads,omitempty"`
-	LoraRank                   *int     `json:"lora_rank,omitempty"`
-	SupportedLoraRanks         []int    `json:"supported_lora_ranks,omitempty"`
-	AudioLoraRank              *int     `json:"audio_lora_rank,omitempty"`
-	SupportedAudioLoraRanks    []int    `json:"supported_audio_lora_ranks,omitempty"`
-	SamplerType                *string  `json:"sampler_type,omitempty"`
-	Temperature                *float32 `json:"temperature,omitempty"`
-	TopK                       *int     `json:"top_k,omitempty"`
-	TopP                       *float32 `json:"top_p,omitempty"`
-	Seed                       *int     `json:"seed,omitempty"`
-	LibPath                    *string  `json:"lib_path,omitempty"`
-	LibName                    *string  `json:"lib_name,omitempty"`
-	ModelPath                  *string  `json:"model_path,omitempty"`
+	Backend                     *string  `json:"backend,omitempty"`
+	MaxTokens                   *int     `json:"max_tokens,omitempty"`
+	CacheDir                    *string  `json:"cache_dir,omitempty"`
+	SpeculativeDecodingEnabled  *bool    `json:"speculative_decoding_enabled,omitempty"`
+	SpeculativeDecodingMode     *string  `json:"speculative_decoding_mode,omitempty"`
+	SpeculativeDecodingLenience *float32 `json:"speculative_decoding_lenience,omitempty"`
+	ParallelSectionLoading      *bool    `json:"parallel_section_loading,omitempty"`
+	EnableYNNPACK               *bool    `json:"enable_ynnpack,omitempty"`
+	MaxVisionTokensPerImage     *int     `json:"max_vision_tokens_per_image,omitempty"`
+	MetalResidencySet           *bool    `json:"metal_residency_set,omitempty"`
+	GPUDecodeStepsPerSync       *int     `json:"gpu_decode_steps_per_sync,omitempty"`
+	GPUWaitForWeightUploads     *bool    `json:"gpu_wait_for_weight_uploads,omitempty"`
+	UseRingbuffersLocalAttn     *bool    `json:"use_ringbuffers_local_attention,omitempty"`
+	SingleThreadedExecution     *bool    `json:"single_threaded_execution,omitempty"`
+	SelectedSignatures          []string `json:"selected_signatures,omitempty"`
+	NumThreads                  *int     `json:"num_threads,omitempty"`
+	AudioNumThreads             *int     `json:"audio_num_threads,omitempty"`
+	LoraRank                    *int     `json:"lora_rank,omitempty"`
+	SupportedLoraRanks          []int    `json:"supported_lora_ranks,omitempty"`
+	AudioLoraRank               *int     `json:"audio_lora_rank,omitempty"`
+	SupportedAudioLoraRanks     []int    `json:"supported_audio_lora_ranks,omitempty"`
+	SamplerType                 *string  `json:"sampler_type,omitempty"`
+	Temperature                 *float32 `json:"temperature,omitempty"`
+	TopK                        *int     `json:"top_k,omitempty"`
+	TopP                        *float32 `json:"top_p,omitempty"`
+	Seed                        *int     `json:"seed,omitempty"`
+	LibPath                     *string  `json:"lib_path,omitempty"`
+	LibName                     *string  `json:"lib_name,omitempty"`
+	ModelPath                   *string  `json:"model_path,omitempty"`
 }
 
 // WithConfigFile reads settings from a LiteRT-LM config.json file and applies them
@@ -88,8 +98,49 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 	if mc.SpeculativeDecodingEnabled != nil {
 		c.speculativeDecodingEnabled = new(*mc.SpeculativeDecodingEnabled)
 	}
+	if mc.SpeculativeDecodingMode != nil || mc.SpeculativeDecodingLenience != nil {
+		var sd SpeculativeDecodingConfig
+		if c.speculativeDecoding != nil {
+			sd = *c.speculativeDecoding
+		}
+		if mc.SpeculativeDecodingMode != nil {
+			mode, err := parseSpeculativeDecodingMode(*mc.SpeculativeDecodingMode)
+			if err != nil {
+				return err
+			}
+			sd.Mode = mode
+		}
+		if mc.SpeculativeDecodingLenience != nil {
+			sd.Lenience = *mc.SpeculativeDecodingLenience
+		}
+		c.speculativeDecoding = new(sd)
+	}
 	if mc.ParallelSectionLoading != nil {
 		c.parallelSectionLoading = new(*mc.ParallelSectionLoading)
+	}
+	if mc.EnableYNNPACK != nil {
+		c.enableYNNPACK = new(*mc.EnableYNNPACK)
+	}
+	if mc.MaxVisionTokensPerImage != nil {
+		c.maxVisionTokensPerImage = new(*mc.MaxVisionTokensPerImage)
+	}
+	if mc.MetalResidencySet != nil {
+		c.metalResidencySet = new(*mc.MetalResidencySet)
+	}
+	if mc.GPUDecodeStepsPerSync != nil {
+		c.gpuDecodeStepsPerSync = new(*mc.GPUDecodeStepsPerSync)
+	}
+	if mc.GPUWaitForWeightUploads != nil {
+		c.gpuWaitForWeightUploads = new(*mc.GPUWaitForWeightUploads)
+	}
+	if mc.UseRingbuffersLocalAttn != nil {
+		c.useRingbuffersLocalAttn = new(*mc.UseRingbuffersLocalAttn)
+	}
+	if mc.SingleThreadedExecution != nil {
+		c.singleThreadedExecution = new(*mc.SingleThreadedExecution)
+	}
+	if len(mc.SelectedSignatures) > 0 {
+		c.selectedSignatures = slices.Clone(mc.SelectedSignatures)
 	}
 	if mc.NumThreads != nil {
 		c.numThreads = new(*mc.NumThreads)
@@ -173,5 +224,18 @@ func parseSamplerType(s string) (SamplerType, error) {
 		return SamplerTypeUnspecified, nil
 	default:
 		return 0, fmt.Errorf("unknown sampler type %q (use top_k | top_p | greedy)", s)
+	}
+}
+
+func parseSpeculativeDecodingMode(s string) (SpeculativeDecodingMode, error) {
+	switch strings.ToLower(s) {
+	case "off", "":
+		return SpeculativeDecodingOff, nil
+	case "on":
+		return SpeculativeDecodingOn, nil
+	case "adaptive":
+		return SpeculativeDecodingAdaptive, nil
+	default:
+		return 0, fmt.Errorf("unknown speculative decoding mode %q (use off | on | adaptive)", s)
 	}
 }

@@ -68,23 +68,63 @@ func extractStreamEnvelope(raw string) (string, []ToolCall) {
 }
 
 func buildOptionalArgs(cfg runtimeConfig) (OptionalArgs, error) {
-	if cfg.visualTokenBudget == nil && cfg.maxOutputTokens <= 0 {
+	hasConstraint := cfg.constraintType != ConstraintNone || cfg.constraintPattern != ""
+	hasToolChoice := !cfg.toolChoice.IsZero()
+	if cfg.visualTokenBudget == nil && cfg.maxOutputTokens <= 0 &&
+		cfg.thinking == nil && !hasConstraint && !hasToolChoice &&
+		cfg.repetitionPenalty == nil && cfg.noRepeatNgram == nil && cfg.suppressTokens == nil {
 		return 0, nil
 	}
 	o, err := NewOptionalArgs()
 	if err != nil {
 		return 0, fmt.Errorf("litertlm: per-call options: %w", err)
 	}
+	fail := func(err error) (OptionalArgs, error) {
+		o.Delete()
+		return 0, fmt.Errorf("litertlm: per-call options: %w", err)
+	}
 	if cfg.visualTokenBudget != nil {
 		if err = o.SetVisualTokenBudget(*cfg.visualTokenBudget); err != nil {
-			o.Delete()
-			return 0, fmt.Errorf("litertlm: per-call options: %w", err)
+			return fail(err)
 		}
 	}
 	if cfg.maxOutputTokens > 0 {
 		if err = o.SetMaxOutputTokens(cfg.maxOutputTokens); err != nil {
-			o.Delete()
-			return 0, fmt.Errorf("litertlm: per-call options: %w", err)
+			return fail(err)
+		}
+	}
+	if cfg.thinking != nil {
+		if err = o.SetThinkingConfig(cfg.thinking); err != nil {
+			return fail(err)
+		}
+	}
+	if hasConstraint {
+		if err = o.SetConstraint(cfg.constraintType, cfg.constraintPattern); err != nil {
+			return fail(err)
+		}
+	}
+	if hasToolChoice {
+		rawTC, encErr := cfg.toolChoice.JSON()
+		if encErr != nil {
+			return fail(encErr)
+		}
+		if err = o.SetToolChoice(rawTC); err != nil {
+			return fail(err)
+		}
+	}
+	if cfg.repetitionPenalty != nil {
+		if err = o.SetRepetitionPenalty(cfg.repetitionPenalty); err != nil {
+			return fail(err)
+		}
+	}
+	if cfg.noRepeatNgram != nil {
+		if err = o.SetNoRepeatNgram(cfg.noRepeatNgram); err != nil {
+			return fail(err)
+		}
+	}
+	if cfg.suppressTokens != nil {
+		if err = o.SetSuppressTokens(cfg.suppressTokens); err != nil {
+			return fail(err)
 		}
 	}
 	return o, nil

@@ -34,16 +34,20 @@ func (c SessionConfig) SetSamplerParams(p SamplerParams) error {
 	if c == 0 {
 		return fmt.Errorf("litertlm: set_sampler_params: invalid session config")
 	}
-	h, err := newSamplerParamsHandle(p)
-	if err != nil {
-		return err
-	}
-	defer h.delete()
+	return withTempHandle(
+		func() (samplerParamsHandle, error) { return newSamplerParamsHandle(p) },
+		func(h samplerParamsHandle) { h.delete() },
+		func(h samplerParamsHandle) error {
+			return setHandleConfig(c, "session config", sessionConfigSetSamplerParamsFunc, "session_config_set_sampler_params", h)
+		},
+	)
+}
 
-	err = callStatus(sessionConfigSetSamplerParamsFunc, "session_config_set_sampler_params",
-		unsafe.Pointer(&c), unsafe.Pointer(&h))
-	runtime.KeepAlive(h)
-	return err
+// SetSpeculativeDecodingConfig overrides the engine's speculative decoding
+// configuration for sessions constructed with this config.
+func (c SessionConfig) SetSpeculativeDecodingConfig(cfg SpeculativeDecodingConfig) error {
+	return setSpeculativeDecodingConfig(c, "session config", sessionConfigSetSpeculativeDecodingConfigFunc,
+		"session_config_set_speculative_decoding_config", cfg)
 }
 
 // SetLoRAPath sets the path to the text LoRA weights file for this session.
@@ -58,6 +62,30 @@ func (c SessionConfig) SetAudioLoRAPath(path string) error {
 
 // Delete releases a Session handle.
 func (s Session) Delete() { deleteHandle(s, sessionDeleteFunc) }
+
+// Clone returns an independent copy of s carrying its current prefill and KV state.
+// Caller must Delete() the cloned Session.
+func (s Session) Clone() (Session, error) {
+	if s == 0 {
+		return 0, fmt.Errorf("litertlm: session_clone: invalid session")
+	}
+	return callStatusHandle[Session](sessionCloneFunc, "session_clone", unsafe.Pointer(&s))
+}
+
+// SaveCheckpoint records the session's current state under label for later rewind.
+func (s Session) SaveCheckpoint(label string) error {
+	return setHandleString(s, "session", sessionSaveCheckpointFunc, "session_save_checkpoint", label)
+}
+
+// RewindToCheckpoint restores the session state saved under label.
+func (s Session) RewindToCheckpoint(label string) error {
+	return setHandleString(s, "session", sessionRewindToCheckpointFunc, "session_rewind_to_checkpoint", label)
+}
+
+// RewindToStep restores the session state to the given token step number.
+func (s Session) RewindToStep(step int) error {
+	return setHandleScalar(s, "session", sessionRewindToStepFunc, "session_rewind_to_step", int32(step))
+}
 
 // GenerateContent runs synchronous inference for the given multimodal
 // inputs. Caller must Delete() the returned Responses.
@@ -137,10 +165,12 @@ func (s Session) RunDecode() (Responses, error) {
 		unsafe.Pointer(&s))
 }
 
-// ScoreTexts scores each candidate string against the prefilled
-// prompt. storeTokenLengths attaches the per-target tokenized length
-// to the returned Responses (read via Responses.TokenLength). Caller
-// must Delete() the result.
+// ScoreTexts scores candidate strings against the prefilled prompt. Pass one
+// target, or multiple single-token targets (C API 1.1.0+) scored from one
+// decode step. storeTokenLengths attaches tokenized target lengths (read via
+// Responses.TokenLength). Because scoring advances model state, rewind with
+// SaveCheckpoint/RewindToCheckpoint before further prefill or decode. Caller
+// must Delete() the returned Responses.
 func (s Session) ScoreTexts(targets []string, storeTokenLengths bool) (Responses, error) {
 	if s == 0 {
 		return 0, fmt.Errorf("litertlm: session_run_text_scoring: invalid session")

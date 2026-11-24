@@ -40,6 +40,9 @@ type chatConfig struct {
 	tools                           []ToolDefinition
 	initialMessages                 []Message
 	constrainedDecoding             bool
+	constraintProvider              *ConstraintProviderType
+	promptTemplate                  string
+	thinking                        *ThinkingConfig
 	maxToolHops                     int
 	extraContextJSON                string
 	filterChannelContentFromKVCache *bool
@@ -74,6 +77,21 @@ func WithConstrainedDecoding(on bool) ChatOption {
 	return func(c *chatConfig) { c.constrainedDecoding = on }
 }
 
+// WithConstraintProvider selects the constrained-decoding grammar provider.
+func WithConstraintProvider(provider ConstraintProviderType) ChatOption {
+	return func(c *chatConfig) { c.constraintProvider = new(provider) }
+}
+
+// WithPromptTemplate overrides the model's default chat prompt template.
+func WithPromptTemplate(tmpl string) ChatOption {
+	return func(c *chatConfig) { c.promptTemplate = tmpl }
+}
+
+// WithThinking sets conversation-wide thinking/reasoning configuration.
+func WithThinking(cfg ThinkingConfig) ChatOption {
+	return func(c *chatConfig) { c.thinking = new(cfg) }
+}
+
 // WithExtraContext attaches an extra-context JSON string used in the
 // conversation preface. Empty string is a no-op.
 func WithExtraContext(extraContextJSON string) ChatOption {
@@ -103,10 +121,11 @@ type Chat struct {
 	cfg  ConversationConfig
 	conv Conversation
 
-	mu          sync.Mutex
-	closed      bool
-	tools       map[string]ToolDefinition
-	maxToolHops int
+	mu             sync.Mutex
+	closed         bool
+	tools          map[string]ToolDefinition
+	maxToolHops    int
+	singleThreaded bool
 }
 
 type chatBuildSpec struct {
@@ -185,6 +204,24 @@ func (c *Client) buildChat(spec chatBuildSpec) (*Chat, error) {
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
 	}
 
+	if spec.cfg.promptTemplate != "" {
+		if err = convCfg.SetPromptTemplate(spec.cfg.promptTemplate); err != nil {
+			convCfg.Delete()
+			return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+		}
+	}
+	if spec.cfg.constraintProvider != nil {
+		if err = convCfg.SetConstraintProvider(*spec.cfg.constraintProvider); err != nil {
+			convCfg.Delete()
+			return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+		}
+	}
+	if spec.cfg.thinking != nil {
+		if err = convCfg.SetThinkingConfig(*spec.cfg.thinking); err != nil {
+			convCfg.Delete()
+			return nil, fmt.Errorf("litertlm: NewChat: %w", err)
+		}
+	}
 	if err = convCfg.SetExtraContext(spec.cfg.extraContextJSON); err != nil {
 		convCfg.Delete()
 		return nil, fmt.Errorf("litertlm: NewChat: %w", err)
@@ -203,10 +240,11 @@ func (c *Client) buildChat(spec chatBuildSpec) (*Chat, error) {
 	}
 
 	return &Chat{
-		cfg:         convCfg,
-		conv:        conv,
-		tools:       spec.registry,
-		maxToolHops: spec.cfg.maxToolHops,
+		cfg:            convCfg,
+		conv:           conv,
+		tools:          spec.registry,
+		maxToolHops:    spec.cfg.maxToolHops,
+		singleThreaded: c.singleThreaded(),
 	}, nil
 }
 
@@ -268,6 +306,7 @@ func (ch *Chat) Clone() (*Chat, error) {
 	conv := ch.conv
 	tools := ch.tools
 	hops := ch.maxToolHops
+	singleThreaded := ch.singleThreaded
 	ch.mu.Unlock()
 
 	clonedConv, err := conv.Clone()
@@ -275,9 +314,10 @@ func (ch *Chat) Clone() (*Chat, error) {
 		return nil, fmt.Errorf("litertlm: Chat.Clone: %w", err)
 	}
 	return &Chat{
-		conv:        clonedConv,
-		tools:       tools,
-		maxToolHops: hops,
+		conv:           clonedConv,
+		tools:          tools,
+		maxToolHops:    hops,
+		singleThreaded: singleThreaded,
 	}, nil
 }
 
@@ -309,6 +349,19 @@ func (ch *Chat) Send(ctx context.Context, message string, opts ...RuntimeOption)
 	return ch.send(ctx, conv, string(msgJSON), resolveRuntimeConfig(opts))
 }
 
+type singleThreadedConv struct{ Conversation }
+
+func (s singleThreadedConv) SendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs) <-chan StreamChunk {
+	return s.sendMessageStreamCh(messageJSON, extraContext, opts, true)
+}
+
+func (ch *Chat) streamTransport(conv Conversation) chatTransport {
+	if ch.singleThreaded {
+		return singleThreadedConv{conv}
+	}
+	return conv
+}
+
 // SendStream issues a user-role message and returns an iterator over
 // streamed text chunks, transparently running ManagedTool dispatch hops.
 func (ch *Chat) SendStream(ctx context.Context, message string, opts ...RuntimeOption) iter.Seq2[Chunk, error] {
@@ -323,7 +376,7 @@ func (ch *Chat) SendStream(ctx context.Context, message string, opts ...RuntimeO
 			yield(Chunk{}, fmt.Errorf("litertlm: SendStream: marshal: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, conv, string(msgJSON), resolveRuntimeConfig(opts), yield)
+		ch.streamWithDispatch(ctx, ch.streamTransport(conv), string(msgJSON), resolveRuntimeConfig(opts), yield)
 	}
 }
 
@@ -360,7 +413,7 @@ func (ch *Chat) SendMultiStream(ctx context.Context, parts []Part, opts ...Runti
 			yield(Chunk{}, fmt.Errorf("litertlm: SendMultiStream: %w", err))
 			return
 		}
-		ch.streamWithDispatch(ctx, conv, msgJSON, resolveRuntimeConfig(opts), yield)
+		ch.streamWithDispatch(ctx, ch.streamTransport(conv), msgJSON, resolveRuntimeConfig(opts), yield)
 	}
 }
 

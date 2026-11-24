@@ -8,8 +8,8 @@ var ffiTypeSizeT = ffi.TypeUint64
 
 // Every exported litert_lm_* function in the LiteRT-LM C API (1.0.0+) has a
 // package-level *lazyFun declared here. Each one resolves its C symbol against
-// libHandle on first Call, panicking with the symbol name if the loaded
-// library doesn't export it.
+// libHandle on first call, returning StatusUnimplemented if the loaded
+// library does not export it.
 
 var (
 	// ---- API Version & Error Reporter ----
@@ -43,6 +43,76 @@ var (
 		"litert_lm_sampler_params_set_seed",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 
+	// ---- Speculative Decoding Config ----
+	speculativeDecodingConfigCreateFunc = newLazyFun(
+		"litert_lm_speculative_decoding_config_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	speculativeDecodingConfigDeleteFunc = newLazyFun(
+		"litert_lm_speculative_decoding_config_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	speculativeDecodingConfigSetModeFunc = newLazyFun(
+		"litert_lm_speculative_decoding_config_set_mode",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	speculativeDecodingConfigSetLenienceFunc = newLazyFun(
+		"litert_lm_speculative_decoding_config_set_lenience",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+
+	// ---- Logit Penalty & Thinking Configs ----
+	repetitionPenaltyConfigCreateFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	repetitionPenaltyConfigDeleteFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	repetitionPenaltyConfigSetRepetitionPenaltyFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_set_repetition_penalty",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+	repetitionPenaltyConfigSetPresencePenaltyFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_set_presence_penalty",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+	repetitionPenaltyConfigSetFrequencyPenaltyFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_set_frequency_penalty",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeFloat)
+	repetitionPenaltyConfigSetWindowSizeFunc = newLazyFun(
+		"litert_lm_repetition_penalty_config_set_window_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+
+	noRepeatNgramConfigCreateFunc = newLazyFun(
+		"litert_lm_no_repeat_ngram_config_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	noRepeatNgramConfigDeleteFunc = newLazyFun(
+		"litert_lm_no_repeat_ngram_config_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	noRepeatNgramConfigSetNoRepeatNgramSizeFunc = newLazyFun(
+		"litert_lm_no_repeat_ngram_config_set_no_repeat_ngram_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	noRepeatNgramConfigSetWindowSizeFunc = newLazyFun(
+		"litert_lm_no_repeat_ngram_config_set_window_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+
+	suppressTokensConfigCreateFunc = newLazyFun(
+		"litert_lm_suppress_tokens_config_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	suppressTokensConfigDeleteFunc = newLazyFun(
+		"litert_lm_suppress_tokens_config_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	suppressTokensConfigSetSuppressTokensFunc = newLazyFun(
+		"litert_lm_suppress_tokens_config_set_suppress_tokens",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
+
+	thinkingConfigCreateFunc = newLazyFun(
+		"litert_lm_thinking_config_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	thinkingConfigDeleteFunc = newLazyFun(
+		"litert_lm_thinking_config_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	thinkingConfigSetEnableThinkingFunc = newLazyFun(
+		"litert_lm_thinking_config_set_enable_thinking",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	thinkingConfigSetThinkingTokenBudgetFunc = newLazyFun(
+		"litert_lm_thinking_config_set_thinking_token_budget",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+
 	// ---- Session config ----
 	sessionConfigCreateFunc = newLazyFun(
 		"litert_lm_session_config_create",
@@ -61,6 +131,9 @@ var (
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionConfigSetAudioLoraPathFunc = newLazyFun(
 		"litert_lm_session_config_set_audio_lora_path",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionConfigSetSpeculativeDecodingConfigFunc = newLazyFun(
+		"litert_lm_session_config_set_speculative_decoding_config",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 	sessionConfigDeleteFunc = newLazyFun(
 		"litert_lm_session_config_delete",
@@ -119,6 +192,24 @@ var (
 		&ffi.TypeUint8,   // stream_tool_calls (bool)
 		&ffi.TypePointer, // channel_name (const char*)
 	)
+	conversationConfigSetPromptTemplateFunc = newLazyFun(
+		"litert_lm_conversation_config_set_prompt_template",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // prompt_template (const char*)
+	)
+	conversationConfigSetConstraintProviderFunc = newLazyFun(
+		"litert_lm_conversation_config_set_constraint_provider",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // config
+		&ffi.TypeSint32,  // provider_type (LiteRtLmConstraintProviderType)
+	)
+	conversationConfigSetThinkingConfigFunc = newLazyFun(
+		"litert_lm_conversation_config_set_thinking_config",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // config
+		&ffi.TypePointer, // thinking_config (const LiteRtLmThinkingConfig*)
+	)
 	conversationConfigDeleteFunc = newLazyFun(
 		"litert_lm_conversation_config_delete",
 		&ffi.TypeVoid, &ffi.TypePointer)
@@ -136,6 +227,28 @@ var (
 	conversationOptionalArgsSetMaxOutputTokensFunc = newLazyFun(
 		"litert_lm_conversation_optional_args_set_max_output_tokens",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	conversationOptionalArgsSetRepetitionPenaltyConfigFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_repetition_penalty_config",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	conversationOptionalArgsSetNoRepeatNgramConfigFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_no_repeat_ngram_config",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	conversationOptionalArgsSetSuppressTokensConfigFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_suppress_tokens_config",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	conversationOptionalArgsSetThinkingConfigFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_thinking_config",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	conversationOptionalArgsSetConstraintFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_constraint",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // optional_args
+		&ffi.TypeSint32,  // constraint_type (LiteRtLmConstraintType)
+		&ffi.TypePointer, // constraint_string (const char*)
+	)
+	conversationOptionalArgsSetToolChoiceFunc = newLazyFun(
+		"litert_lm_conversation_optional_args_set_tool_choice",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Logging ----
 	setMinLogLevelFunc = newLazyFun(
@@ -215,6 +328,33 @@ var (
 	engineSettingsSetSupportedAudioLoraRanksFunc = newLazyFun(
 		"litert_lm_engine_settings_set_supported_audio_lora_ranks",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
+	engineSettingsSetEnableYnnpackFunc = newLazyFun(
+		"litert_lm_engine_settings_set_enable_ynnpack",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetMaxVisionTokensPerImageFunc = newLazyFun(
+		"litert_lm_engine_settings_set_max_vision_tokens_per_image",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetSpeculativeDecodingConfigFunc = newLazyFun(
+		"litert_lm_engine_settings_set_speculative_decoding_config",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	engineSettingsSetGpuEnableMetalResidencySetFunc = newLazyFun(
+		"litert_lm_engine_settings_set_gpu_enable_metal_residency_set",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetGpuDecodeStepsPerSyncFunc = newLazyFun(
+		"litert_lm_engine_settings_set_gpu_decode_steps_per_sync",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	engineSettingsSetGpuWaitForWeightUploadsFunc = newLazyFun(
+		"litert_lm_engine_settings_set_gpu_wait_for_weight_uploads",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetUseRingbuffersLocalAttentionFunc = newLazyFun(
+		"litert_lm_engine_settings_set_use_ringbuffers_local_attention",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetSingleThreadedExecutionFunc = newLazyFun(
+		"litert_lm_engine_settings_set_single_threaded_execution",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	engineSettingsSetSelectedSignaturesFunc = newLazyFun(
+		"litert_lm_engine_settings_set_selected_signatures",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffiTypeSizeT)
 
 	// ---- Engine ----
 	engineCreateFunc = newLazyFun(
@@ -279,6 +419,21 @@ var (
 	sessionRunDecodeFunc = newLazyFun(
 		"litert_lm_session_run_decode",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionRunDecodeAsyncFunc = newLazyFun(
+		"litert_lm_session_run_decode_async",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer, &ffi.TypePointer)
+	sessionCloneFunc = newLazyFun(
+		"litert_lm_session_clone",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionSaveCheckpointFunc = newLazyFun(
+		"litert_lm_session_save_checkpoint",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionRewindToCheckpointFunc = newLazyFun(
+		"litert_lm_session_rewind_to_checkpoint",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	sessionRewindToStepFunc = newLazyFun(
+		"litert_lm_session_rewind_to_step",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
 	sessionRunTextScoringFunc = newLazyFun(
 		"litert_lm_session_run_text_scoring",
 		&ffi.TypeSint32,
@@ -360,6 +515,9 @@ var (
 	benchmarkInfoGetDecodeTokensPerSecAtFunc = newLazyFun(
 		"litert_lm_benchmark_info_get_decode_tokens_per_sec_at",
 		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
+	benchmarkInfoGetMaxNumTokensFunc = newLazyFun(
+		"litert_lm_benchmark_info_get_max_num_tokens",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 
 	// ---- Conversation ----
 	conversationCreateFunc = newLazyFun(
@@ -392,6 +550,9 @@ var (
 	)
 	conversationCancelProcessFunc = newLazyFun(
 		"litert_lm_conversation_cancel_process",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	conversationWaitUntilDoneFunc = newLazyFun(
+		"litert_lm_conversation_wait_until_done",
 		&ffi.TypeSint32, &ffi.TypePointer)
 	conversationRenderMessageToStringFunc = newLazyFun(
 		"litert_lm_conversation_render_message_to_string",

@@ -120,7 +120,7 @@ go run ./examples/bot -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-
 go run ./examples/autotool -get-lib v0.19.1 -get-model litert-community/gemma3-1b-it-int4
 ```
 
-See [`examples/README.md`](./examples/README.md) for the complete index of 38 runnable examples.
+See [`examples/README.md`](./examples/README.md) for the complete index of 43 runnable examples.
 
 ### Multimodal Demo
 

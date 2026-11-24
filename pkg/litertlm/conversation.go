@@ -111,6 +111,35 @@ func (c ConversationConfig) SetStreamToolCalls(stream bool, channelName string) 
 	return err
 }
 
+// SetPromptTemplate overrides the chat template string used for this conversation.
+func (c ConversationConfig) SetPromptTemplate(tmpl string) error {
+	return setHandleString(c, "conversation config",
+		conversationConfigSetPromptTemplateFunc, "conversation_config_set_prompt_template", tmpl)
+}
+
+// SetConstraintProvider selects the constrained-decoding backend provider
+// (e.g. ConstraintProviderLLGuidance, or ConstraintProviderNone to unset).
+func (c ConversationConfig) SetConstraintProvider(provider ConstraintProviderType) error {
+	return setHandleScalar(c, "conversation config",
+		conversationConfigSetConstraintProviderFunc, "conversation_config_set_constraint_provider", int32(provider))
+}
+
+// SetThinkingConfig sets default thinking behavior and token budget on the
+// conversation config.
+func (c ConversationConfig) SetThinkingConfig(cfg ThinkingConfig) error {
+	if c == 0 {
+		return fmt.Errorf("litertlm: conversation_config_set_thinking_config: invalid conversation config")
+	}
+	return withTempHandle(
+		func() (thinkingConfigHandle, error) { return newThinkingConfigHandle(cfg) },
+		func(h thinkingConfigHandle) { h.delete() },
+		func(h thinkingConfigHandle) error {
+			return setHandleConfig(c, "conversation config",
+				conversationConfigSetThinkingConfigFunc, "conversation_config_set_thinking_config", h)
+		},
+	)
+}
+
 // Delete releases a ConversationConfig handle.
 func (c ConversationConfig) Delete() { deleteHandle(c, conversationConfigDeleteFunc) }
 
@@ -211,6 +240,15 @@ func (c Conversation) Cancel() {
 	}
 	var status int32
 	_ = conversationCancelProcessFunc.callErr(unsafe.Pointer(&status), unsafe.Pointer(&c))
+}
+
+// WaitUntilDone drives and waits for all pending tasks in c when the engine was
+// created with single-threaded execution enabled.
+func (c Conversation) WaitUntilDone() error {
+	if c == 0 {
+		return fmt.Errorf("litertlm: conversation_wait_until_done: invalid conversation")
+	}
+	return callStatus(conversationWaitUntilDoneFunc, "conversation_wait_until_done", unsafe.Pointer(&c))
 }
 
 // BenchmarkInfo returns conversation-level benchmark metrics. Requires

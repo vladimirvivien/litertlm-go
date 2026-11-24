@@ -159,3 +159,69 @@ func TestWithConfigFile_ErrorPropagation(t *testing.T) {
 		}
 	})
 }
+
+func TestWithConfigFile_Phase2Fields(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+
+	jsonContent := `{
+		"default": {
+			"speculative_decoding_mode": "adaptive",
+			"speculative_decoding_lenience": 0.25,
+			"enable_ynnpack": true,
+			"max_vision_tokens_per_image": 512,
+			"metal_residency_set": true,
+			"gpu_decode_steps_per_sync": 4,
+			"gpu_wait_for_weight_uploads": false,
+			"use_ringbuffers_local_attention": true,
+			"single_threaded_execution": true,
+			"selected_signatures": ["prefill_1024", "decode"]
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(jsonContent), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := clientConfig{}
+	WithConfigFile(configPath, "")(&cfg)
+	if cfg.err != nil {
+		t.Fatalf("unexpected error: %v", cfg.err)
+	}
+	if cfg.speculativeDecoding == nil || cfg.speculativeDecoding.Mode != SpeculativeDecodingAdaptive || cfg.speculativeDecoding.Lenience != 0.25 {
+		t.Fatalf("speculativeDecoding = %+v", cfg.speculativeDecoding)
+	}
+	if cfg.enableYNNPACK == nil || !*cfg.enableYNNPACK {
+		t.Errorf("enableYNNPACK = %v, want true", cfg.enableYNNPACK)
+	}
+	if cfg.maxVisionTokensPerImage == nil || *cfg.maxVisionTokensPerImage != 512 {
+		t.Errorf("maxVisionTokensPerImage = %v, want 512", cfg.maxVisionTokensPerImage)
+	}
+	if cfg.metalResidencySet == nil || !*cfg.metalResidencySet {
+		t.Errorf("metalResidencySet = %v, want true", cfg.metalResidencySet)
+	}
+	if cfg.gpuDecodeStepsPerSync == nil || *cfg.gpuDecodeStepsPerSync != 4 {
+		t.Errorf("gpuDecodeStepsPerSync = %v, want 4", cfg.gpuDecodeStepsPerSync)
+	}
+	if cfg.gpuWaitForWeightUploads == nil || *cfg.gpuWaitForWeightUploads {
+		t.Errorf("gpuWaitForWeightUploads = %v, want false", cfg.gpuWaitForWeightUploads)
+	}
+	if cfg.useRingbuffersLocalAttn == nil || !*cfg.useRingbuffersLocalAttn {
+		t.Errorf("useRingbuffersLocalAttn = %v, want true", cfg.useRingbuffersLocalAttn)
+	}
+	if cfg.singleThreadedExecution == nil || !*cfg.singleThreadedExecution {
+		t.Errorf("singleThreadedExecution = %v, want true", cfg.singleThreadedExecution)
+	}
+	if len(cfg.selectedSignatures) != 2 || cfg.selectedSignatures[0] != "prefill_1024" || cfg.selectedSignatures[1] != "decode" {
+		t.Errorf("selectedSignatures = %v", cfg.selectedSignatures)
+	}
+
+	badPath := filepath.Join(tmp, "bad_mode.json")
+	if err := os.WriteFile(badPath, []byte(`{"default":{"speculative_decoding_mode":"invalid"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile bad: %v", err)
+	}
+	badCfg := clientConfig{}
+	WithConfigFile(badPath, "")(&badCfg)
+	if badCfg.err == nil {
+		t.Fatal("expected error for invalid speculative_decoding_mode")
+	}
+}

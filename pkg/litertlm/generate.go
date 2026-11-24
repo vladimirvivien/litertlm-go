@@ -51,7 +51,13 @@ func (c *Client) runConversation(ctx context.Context, parts []Part, cfg runtimeC
 		return "", nil, err
 	}
 
-	raw, err := conv.SendMessage(msgJSON, "", OptionalArgs(0))
+	optArgs, err := buildOptionalArgs(cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	defer optArgs.Delete()
+
+	raw, err := conv.SendMessage(msgJSON, "", optArgs)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return "", nil, cerr
@@ -100,7 +106,8 @@ func (c *Client) openConversation(cfg runtimeConfig) (Conversation, Conversation
 		sessCfg.Delete()
 		return 0, 0, err
 	}
-	convCfg, err := NewConversationConfig(engine, sessCfg, "", "", "", false)
+	constrained := cfg.constraintType != ConstraintNone
+	convCfg, err := NewConversationConfig(engine, sessCfg, "", "", "", constrained)
 	sessCfg.Delete()
 	if err != nil {
 		return 0, 0, err
@@ -152,7 +159,14 @@ func (c *Client) streamConversation(ctx context.Context, parts []Part, cfg runti
 			return
 		}
 
-		ch := conv.SendMessageStreamCh(msgJSON, "", OptionalArgs(0))
+		optArgs, err := buildOptionalArgs(cfg)
+		if err != nil {
+			yield(Chunk{}, err)
+			return
+		}
+		defer optArgs.Delete()
+
+		ch := conv.sendMessageStreamCh(msgJSON, "", optArgs, c.singleThreaded())
 		broken := false
 		for sc := range ch {
 			if broken {

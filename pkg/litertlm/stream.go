@@ -200,10 +200,40 @@ func (s Session) GenerateContentStreamCh(inputs []InputData) <-chan StreamChunk 
 	})
 }
 
+// RunDecodeAsync starts non-blocking decoding for inputs previously added via
+// Session.RunPrefill, delivering chunks to cb until Final=true.
+func (s Session) RunDecodeAsync(cb func(StreamChunk)) error {
+	if s == 0 {
+		return fmt.Errorf("litertlm: run_decode_async: invalid session")
+	}
+	if cb == nil {
+		return fmt.Errorf("litertlm: run_decode_async: nil callback")
+	}
+	return runStream("run_decode_async", cb, func(cbAddr, cbData uintptr) error {
+		return callStatus(sessionRunDecodeAsyncFunc, "session_run_decode_async",
+			unsafe.Pointer(&s),
+			unsafe.Pointer(&cbAddr),
+			unsafe.Pointer(&cbData),
+		)
+	})
+}
+
+// RunDecodeAsyncCh is the channel-idiomatic wrapper over RunDecodeAsync.
+// The returned channel closes after the Final chunk is delivered.
+func (s Session) RunDecodeAsyncCh() <-chan StreamChunk {
+	return streamToChan(func(cb func(StreamChunk)) error {
+		return s.RunDecodeAsync(cb)
+	})
+}
+
 // SendMessageStream is the Conversation-level streaming send. Mirrors
 // Session.GenerateContentStream. opts carries per-call knobs such as
 // the visual token budget; pass OptionalArgs(0) for C-side defaults.
 func (c Conversation) SendMessageStream(messageJSON, extraContext string, opts OptionalArgs, cb func(StreamChunk)) error {
+	return c.sendMessageStream(messageJSON, extraContext, opts, false, cb)
+}
+
+func (c Conversation) sendMessageStream(messageJSON, extraContext string, opts OptionalArgs, driveWait bool, cb func(StreamChunk)) error {
 	if c == 0 {
 		return fmt.Errorf("litertlm: send_message_stream: invalid conversation")
 	}
@@ -221,14 +251,20 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, opts O
 	}
 
 	err = runStream("send_message_stream", cb, func(cbAddr, cbData uintptr) error {
-		return callStatus(conversationSendMessageStreamFunc, "conversation_send_message_stream",
+		if callErr := callStatus(conversationSendMessageStreamFunc, "conversation_send_message_stream",
 			unsafe.Pointer(&c),
 			unsafe.Pointer(&msgPtr),
 			unsafe.Pointer(&ctxPtr),
 			unsafe.Pointer(&opts),
 			unsafe.Pointer(&cbAddr),
 			unsafe.Pointer(&cbData),
-		)
+		); callErr != nil {
+			return callErr
+		}
+		if driveWait {
+			return c.WaitUntilDone()
+		}
+		return nil
 	})
 	// Hold the C strings live until Final has been delivered.
 	runtime.KeepAlive(msgPtr)
@@ -239,7 +275,11 @@ func (c Conversation) SendMessageStream(messageJSON, extraContext string, opts O
 // SendMessageStreamCh is the channel variant of SendMessageStream.
 // opts carries per-call knobs; pass OptionalArgs(0) for C-side defaults.
 func (c Conversation) SendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs) <-chan StreamChunk {
+	return c.sendMessageStreamCh(messageJSON, extraContext, opts, false)
+}
+
+func (c Conversation) sendMessageStreamCh(messageJSON, extraContext string, opts OptionalArgs, driveWait bool) <-chan StreamChunk {
 	return streamToChan(func(cb func(StreamChunk)) error {
-		return c.SendMessageStream(messageJSON, extraContext, opts, cb)
+		return c.sendMessageStream(messageJSON, extraContext, opts, driveWait, cb)
 	})
 }

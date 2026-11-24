@@ -179,6 +179,57 @@ func (s EngineSettings) SetSupportedAudioLoRARanks(ranks []int) error {
 	return setHandleInt32Slice(s, "settings", engineSettingsSetSupportedAudioLoraRanksFunc, "engine_settings_set_supported_audio_lora_ranks", ranks)
 }
 
+// SetSpeculativeDecodingConfig configures default speculative decoding mode and
+// draft lenience for all sessions created by this engine.
+func (s EngineSettings) SetSpeculativeDecodingConfig(cfg SpeculativeDecodingConfig) error {
+	return setSpeculativeDecodingConfig(s, "settings", engineSettingsSetSpeculativeDecodingConfigFunc,
+		"engine_settings_set_speculative_decoding_config", cfg)
+}
+
+// SetEnableYNNPACK enables YNNPACK CPU delegation before XNNPACK.
+func (s EngineSettings) SetEnableYNNPACK(on bool) error {
+	return setHandleBool(s, "settings", engineSettingsSetEnableYnnpackFunc, "engine_settings_set_enable_ynnpack", on)
+}
+
+// SetMaxVisionTokensPerImage caps vision tokens generated per image.
+func (s EngineSettings) SetMaxVisionTokensPerImage(n int) error {
+	return setHandleScalar(s, "settings", engineSettingsSetMaxVisionTokensPerImageFunc, "engine_settings_set_max_vision_tokens_per_image", int32(n))
+}
+
+// SetGPUEnableMetalResidencySet enables Metal residency sets on Apple GPU backends.
+func (s EngineSettings) SetGPUEnableMetalResidencySet(on bool) error {
+	return setHandleBool(s, "settings", engineSettingsSetGpuEnableMetalResidencySetFunc, "engine_settings_set_gpu_enable_metal_residency_set", on)
+}
+
+// SetGPUDecodeStepsPerSync configures decode steps between GPU syncs.
+func (s EngineSettings) SetGPUDecodeStepsPerSync(n int) error {
+	return setHandleScalar(s, "settings", engineSettingsSetGpuDecodeStepsPerSyncFunc, "engine_settings_set_gpu_decode_steps_per_sync", int32(n))
+}
+
+// SetGPUWaitForWeightUploads configures whether GPU initialization waits for weight uploads.
+func (s EngineSettings) SetGPUWaitForWeightUploads(on bool) error {
+	return setHandleBool(s, "settings", engineSettingsSetGpuWaitForWeightUploadsFunc, "engine_settings_set_gpu_wait_for_weight_uploads", on)
+}
+
+// SetUseRingbuffersLocalAttention toggles ringbuffer KV storage for local attention layers.
+func (s EngineSettings) SetUseRingbuffersLocalAttention(on bool) error {
+	return setHandleBool(s, "settings", engineSettingsSetUseRingbuffersLocalAttentionFunc, "engine_settings_set_use_ringbuffers_local_attention", on)
+}
+
+// SetSingleThreadedExecution runs session execution on caller-driven threads rather than background workers.
+func (s EngineSettings) SetSingleThreadedExecution(on bool) error {
+	return setHandleBool(s, "settings", engineSettingsSetSingleThreadedExecutionFunc, "engine_settings_set_single_threaded_execution", on)
+}
+
+// SetSelectedSignatures restricts the main executor to the listed model signatures
+// (requires LiteRT-LM C API 1.1.0+).
+func (s EngineSettings) SetSelectedSignatures(signatures []string) error {
+	if err := requireAPIVersion(1, 1); err != nil {
+		return err
+	}
+	return setHandleStringSlice(s, "settings", engineSettingsSetSelectedSignaturesFunc, "engine_settings_set_selected_signatures", signatures)
+}
+
 // NewEngine loads the model described by settings. The caller still owns
 // the settings handle and may Delete() it once the engine is created.
 func NewEngine(settings EngineSettings) (Engine, error) {

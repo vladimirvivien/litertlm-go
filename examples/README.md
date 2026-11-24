@@ -55,7 +55,12 @@ go run ./examples/<name> [-backend cpu|gpu]
 | `examples/parallel-load/`     | Parallel vs serial `WithParallelSectionLoading` — `litertlm.New` wall-clock delta |
 | `examples/logging/`           | `SetMinLogLevel` — set the LiteRT-LM log severity floor at startup and toggle mid-program |
 | `examples/per-call-sampler/`  | `WithSampler` per-call override — three sampler shapes (Deterministic / Balanced / Creative) on the same Client |
-| `examples/speculative/`       | Side-by-side throughput comparison with / without `WithSpeculativeDecodingEnabled` |
+| `examples/speculative/`       | Three-way throughput comparison (`Off` / `On` / `Adaptive` + `-lenience`) with `WithSpeculativeDecoding` |
+| `examples/checkpoints/`       | KV-cache branching with `Session.SaveCheckpoint`, `RewindToCheckpoint`, `Session.Clone`, and `RunDecodeAsyncCh` |
+| `examples/constrained-json/`  | Grammar-enforced `ConstraintJSONSchema` and `ConstraintRegex` generation via `WithConstraintProvider` / `WithConstraint` |
+| `examples/thinking/`          | Session and per-turn reasoning budgets with `WithThinking`, `WithTurnThinking`, and KV channel filtering |
+| `examples/logit-penalties/`   | Controlling repetition loops and token bans with `WithRepetitionPenalty`, `WithNoRepeatNgram`, and `WithSuppressTokens` |
+| `examples/tool-choice/`       | Per-turn OpenAI `ToolChoice` policies (`auto`, `none`, `required`, forced function, `allowed_tools`, C API 1.1.0+) |
 | `examples/template-inspector/` | Template dry-run and raw prompt template introspection via `Chat.Conversation().RenderPreface()` |
 | `examples/fd-loader/`          | Sandboxed model loading directly from open file descriptors (`WithModelFD`) |
 | `examples/thread-tuner/`       | Benchmark profiling of CPU thread allocation sizes (`WithNumThreads`) |

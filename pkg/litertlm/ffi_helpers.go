@@ -54,6 +54,64 @@ func setHandleString[H cHandle](h H, handleName string, f *lazyFun, op, s string
 	return err
 }
 
+func setHandleConfig[H cHandle, C cHandle](h H, handleName string, f *lazyFun, op string, cfg C) error {
+	if h == 0 {
+		return fmt.Errorf("litertlm: %s: invalid %s", op, handleName)
+	}
+	err := callStatus(f, op, unsafe.Pointer(&h), unsafe.Pointer(&cfg))
+	runtime.KeepAlive(cfg)
+	return err
+}
+
+func setHandleStringSlice[H cHandle](h H, handleName string, f *lazyFun, op string, vals []string) error {
+	if h == 0 {
+		return fmt.Errorf("litertlm: %s: invalid %s", op, handleName)
+	}
+	if len(vals) == 0 {
+		return fmt.Errorf("litertlm: %s: empty slice", op)
+	}
+	ptrs := make([]*byte, len(vals))
+	for i, s := range vals {
+		p, err := cstr.BytePtrFromString(s)
+		if err != nil {
+			return err
+		}
+		ptrs[i] = p
+	}
+	arrPtr := unsafe.Pointer(&ptrs[0])
+	n := uint64(len(ptrs))
+	err := callStatus(f, op, unsafe.Pointer(&h), unsafe.Pointer(&arrPtr), unsafe.Pointer(&n))
+	runtime.KeepAlive(ptrs)
+	return err
+}
+
+func withTempHandle[H cHandle](build func() (H, error), del func(H), use func(H) error) error {
+	h, err := build()
+	if err != nil {
+		return err
+	}
+	defer del(h)
+	return use(h)
+}
+
+func setOptionalConfig[H cHandle, C any](
+	o OptionalArgs,
+	op string,
+	f *lazyFun,
+	cfg *C,
+	build func(C) (H, error),
+	del func(H),
+) error {
+	if cfg == nil {
+		return setHandleConfig[OptionalArgs, H](o, "optional args", f, op, 0)
+	}
+	return withTempHandle(
+		func() (H, error) { return build(*cfg) },
+		del,
+		func(h H) error { return setHandleConfig(o, "optional args", f, op, h) },
+	)
+}
+
 func setHandleInt32Slice[H cHandle](h H, handleName string, f *lazyFun, op string, vals []int) error {
 	if h == 0 {
 		return fmt.Errorf("litertlm: %s: invalid %s", op, handleName)

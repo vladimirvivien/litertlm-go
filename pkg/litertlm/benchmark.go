@@ -8,6 +8,7 @@ import "time"
 type Benchmark struct {
 	TimeToFirstToken    time.Duration
 	TotalInitTime       time.Duration
+	MaxNumTokens        int
 	PrefillTurns        int
 	DecodeTurns         int
 	PrefillTokenCounts  []int
@@ -29,6 +30,7 @@ func snapshotBenchmark(h BenchmarkInfo) *Benchmark {
 	b := &Benchmark{
 		TimeToFirstToken:    seconds(h.TimeToFirstToken()),
 		TotalInitTime:       seconds(h.TotalInitTime()),
+		MaxNumTokens:        h.MaxNumTokens(),
 		PrefillTurns:        prefillTurns,
 		DecodeTurns:         decodeTurns,
 		PrefillTokenCounts:  make([]int, prefillTurns),
@@ -93,4 +95,9 @@ func (b BenchmarkInfo) PrefillTokensPerSec(i int) float64 {
 // DecodeTokensPerSec returns decode throughput at turn i, in tokens/sec.
 func (b BenchmarkInfo) DecodeTokensPerSec(i int) float64 {
 	return getHandleScalarAt[BenchmarkInfo, float64](b, i, benchmarkInfoGetDecodeTokensPerSecAtFunc, "benchmark_info_get_decode_tokens_per_sec_at", 0)
+}
+
+// MaxNumTokens returns the KV cache token capacity reported by the engine.
+func (b BenchmarkInfo) MaxNumTokens() int {
+	return int(getHandleScalar[BenchmarkInfo, int32](b, benchmarkInfoGetMaxNumTokensFunc, "benchmark_info_get_max_num_tokens", 0))
 }

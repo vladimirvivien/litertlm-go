@@ -1,11 +1,9 @@
-// speculative compares decode throughput with and without
-// WithSpeculativeDecodingEnabled. Loads the model twice (the
-// speculative flag is engine-level, not per-call), runs the same
-// prompt against each Client, and prints a side-by-side benchmark
-// summary plus the computed speedup ratio.
+// speculative compares decode throughput across SpeculativeDecodingOff,
+// SpeculativeDecodingOn, and SpeculativeDecodingAdaptive (with optional
+// draft acceptance lenience) using WithSpeculativeDecoding.
 //
-// Requires a model that supports speculative (multi-token-prediction)
-// decoding, e.g. Gemma 4.
+// Requires a model that includes a speculative decoding drafter, such as
+// Gemma 4 E4B.
 package main
 
 import (
@@ -19,6 +17,7 @@ import (
 )
 
 type runResult struct {
+	label    string
 	wallTime time.Duration
 	bench    *litertlm.Benchmark
 	text     string
@@ -30,8 +29,9 @@ func main() {
 	getLib := flag.String("get-lib", "", "download LiteRT-LM shared library version if set (e.g. v0.19.1)")
 	libPath := flag.String("lib", os.Getenv("LITERTLM_LIB"), "directory holding LiteRT-LM shared libs (falls back to LITERTLM_LIB env)")
 	backend := flag.String("backend", "cpu", "inference backend (cpu | gpu)")
-	prompt := flag.String("prompt", "The capital of France is", "prompt text (completion-style works best with chat-tuned models on the raw Generate path)")
-	maxOutput := flag.Int("max-output", 256, "max output tokens per call")
+	prompt := flag.String("prompt", "Explain how speculative decoding accelerates autoregressive LLM inference.", "prompt text")
+	lenience := flag.Float64("lenience", 0, "speculative acceptance lenience in [0, 1] (0 = lossless)")
+	maxOutput := flag.Int("max-output", 128, "max output tokens per call")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -64,101 +64,119 @@ func main() {
 		os.Exit(2)
 	}
 
-	fmt.Println("=== Without speculative decoding ===")
-	off, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, *prompt, *maxOutput, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "baseline run: %v\n", err)
-		os.Exit(1)
+	modes := []struct {
+		label string
+		mode  litertlm.SpeculativeDecodingMode
+	}{
+		{"Off (baseline)", litertlm.SpeculativeDecodingOff},
+		{"On", litertlm.SpeculativeDecodingOn},
+		{"Adaptive", litertlm.SpeculativeDecodingAdaptive},
 	}
-	fmt.Println(off.text)
-	printBenchmark(off, "")
 
-	fmt.Println("\n=== With speculative decoding (multi-token prediction) ===")
-	on, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, *prompt, *maxOutput, true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "speculative run: %v\n", err)
-		os.Exit(1)
+	results := make([]runResult, 0, len(modes))
+	for _, entry := range modes {
+		fmt.Printf("=== Mode: %s (lenience=%.2f) ===\n", entry.label, *lenience)
+		r, err := runOnce(ctx, resolvedLib, resolvedModel, *backend, *prompt, *maxOutput, litertlm.SpeculativeDecodingConfig{
+			Mode:     entry.mode,
+			Lenience: float32(*lenience),
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s run: %v\n", entry.label, err)
+			os.Exit(1)
+		}
+		r.label = entry.label
+		fmt.Println(r.text)
+		printBenchmark(r, "  ")
+		fmt.Println()
+		results = append(results, r)
 	}
-	fmt.Println(on.text)
-	printBenchmark(on, "")
 
-	fmt.Println("\n=== Speedup ===")
-	printSpeedup(off, on)
+	if len(results) > 1 {
+		fmt.Println("=== Comparison vs Off ===")
+		base := results[0]
+		for _, r := range results[1:] {
+			printSpeedup(base, r)
+		}
+	}
 }
 
-func runOnce(ctx context.Context, libPath, model, backend, prompt string, maxOutput int, speculative bool) (runResult, error) {
-	opts := []litertlm.Option{
+func runOnce(ctx context.Context, libPath, model, backend, prompt string, maxOutput int, spec litertlm.SpeculativeDecodingConfig) (runResult, error) {
+	litertlm.SetMinLogLevel(litertlm.LogQuiet)
+	client, err := litertlm.New(ctx,
 		litertlm.WithLib(libPath),
 		litertlm.WithModel(model),
 		litertlm.WithBackend(backend),
 		litertlm.WithBenchmarkEnabled(),
-	}
-	if speculative {
-		opts = append(opts, litertlm.WithSpeculativeDecodingEnabled(true))
-	}
-
-	litertlm.SetMinLogLevel(litertlm.LogQuiet)
-	client, err := litertlm.New(ctx, opts...)
+		litertlm.WithSpeculativeDecoding(spec),
+	)
 	if err != nil {
 		return runResult{}, fmt.Errorf("new client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
+
+	chat, err := client.NewChat(ctx)
+	if err != nil {
+		return runResult{}, fmt.Errorf("new chat: %w", err)
+	}
+	defer func() { _ = chat.Close() }()
 
 	start := time.Now()
-	resp, err := client.GenerateResponse(ctx, prompt, litertlm.WithMaxOutputTokens(maxOutput))
+	reply, err := chat.Send(ctx, prompt, litertlm.WithMaxOutputTokens(maxOutput))
 	wall := time.Since(start)
 	if err != nil {
-		return runResult{}, fmt.Errorf("generate: %w", err)
+		return runResult{}, fmt.Errorf("chat send: %w", err)
 	}
-	bench := resp.Benchmark()
-	if bench == nil {
-		return runResult{}, fmt.Errorf("no benchmark captured (WithBenchmarkEnabled missing?)")
+	bi, err := chat.Conversation().BenchmarkInfo()
+	if err != nil {
+		return runResult{}, fmt.Errorf("benchmark info: %w", err)
 	}
-	return runResult{wallTime: wall, bench: bench, text: resp.Text()}, nil
+	defer bi.Delete()
+
+	bench := &litertlm.Benchmark{
+		TimeToFirstToken: time.Duration(bi.TimeToFirstToken() * float64(time.Second)),
+		TotalInitTime:    time.Duration(bi.TotalInitTime() * float64(time.Second)),
+		MaxNumTokens:     bi.MaxNumTokens(),
+		PrefillTurns:     bi.NumPrefillTurns(),
+		DecodeTurns:      bi.NumDecodeTurns(),
+	}
+	for i := range bench.PrefillTurns {
+		bench.PrefillTokenCounts = append(bench.PrefillTokenCounts, bi.PrefillTokenCount(i))
+		bench.PrefillTokensPerSec = append(bench.PrefillTokensPerSec, bi.PrefillTokensPerSec(i))
+	}
+	for i := range bench.DecodeTurns {
+		bench.DecodeTokenCounts = append(bench.DecodeTokenCounts, bi.DecodeTokenCount(i))
+		bench.DecodeTokensPerSec = append(bench.DecodeTokensPerSec, bi.DecodeTokensPerSec(i))
+	}
+	return runResult{wallTime: wall, bench: bench, text: reply.Text()}, nil
 }
 
 func printBenchmark(r runResult, indent string) {
 	b := r.bench
-	fmt.Printf("%s  Init time:               %v\n", indent, b.TotalInitTime)
-	fmt.Printf("%s  Time to first token:     %v\n", indent, b.TimeToFirstToken)
-	fmt.Printf("%s  Wall-clock generate:     %v\n", indent, r.wallTime)
+	fmt.Printf("%sInit time:           %v\n", indent, b.TotalInitTime)
+	fmt.Printf("%sMax KV tokens:       %d\n", indent, b.MaxNumTokens)
+	fmt.Printf("%sTime to first token: %v\n", indent, b.TimeToFirstToken)
+	fmt.Printf("%sWall-clock send:     %v\n", indent, r.wallTime)
 	for i, tps := range b.PrefillTokensPerSec {
-		fmt.Printf("%s  Prefill turn %d:          %.1f tok/s  (%d tokens)\n",
+		fmt.Printf("%sPrefill turn %d:      %.1f tok/s  (%d tokens)\n",
 			indent, i, tps, b.PrefillTokenCounts[i])
 	}
 	for i, tps := range b.DecodeTokensPerSec {
-		fmt.Printf("%s  Decode  turn %d:          %.1f tok/s  (%d tokens)\n",
+		fmt.Printf("%sDecode  turn %d:      %.1f tok/s  (%d tokens)\n",
 			indent, i, tps, b.DecodeTokenCounts[i])
 	}
 }
 
-func printSpeedup(off, on runResult) {
-	offDecode := totalDecodeTokens(off.bench)
-	onDecode := totalDecodeTokens(on.bench)
-
-	offTPS := avg(off.bench.DecodeTokensPerSec)
-	onTPS := avg(on.bench.DecodeTokensPerSec)
-
-	fmt.Printf("  Decode tokens (off / on):  %d / %d\n", offDecode, onDecode)
-	fmt.Printf("  Decode tok/s  (off / on):  %.1f / %.1f", offTPS, onTPS)
-	if offTPS > 0 {
-		fmt.Printf("   (%.2f×)\n", onTPS/offTPS)
-	} else {
-		fmt.Println()
+func printSpeedup(base, cand runResult) {
+	baseTPS := avg(base.bench.DecodeTokensPerSec)
+	candTPS := avg(cand.bench.DecodeTokensPerSec)
+	fmt.Printf("  %-14s decode: %.1f tok/s", cand.label, candTPS)
+	if baseTPS > 0 {
+		fmt.Printf(" (%.2fx)", candTPS/baseTPS)
 	}
-	if off.wallTime > 0 {
-		fmt.Printf("  Wall-clock    (off / on):  %v / %v   (%.2f×)\n",
-			off.wallTime, on.wallTime,
-			float64(off.wallTime)/float64(on.wallTime))
+	if cand.wallTime > 0 && base.wallTime > 0 {
+		fmt.Printf(" | wall: %v (%.2fx)", cand.wallTime, float64(base.wallTime)/float64(cand.wallTime))
 	}
-}
-
-func totalDecodeTokens(b *litertlm.Benchmark) int {
-	var n int
-	for _, c := range b.DecodeTokenCounts {
-		n += c
-	}
-	return n
+	fmt.Println()
 }
 
 func avg(xs []float64) float64 {

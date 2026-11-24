@@ -128,3 +128,52 @@ func TestModality_String(t *testing.T) {
 		}
 	}
 }
+
+func TestPhase2EnumValuesAndStrings(t *testing.T) {
+	specCases := []struct {
+		got  SpeculativeDecodingMode
+		raw  int32
+		want string
+	}{
+		{SpeculativeDecodingOff, 0, "Off"},
+		{SpeculativeDecodingOn, 1, "On"},
+		{SpeculativeDecodingAdaptive, 2, "Adaptive"},
+		{SpeculativeDecodingMode(9), 9, "SpeculativeDecodingMode(9)"},
+	}
+	for _, tc := range specCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("SpeculativeDecodingMode(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+
+	constraintCases := []struct {
+		got  ConstraintType
+		raw  int32
+		want string
+	}{
+		{ConstraintNone, 0, "None"},
+		{ConstraintRegex, 1, "Regex"},
+		{ConstraintJSONSchema, 2, "JsonSchema"},
+		{ConstraintType(9), 9, "ConstraintType(9)"},
+	}
+	for _, tc := range constraintCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("ConstraintType(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+
+	providerCases := []struct {
+		got  ConstraintProviderType
+		raw  int32
+		want string
+	}{
+		{ConstraintProviderNone, 0, "None"},
+		{ConstraintProviderLLGuidance, 1, "LlGuidance"},
+		{ConstraintProviderType(9), 9, "ConstraintProviderType(9)"},
+	}
+	for _, tc := range providerCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("ConstraintProviderType(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+}
