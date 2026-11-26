@@ -31,6 +31,10 @@ type jsonModelConfig struct {
 	SelectedSignatures          []string `json:"selected_signatures,omitempty"`
 	NumThreads                  *int     `json:"num_threads,omitempty"`
 	AudioNumThreads             *int     `json:"audio_num_threads,omitempty"`
+	VisionDispatchLibDir        *string  `json:"vision_dispatch_lib_dir,omitempty"`
+	AudioDispatchLibDir         *string  `json:"audio_dispatch_lib_dir,omitempty"`
+	MaxInputLength              *int     `json:"max_input_length,omitempty"`
+	MinInputLength              *int     `json:"min_input_length,omitempty"`
 	LoraRank                    *int     `json:"lora_rank,omitempty"`
 	SupportedLoraRanks          []int    `json:"supported_lora_ranks,omitempty"`
 	AudioLoraRank               *int     `json:"audio_lora_rank,omitempty"`
@@ -147,6 +151,18 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 	}
 	if mc.AudioNumThreads != nil {
 		c.audioNumThreads = new(*mc.AudioNumThreads)
+	}
+	if mc.VisionDispatchLibDir != nil {
+		c.visionDispatchLibDir = *mc.VisionDispatchLibDir
+	}
+	if mc.AudioDispatchLibDir != nil {
+		c.audioDispatchLibDir = *mc.AudioDispatchLibDir
+	}
+	if mc.MaxInputLength != nil {
+		c.maxInputLength = new(*mc.MaxInputLength)
+	}
+	if mc.MinInputLength != nil {
+		c.minInputLength = new(*mc.MinInputLength)
 	}
 	if mc.LoraRank != nil {
 		c.loraRank = new(*mc.LoraRank)

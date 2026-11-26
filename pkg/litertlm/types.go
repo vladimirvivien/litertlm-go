@@ -49,3 +49,23 @@ type InputData uintptr
 // LoadedFile wraps a LiteRtLmLoadedFile* opaque pointer representing a model
 // file opened for capability inspection.
 type LoadedFile uintptr
+
+// EmbeddingEngine wraps a LiteRtLmEmbeddingEngine* for multimodal and text
+// embedding generation.
+type EmbeddingEngine uintptr
+
+// EmbeddingEngineSettings wraps a LiteRtLmEmbeddingEngineSettings* used to
+// configure an EmbeddingEngine.
+type EmbeddingEngineSettings uintptr
+
+// EmbeddingOptions wraps a LiteRtLmEmbeddingOptions* carrying per-call
+// normalization, special-token, overflow, truncation, and vision settings.
+type EmbeddingOptions uintptr
+
+// EmbeddingResponse wraps a LiteRtLmEmbeddingResponse* holding one embedding
+// vector.
+type EmbeddingResponse uintptr
+
+// EmbeddingResponses wraps a LiteRtLmEmbeddingResponses* holding a batch of
+// embedding vectors.
+type EmbeddingResponses uintptr

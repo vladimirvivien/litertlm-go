@@ -15,23 +15,9 @@ func NewEngineSettings(modelPath, backend string, vision, audio *string) (Engine
 	if err != nil {
 		return 0, err
 	}
-	backendPtr, err := cstr.BytePtrFromString(backend)
+	backendPtr, visionPtr, audioPtr, err := marshalBackendPtrs(backend, vision, audio)
 	if err != nil {
 		return 0, err
-	}
-
-	var visionPtr, audioPtr *byte
-	if vision != nil {
-		visionPtr, err = cstr.BytePtrFromString(*vision)
-		if err != nil {
-			return 0, err
-		}
-	}
-	if audio != nil {
-		audioPtr, err = cstr.BytePtrFromString(*audio)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	s, err := callStatusHandle[EngineSettings](engineSettingsCreateFunc, "engine_settings_create",
@@ -51,22 +37,9 @@ func NewEngineSettings(modelPath, backend string, vision, audio *string) (Engine
 // The engine takes ownership of the file descriptor and will close it when done.
 // vision and audio may be nil to leave those backends unset. Caller must Delete().
 func NewEngineSettingsFromFD(fd int, backend string, vision, audio *string) (EngineSettings, error) {
-	backendPtr, err := cstr.BytePtrFromString(backend)
+	backendPtr, visionPtr, audioPtr, err := marshalBackendPtrs(backend, vision, audio)
 	if err != nil {
 		return 0, err
-	}
-	var visionPtr, audioPtr *byte
-	if vision != nil {
-		visionPtr, err = cstr.BytePtrFromString(*vision)
-		if err != nil {
-			return 0, err
-		}
-	}
-	if audio != nil {
-		audioPtr, err = cstr.BytePtrFromString(*audio)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	fdVal := int32(fd)

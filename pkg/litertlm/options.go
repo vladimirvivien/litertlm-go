@@ -36,7 +36,11 @@ type clientConfig struct {
 	singleThreadedExecution    *bool
 	selectedSignatures         []string
 
-	dispatchLibDir string
+	dispatchLibDir       string
+	visionDispatchLibDir string
+	audioDispatchLibDir  string
+	maxInputLength       *int
+	minInputLength       *int
 
 	maxImages *int
 
@@ -192,6 +196,26 @@ func WithParallelSectionLoading(on bool) Option {
 // WithDispatchLibDir sets the LiteRT dispatch library directory for NPU backends.
 func WithDispatchLibDir(dir string) Option {
 	return func(c *clientConfig) { c.dispatchLibDir = dir }
+}
+
+// WithVisionDispatchLibDir sets the LiteRT dispatch library directory for vision NPU backends.
+func WithVisionDispatchLibDir(dir string) Option {
+	return func(c *clientConfig) { c.visionDispatchLibDir = dir }
+}
+
+// WithAudioDispatchLibDir sets the LiteRT dispatch library directory for audio NPU backends.
+func WithAudioDispatchLibDir(dir string) Option {
+	return func(c *clientConfig) { c.audioDispatchLibDir = dir }
+}
+
+// WithMaxInputLength sets the maximum text encoder sequence length for embedding engines.
+func WithMaxInputLength(n int) Option {
+	return func(c *clientConfig) { c.maxInputLength = new(n) }
+}
+
+// WithMinInputLength sets the minimum text encoder sequence length for embedding engines.
+func WithMinInputLength(n int) Option {
+	return func(c *clientConfig) { c.minInputLength = new(n) }
 }
 
 // WithMaxImages caps the number of image inputs per generation for legacy backends.

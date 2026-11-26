@@ -61,6 +61,7 @@ nav:
       - Client: client.md
       - Chat: chat.md
       - Tools: tools.md
+      - Embeddings: embeddings.md
       - Structured output: structured-output.md
   - Low-level API: low-level.md
   - Supported models: models.md

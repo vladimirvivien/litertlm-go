@@ -718,6 +718,204 @@ var (
 		&ffi.TypePointer, // loaded_file
 		&ffi.TypePointer, // out_budget
 	)
+	loadedFileMaxContextTokensFunc = newLazyFun(
+		"litert_lm_loaded_file_max_context_tokens",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_max_context_tokens (uint32_t*)
+	)
+	loadedFileIsDynamicContextFunc = newLazyFun(
+		"litert_lm_loaded_file_is_dynamic_context",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_is_dynamic (bool*)
+	)
+	loadedFileVisionSignatureSelectionFunc = newLazyFun(
+		"litert_lm_loaded_file_vision_signature_selection",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // lengths (int32_t*, nullable)
+		&ffiTypeSizeT,    // max_size
+		&ffi.TypePointer, // out_count (size_t*)
+	)
+	loadedFileModalitySupportedBackendsFunc = newLazyFun(
+		"litert_lm_loaded_file_modality_supported_backends",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypeSint32,  // modality (LiteRtLmModality)
+		&ffi.TypePointer, // backends (LiteRtLmBackendType*, nullable)
+		&ffiTypeSizeT,    // max_size
+		&ffi.TypePointer, // out_count (size_t*)
+	)
+	loadedFileModalityNpuBrandFunc = newLazyFun(
+		"litert_lm_loaded_file_modality_npu_brand",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypeSint32,  // modality (LiteRtLmModality)
+		&ffi.TypePointer, // out_npu_brand (LiteRtLmNpuBrand*)
+	)
+	loadedFileModalitySocNameFunc = newLazyFun(
+		"litert_lm_loaded_file_modality_soc_name",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypeSint32,  // modality (LiteRtLmModality)
+		&ffi.TypePointer, // out_soc_name (const char**)
+	)
+	loadedFileMinRuntimeVersionFunc = newLazyFun(
+		"litert_lm_loaded_file_min_runtime_version",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_version (const char**)
+	)
+	loadedFileModelTypeFunc = newLazyFun(
+		"litert_lm_loaded_file_model_type",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_model_type (LiteRtLmModelType*)
+	)
+	loadedFileEmbeddingDimensionFunc = newLazyFun(
+		"litert_lm_loaded_file_embedding_dimension",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // out_dimension (int32_t*)
+	)
+	loadedFileEmbeddingSignatureSelectionFunc = newLazyFun(
+		"litert_lm_loaded_file_embedding_signature_selection",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // loaded_file
+		&ffi.TypePointer, // lengths (int32_t*, nullable)
+		&ffiTypeSizeT,    // max_size
+		&ffi.TypePointer, // out_count (size_t*)
+	)
+
+	// ---- Embedding Engine Settings ----
+	embeddingEngineSettingsCreateFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_create",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // model_path
+		&ffi.TypePointer, // backend_str
+		&ffi.TypePointer, // vision_backend_str (nullable)
+		&ffi.TypePointer, // audio_backend_str (nullable)
+		&ffi.TypePointer, // out_settings
+	)
+	embeddingEngineSettingsDeleteFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	embeddingEngineSettingsSetNumThreadsFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_num_threads",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingEngineSettingsSetAudioNumThreadsFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_audio_num_threads",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingEngineSettingsSetCacheDirFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_cache_dir",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingEngineSettingsSetLitertDispatchLibDirFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_litert_dispatch_lib_dir",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingEngineSettingsSetVisionLitertDispatchLibDirFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_vision_litert_dispatch_lib_dir",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingEngineSettingsSetAudioLitertDispatchLibDirFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_audio_litert_dispatch_lib_dir",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingEngineSettingsSetMaxInputLengthFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_max_input_length",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingEngineSettingsSetMinInputLengthFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_min_input_length",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingEngineSettingsSetVisionTokensPerImageFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_vision_tokens_per_image",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingEngineSettingsSetActivationDataTypeFunc = newLazyFun(
+		"litert_lm_embedding_engine_settings_set_activation_data_type",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+
+	// ---- Embedding Options ----
+	embeddingOptionsCreateFunc = newLazyFun(
+		"litert_lm_embedding_options_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	embeddingOptionsDeleteFunc = newLazyFun(
+		"litert_lm_embedding_options_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	embeddingOptionsSetNormalizeFunc = newLazyFun(
+		"litert_lm_embedding_options_set_normalize",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	embeddingOptionsGetNormalizeFunc = newLazyFun(
+		"litert_lm_embedding_options_get_normalize",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingOptionsSetInsertSpecialTokensFunc = newLazyFun(
+		"litert_lm_embedding_options_set_insert_special_tokens",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	embeddingOptionsGetInsertSpecialTokensFunc = newLazyFun(
+		"litert_lm_embedding_options_get_insert_special_tokens",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingOptionsSetInputOverflowStrategyFunc = newLazyFun(
+		"litert_lm_embedding_options_set_input_overflow_strategy",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingOptionsGetInputOverflowStrategyFunc = newLazyFun(
+		"litert_lm_embedding_options_get_input_overflow_strategy",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingOptionsSetOutputSizeFunc = newLazyFun(
+		"litert_lm_embedding_options_set_output_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingOptionsGetOutputSizeFunc = newLazyFun(
+		"litert_lm_embedding_options_get_output_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingOptionsSetVisionTokensPerImageFunc = newLazyFun(
+		"litert_lm_embedding_options_set_vision_tokens_per_image",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeSint32)
+	embeddingOptionsGetVisionTokensPerImageFunc = newLazyFun(
+		"litert_lm_embedding_options_get_vision_tokens_per_image",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+
+	// ---- Embedding Response & Responses ----
+	embeddingResponseDeleteFunc = newLazyFun(
+		"litert_lm_embedding_response_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	embeddingResponseGetSizeFunc = newLazyFun(
+		"litert_lm_embedding_response_get_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingResponseGetValuesFunc = newLazyFun(
+		"litert_lm_embedding_response_get_values",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingResponsesDeleteFunc = newLazyFun(
+		"litert_lm_embedding_responses_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	embeddingResponsesGetSizeFunc = newLazyFun(
+		"litert_lm_embedding_responses_get_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingResponsesGetAtFunc = newLazyFun(
+		"litert_lm_embedding_responses_get_at",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffiTypeSizeT, &ffi.TypePointer)
+
+	// ---- Embedding Engine ----
+	embeddingEngineCreateFunc = newLazyFun(
+		"litert_lm_embedding_engine_create",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	embeddingEngineDeleteFunc = newLazyFun(
+		"litert_lm_embedding_engine_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	embeddingEngineComputeEmbeddingFunc = newLazyFun(
+		"litert_lm_embedding_engine_compute_embedding",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // engine
+		&ffi.TypePointer, // inputs
+		&ffiTypeSizeT,    // num_inputs
+		&ffi.TypePointer, // options (nullable)
+		&ffi.TypePointer, // out_response
+	)
+	embeddingEngineComputeEmbeddingBatchFunc = newLazyFun(
+		"litert_lm_embedding_engine_compute_embedding_batch",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // engine
+		&ffi.TypePointer, // inputs_batch
+		&ffi.TypePointer, // num_inputs_per_batch
+		&ffiTypeSizeT,    // batch_size
+		&ffi.TypePointer, // options (nullable)
+		&ffi.TypePointer, // out_responses
+	)
 )
 
 // loadFuncs stashes the opened library so lazyFun can resolve symbols

@@ -41,13 +41,17 @@ go run ./examples/capabilities -model /path/to/model.litertlm -json
 ```text
 Model Capabilities for: gemma3-1b-it-int4.litertlm
 --------------------------------------------------
+  Model Type           : LLM
+  Min Runtime Version  : 0.14.0
   Supported Modalities : [Text]
+  Max Context Tokens   : 32768 (dynamic=false)
   Speculative Decoding : false
   Thinking / Reasoning : false
   Function Calling     : true
   Default Sampler      : TopK
-  Default Temperature  : 0.80
-  Default Top-K        : 40
+  Default Temperature  : 1.00
+  Default Top-K        : 64
   Default Top-P        : 0.95
   Vision Token Budget  : N/A
+  Modality Text        : backends=[CPU]
 ```

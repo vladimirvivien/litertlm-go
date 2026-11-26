@@ -225,3 +225,38 @@ func TestWithConfigFile_Phase2Fields(t *testing.T) {
 		t.Fatal("expected error for invalid speculative_decoding_mode")
 	}
 }
+
+func TestWithConfigFile_EmbeddingFields(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "embed_config.json")
+
+	jsonContent := `{
+		"default": {
+			"vision_dispatch_lib_dir": "/opt/npu/vision",
+			"audio_dispatch_lib_dir": "/opt/npu/audio",
+			"max_input_length": 512,
+			"min_input_length": 64
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(jsonContent), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg := clientConfig{}
+	WithConfigFile(configPath, "")(&cfg)
+	if cfg.err != nil {
+		t.Fatalf("unexpected error: %v", cfg.err)
+	}
+	if cfg.visionDispatchLibDir != "/opt/npu/vision" {
+		t.Errorf("visionDispatchLibDir = %q", cfg.visionDispatchLibDir)
+	}
+	if cfg.audioDispatchLibDir != "/opt/npu/audio" {
+		t.Errorf("audioDispatchLibDir = %q", cfg.audioDispatchLibDir)
+	}
+	if cfg.maxInputLength == nil || *cfg.maxInputLength != 512 {
+		t.Errorf("maxInputLength = %v, want 512", cfg.maxInputLength)
+	}
+	if cfg.minInputLength == nil || *cfg.minInputLength != 64 {
+		t.Errorf("minInputLength = %v, want 64", cfg.minInputLength)
+	}
+}

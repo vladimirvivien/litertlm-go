@@ -161,6 +161,55 @@ func getHandleBool[H cHandle](h H, f *lazyFun, op string) bool {
 	return err == nil && v
 }
 
+func getHandleScalarErr[H cHandle, T any](h H, handleName string, f *lazyFun, op string) (T, error) {
+	var zero T
+	if h == 0 {
+		return zero, fmt.Errorf("litertlm: %s: invalid %s", op, handleName)
+	}
+	return callStatusScalar[T](f, op, unsafe.Pointer(&h))
+}
+
+func getHandleBoolErr[H cHandle](h H, handleName string, f *lazyFun, op string) (bool, error) {
+	if h == 0 {
+		return false, fmt.Errorf("litertlm: %s: invalid %s", op, handleName)
+	}
+	return callStatusBool(f, op, unsafe.Pointer(&h))
+}
+
+func getHandleStringErr[H cHandle](h H, handleName string, f *lazyFun, op string) (string, error) {
+	if h == 0 {
+		return "", fmt.Errorf("litertlm: %s: invalid %s", op, handleName)
+	}
+	s, _, err := callStatusString(f, op, unsafe.Pointer(&h))
+	if err != nil {
+		return "", err
+	}
+	return s, nil
+}
+
+// queryCBuffer runs the two-step C size-query-then-fill convention: call once
+// with (nil, 0) to obtain the total element count, allocate a Go slice of that
+// size, and call again to populate it.
+func queryCBuffer[T any](call func(buf *T, maxSize uint64) (uint64, error)) ([]T, error) {
+	count, err := call(nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		return nil, nil
+	}
+	buf := make([]T, count)
+	got, err := call(&buf[0], count)
+	runtime.KeepAlive(buf)
+	if err != nil {
+		return nil, err
+	}
+	if got < count {
+		buf = buf[:got]
+	}
+	return buf, nil
+}
+
 func copyCSlice[T any](ptr *T, n uint64) []T {
 	if ptr == nil || n == 0 {
 		return []T{}

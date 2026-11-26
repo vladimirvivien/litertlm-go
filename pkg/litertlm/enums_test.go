@@ -177,3 +177,72 @@ func TestPhase2EnumValuesAndStrings(t *testing.T) {
 		}
 	}
 }
+
+func TestPhase3aEnumValuesAndStrings(t *testing.T) {
+	modelCases := []struct {
+		got  ModelType
+		raw  int32
+		want string
+	}{
+		{ModelTypeUnknown, 0, "Unknown"},
+		{ModelTypeLLM, 1, "LLM"},
+		{ModelTypeEmbedding, 2, "Embedding"},
+		{ModelType(9), 9, "ModelType(9)"},
+	}
+	for _, tc := range modelCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("ModelType(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+
+	backendCases := []struct {
+		got  BackendType
+		raw  int32
+		want string
+	}{
+		{BackendTypeCPU, 1, "CPU"},
+		{BackendTypeGPU, 2, "GPU"},
+		{BackendTypeNPU, 3, "NPU"},
+		{BackendType(9), 9, "BackendType(9)"},
+	}
+	for _, tc := range backendCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("BackendType(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+
+	npuCases := []struct {
+		got  NPUBrand
+		raw  int32
+		want string
+	}{
+		{NPUBrandUnknown, 0, "Unknown"},
+		{NPUBrandQualcomm, 1, "Qualcomm"},
+		{NPUBrandGoogleTensor, 2, "GoogleTensor"},
+		{NPUBrandMediaTek, 3, "MediaTek"},
+		{NPUBrandIntel, 4, "Intel"},
+		{NPUBrandSamsung, 5, "Samsung"},
+		{NPUBrand(9), 9, "NPUBrand(9)"},
+	}
+	for _, tc := range npuCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("NPUBrand(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+
+	overflowCases := []struct {
+		got  OverflowStrategy
+		raw  int32
+		want string
+	}{
+		{OverflowChunkAndAverage, 0, "ChunkAndAverage"},
+		{OverflowTruncate, 1, "Truncate"},
+		{OverflowError, 2, "Error"},
+		{OverflowStrategy(9), 9, "OverflowStrategy(9)"},
+	}
+	for _, tc := range overflowCases {
+		if int32(tc.got) != tc.raw || tc.got.String() != tc.want {
+			t.Errorf("OverflowStrategy(%d) = %q, want %q", tc.got, tc.got.String(), tc.want)
+		}
+	}
+}

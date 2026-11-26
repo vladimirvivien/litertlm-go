@@ -104,6 +104,36 @@ func TestLoadedFile_ZeroHandle(t *testing.T) {
 	if f.MaxVisionTokenBudget() != -1 {
 		t.Errorf("MaxVisionTokenBudget on zero handle = %d, want -1", f.MaxVisionTokenBudget())
 	}
+	if mt, err := f.ModelType(); err == nil || mt != litertlm.ModelTypeUnknown {
+		t.Errorf("ModelType zero = (%v, %v), want (ModelTypeUnknown, err)", mt, err)
+	}
+	if n, err := f.MaxContextTokens(); err == nil || n != 0 {
+		t.Errorf("MaxContextTokens zero = (%d, %v), want (0, err)", n, err)
+	}
+	if f.IsDynamicContext() {
+		t.Errorf("IsDynamicContext on zero handle should be false")
+	}
+	if lens, err := f.VisionSignatureLengths(); err == nil || lens != nil {
+		t.Errorf("VisionSignatureLengths zero = (%v, %v), want error", lens, err)
+	}
+	if dim, err := f.EmbeddingDimension(); err == nil || dim != 0 {
+		t.Errorf("EmbeddingDimension zero = (%d, %v), want (0, err)", dim, err)
+	}
+	if lens, err := f.EmbeddingSignatureLengths(); err == nil || lens != nil {
+		t.Errorf("EmbeddingSignatureLengths zero = (%v, %v), want error", lens, err)
+	}
+	if b, err := f.ModalitySupportedBackends(litertlm.ModalityText); err == nil || b != nil {
+		t.Errorf("ModalitySupportedBackends zero = (%v, %v), want error", b, err)
+	}
+	if nb, err := f.ModalityNPUBrand(litertlm.ModalityText); err == nil || nb != litertlm.NPUBrandUnknown {
+		t.Errorf("ModalityNPUBrand zero = (%v, %v), want (NPUBrandUnknown, err)", nb, err)
+	}
+	if soc, err := f.ModalitySoCName(litertlm.ModalityText); err == nil || soc != "" {
+		t.Errorf("ModalitySoCName zero = (%q, %v), want error", soc, err)
+	}
+	if ver, err := f.MinRuntimeVersion(); err == nil || ver != "" {
+		t.Errorf("MinRuntimeVersion zero = (%q, %v), want error", ver, err)
+	}
 	if f.Snapshot("dummy") != nil {
 		t.Errorf("Snapshot on zero handle should be nil")
 	}

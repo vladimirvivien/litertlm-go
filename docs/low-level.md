@@ -8,7 +8,8 @@ Common reasons to drop down:
 - **Manual prefill / decode & async streaming.** Explicit `RunPrefill` / `RunDecode` or `RunDecodeAsync` / `RunDecodeAsyncCh` sequencing in place of `Session.GenerateContent`.
 - **KV-cache checkpoints, rewinding & branching.** Branch multiple continuations from one shared prompt with `SaveCheckpoint`, `RewindToCheckpoint`, `RewindToStep`, and `Session.Clone` / `Conversation.Clone`.
 - **Per-turn constraint, thinking & penalty handles.** Configure `OptionalArgs` with `SetThinkingConfig`, `SetConstraint`, `SetRepetitionPenalty`, `SetNoRepeatNgram`, `SetSuppressTokens`, and `SetToolChoice` (C API `1.1+`).
-- **Model capability inspection.** Read `.litertlm` metadata directly via `OpenLoadedFile` / `LoadedFile` without creating an engine.
+- **Model capability inspection.** Read `.litertlm` metadata (`ModelType`, `MaxContextTokens`, `IsDynamicContext`, `ModalitySupportedBackends`, NPU/SoC metadata, embedding dimensions) directly via `OpenLoadedFile` / `LoadedFile` without creating an engine.
+- **Standalone embedding engines.** Use `EmbeddingEngineSettings`, `EmbeddingEngine`, `EmbeddingOptions`, `EmbeddingResponse`, and `EmbeddingResponses` directly when reusing `InputData` buffers or option handles across calls.
 - **Single-threaded execution.** Drive caller-thread scheduling with `SetSingleThreadedExecution(true)` paired with `Conversation.WaitUntilDone`.
 - **Text scoring.** `Session.ScoreTexts` returns log-probabilities for candidate completions.
 - **Token introspection.** `Engine.Tokenize` / `Engine.Detokenize`, `Engine.StartTokenIDs` / `StopTokenIDs`.
@@ -32,16 +33,20 @@ Common reasons to drop down:
 | `chat.SendToolResult(name, result)`   | Build `{"role":"tool","content":[{"name":..., "response":...}]}` JSON, then `conv.SendMessage`                              |
 | `chat.Close()`                        | `conv.Delete()` + `convCfg.Delete()`                                                                                       |
 | `litertlm.GenerateData[T]`            | Synthesized tool-call round-trip + schema-hinted `Generate` fallback + `json.Unmarshal`                                    |
+| `litertlm.NewEmbeddingClient(...)`    | `Load` + `NewEmbeddingEngineSettings` + setters + `NewEmbeddingEngine`                                                     |
+| `embedClient.Embed(ctx, text, ...)`   | `NewTextInputString` + `NewEmbeddingOptions` + `embeddingEngine.ComputeEmbedding` + `Values` + `Delete`s                   |
+| `embedClient.EmbedBatch(ctx, ...)`    | Build `[][]InputData` + `embeddingEngine.ComputeEmbeddingBatch` + `EmbeddingResponses.Values` + `Delete`s                  |
 
 ## Resource lifetime management
 
-The low-level API surfaces each C handle as a `uintptr` value type (`Engine`, `Session`, `EngineSettings`, `SessionConfig`, `Conversation`, `ConversationConfig`, `OptionalArgs`, `Responses`, `BenchmarkInfo`, `JSONResponse`, `InputData`, `LoadedFile`). Each provides a `.Delete()` method. Low-level setters return `error`, wrapping C status failures in `*CError` with thread-local error messages and `StatusCode` sentinels.
+The low-level API surfaces each C handle as a `uintptr` value type (`Engine`, `Session`, `EngineSettings`, `SessionConfig`, `Conversation`, `ConversationConfig`, `OptionalArgs`, `Responses`, `BenchmarkInfo`, `JSONResponse`, `InputData`, `LoadedFile`, `EmbeddingEngine`, `EmbeddingEngineSettings`, `EmbeddingOptions`, `EmbeddingResponse`, `EmbeddingResponses`). Each provides a `.Delete()` method. Low-level setters return `error`, wrapping C status failures in `*CError` with thread-local error messages and `StatusCode` sentinels.
 
 **Rules of thumb:**
 
-- Every `New*`, `OpenLoadedFile`, `Clone`, and `Generate*` (when returning a handle) must be paired with `defer h.Delete()`.
+- Every `New*`, `OpenLoadedFile`, `Clone`, `ComputeEmbedding*`, and `Generate*` (when returning a handle) must be paired with `defer h.Delete()`.
+- `EmbeddingResponses.At(i)` returns a borrowed `EmbeddingResponse` owned by the batch container; do not call `Delete()` on it.
 - A cloned `Session` or `Conversation` owns an independent handle, but keep parent resources (`Engine`, root `Chat`) alive for the lifetime of active clones.
-- Strings returned by accessor methods are copied into Go memory, so they remain valid after the parent handle is deleted.
+- Strings and embedding float slices returned by accessor methods are copied into Go memory, so they remain valid after the parent handle is deleted.
 
 ## Examples
 ### Explicit prefill → decode

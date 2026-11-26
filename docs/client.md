@@ -61,6 +61,10 @@ Use functional options to specify environment and inference engine settings.
 | `WithSingleThreadedExecution(on)`         | Run session execution on caller-driven threads rather than background workers. |
 | `WithSelectedSignatures(signatures...)`   | Restrict the main executor to named model signatures (requires C API `1.1+`; returns `ErrUnimplemented` on `1.0.0`). |
 | `WithDispatchLibDir(dir)`                 | LiteRT dispatch library directory for the NPU backend.                    |
+| `WithVisionDispatchLibDir(dir)`           | LiteRT dispatch library directory for vision NPU embedding backends.      |
+| `WithAudioDispatchLibDir(dir)`            | LiteRT dispatch library directory for audio NPU embedding backends.       |
+| `WithMaxInputLength(n)`                   | Maximum text encoder sequence length for embedding engines.               |
+| `WithMinInputLength(n)`                   | Minimum text encoder sequence length for embedding engines.               |
 | `WithNumThreads(n)`                       | Set the number of threads for the CPU backend.                            |
 | `WithAudioNumThreads(n)`                  | Set the number of threads for the audio CPU backend.                      |
 | `WithLoRARank(rank)`                      | Set the startup LoRA rank for the engine.                                 |
@@ -86,7 +90,7 @@ Use functional options to specify environment and inference engine settings.
 Store engine, speculative decoding, acceleration, thread-count, LoRA, and default sampler settings in a JSON file with a `"default"` block and per-model overrides under `"models"`. Load a profile with `litertlm.WithConfigFile("config.json", "model-profile")`; explicit Go options applied after `WithConfigFile` override profile fields.
 
 Supported keys inside each model entry include:
-`backend`, `max_tokens`, `cache_dir`, `speculative_decoding_enabled`, `speculative_decoding_mode` (`"off"` | `"on"` | `"adaptive"`), `speculative_decoding_lenience`, `parallel_section_loading`, `enable_ynnpack`, `max_vision_tokens_per_image`, `metal_residency_set`, `gpu_decode_steps_per_sync`, `gpu_wait_for_weight_uploads`, `use_ringbuffers_local_attention`, `single_threaded_execution`, `selected_signatures`, `num_threads`, `audio_num_threads`, `lora_rank`, `supported_lora_ranks`, `audio_lora_rank`, `supported_audio_lora_ranks`, `sampler_type` (`"top_k"` | `"top_p"` | `"greedy"`), `temperature`, `top_k`, `top_p`, `seed`, `lib_path`, `lib_name`, and `model_path`.
+`backend`, `max_tokens`, `cache_dir`, `speculative_decoding_enabled`, `speculative_decoding_mode` (`"off"` | `"on"` | `"adaptive"`), `speculative_decoding_lenience`, `parallel_section_loading`, `enable_ynnpack`, `max_vision_tokens_per_image`, `metal_residency_set`, `gpu_decode_steps_per_sync`, `gpu_wait_for_weight_uploads`, `use_ringbuffers_local_attention`, `single_threaded_execution`, `selected_signatures`, `num_threads`, `audio_num_threads`, `vision_dispatch_lib_dir`, `audio_dispatch_lib_dir`, `max_input_length`, `min_input_length`, `lora_rank`, `supported_lora_ranks`, `audio_lora_rank`, `supported_audio_lora_ranks`, `sampler_type` (`"top_k"` | `"top_p"` | `"greedy"`), `temperature`, `top_k`, `top_p`, `seed`, `lib_path`, `lib_name`, and `model_path`.
 
 See [`examples/config-file/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/config-file).
 
@@ -99,12 +103,12 @@ caps, err := client.Capabilities()
 if err != nil {
     return err
 }
-fmt.Printf("modalities=%v thinking=%v tools=%v speculative=%v\n",
-    caps.SupportedModalities, caps.SupportsThinking,
-    caps.SupportsFunctionCalling, caps.SupportsSpeculativeDecoding)
+fmt.Printf("type=%s ctx=%d dynamic=%v modalities=%v thinking=%v tools=%v\n",
+    caps.ModelType, caps.MaxContextTokens, caps.IsDynamicContext,
+    caps.SupportedModalities, caps.SupportsThinking, caps.SupportsFunctionCalling)
 ```
 
-`ModelCapabilities` also exposes convenience predicates: `SupportsText()`, `SupportsVision()`, `SupportsAudio()`, and `SupportsVideo()`. See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities).
+`ModelCapabilities` reports `ModelType` (`ModelTypeLLM` / `ModelTypeEmbedding`), `MinRuntimeVersion`, `MaxContextTokens`, `IsDynamicContext`, `VisionSignatureLengths`, `EmbeddingDimension`, `EmbeddingSignatureLengths`, per-modality hardware support (`ModalityBackends`, `ModalityNPUBrand`, `ModalitySoCName`), and convenience predicates (`SupportsText()`, `SupportsVision()`, `SupportsAudio()`, `SupportsVideo()`). See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities).
 
 Inspect the loaded C API version at runtime with `litertlm.APIVersion()`. Native runtime failures return a `*litertlm.CError` carrying the failing `Op`, canonical `StatusCode`, and thread-local C++ diagnostic `Message`. Match conditions portably with `errors.Is` against sentinel errors (`ErrCancelled`, `ErrInvalidArgument`, `ErrNotFound`, `ErrResourceExhausted`, `ErrFailedPrecondition`, `ErrUnimplemented`, `ErrInternal`, etc.) or extract details via `errors.As`.
 
@@ -230,5 +234,6 @@ text, err := client.GenerateMulti(ctx, []litertlm.Part{
 ## See also
 
 - [Chat](chat.md) — multi-turn with system prompts and tools.
+- [Embeddings](embeddings.md) — standalone text, multimodal, and batch embeddings.
 - [Structured output](structured-output.md) — `GenerateData[T]` and `GenerateDataMulti[T]`.
 - [Low-level API](low-level.md) — when to drop down.

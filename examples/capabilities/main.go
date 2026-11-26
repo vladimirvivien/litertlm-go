@@ -77,7 +77,16 @@ func main() {
 
 	fmt.Printf("Model Capabilities for: %s\n", caps.Path)
 	fmt.Println("--------------------------------------------------")
+	fmt.Printf("  Model Type           : %s\n", caps.ModelType)
+	if caps.MinRuntimeVersion != "" {
+		fmt.Printf("  Min Runtime Version  : %s\n", caps.MinRuntimeVersion)
+	}
 	fmt.Printf("  Supported Modalities : %v\n", formatModalities(caps.SupportedModalities))
+	if caps.MaxContextTokens > 0 {
+		fmt.Printf("  Max Context Tokens   : %d (dynamic=%v)\n", caps.MaxContextTokens, caps.IsDynamicContext)
+	} else {
+		fmt.Printf("  Dynamic Context      : %v\n", caps.IsDynamicContext)
+	}
 	fmt.Printf("  Speculative Decoding : %v\n", caps.SupportsSpeculativeDecoding)
 	fmt.Printf("  Thinking / Reasoning : %v\n", caps.SupportsThinking)
 	fmt.Printf("  Function Calling     : %v\n", caps.SupportsFunctionCalling)
@@ -90,12 +99,44 @@ func main() {
 	} else {
 		fmt.Printf("  Vision Token Budget  : N/A\n")
 	}
+	if len(caps.VisionSignatureLengths) > 0 {
+		fmt.Printf("  Vision Signatures    : %v\n", caps.VisionSignatureLengths)
+	}
+	if caps.EmbeddingDimension > 0 {
+		fmt.Printf("  Embedding Dimension  : %d\n", caps.EmbeddingDimension)
+	}
+	if len(caps.EmbeddingSignatureLengths) > 0 {
+		fmt.Printf("  Embedding Signatures : %v\n", caps.EmbeddingSignatureLengths)
+	}
+	for _, m := range caps.SupportedModalities {
+		backends := formatBackends(caps.ModalityBackends[m])
+		brand := caps.ModalityNPUBrand[m]
+		soc := caps.ModalitySoCName[m]
+		if len(backends) > 0 || brand != litertlm.NPUBrandUnknown || soc != "" {
+			fmt.Printf("  Modality %-11s : backends=%v", m.String(), backends)
+			if brand != litertlm.NPUBrandUnknown {
+				fmt.Printf(" npu=%s", brand.String())
+			}
+			if soc != "" {
+				fmt.Printf(" soc=%s", soc)
+			}
+			fmt.Println()
+		}
+	}
 }
 
 func formatModalities(mods []litertlm.Modality) []string {
 	res := make([]string, len(mods))
 	for i, m := range mods {
 		res[i] = m.String()
+	}
+	return res
+}
+
+func formatBackends(backends []litertlm.BackendType) []string {
+	res := make([]string, len(backends))
+	for i, b := range backends {
+		res[i] = b.String()
 	}
 	return res
 }

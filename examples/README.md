@@ -25,9 +25,11 @@ go run ./examples/<name> [-backend cpu|gpu]
 
 | Path                          | What it shows                                                      |
 |-------------------------------|--------------------------------------------------------------------|
-| `examples/capabilities/`      | `InspectModel` — zero-allocation model container metadata and capability introspection |
+| `examples/capabilities/`      | `InspectModel` — zero-allocation model container type, context limits, backend/NPU metadata, and embedding dimensions |
 | `examples/hello/`             | Minimal `Generate`                                                 |
 | `examples/stream/`            | `GenerateStream` with range-over-func                              |
+| `examples/embed/`             | Standalone text, multimodal, batch, and Matryoshka-truncated embeddings with `EmbeddingClient` |
+| `examples/semantic-search/`   | Modular `search` and zero-shot `classify` packages + CLI over mixed text and images |
 | `examples/chat/`              | Multi-turn `Chat` with a system prompt                             |
 | `examples/chat-history/`      | Seed `Chat` with a prior transcript via `WithInitialMessages` + `WithExtraContext` / `WithFilterChannelContentFromKVCache` / `WithMaxToolHops` |
 | `examples/bot/`               | Persistent multimodal chatbot — slash commands, `MEM.log` history, image / audio attachments via `-attach`, replay through `WithInitialMessages` on restart |

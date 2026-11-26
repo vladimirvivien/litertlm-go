@@ -154,3 +154,90 @@ func (c ConstraintProviderType) String() string {
 		return "ConstraintProviderType(" + strconv.Itoa(int(c)) + ")"
 	}
 }
+
+func enumString[T ~int32](v T, typeName string, names map[T]string) string {
+	if name, ok := names[v]; ok {
+		return name
+	}
+	return typeName + "(" + strconv.Itoa(int(v)) + ")"
+}
+
+// ModelType mirrors `LiteRtLmModelType` in c/model_info.h.
+type ModelType int32
+
+const (
+	ModelTypeUnknown   ModelType = 0
+	ModelTypeLLM       ModelType = 1
+	ModelTypeEmbedding ModelType = 2
+)
+
+var modelTypeNames = map[ModelType]string{
+	ModelTypeUnknown:   "Unknown",
+	ModelTypeLLM:       "LLM",
+	ModelTypeEmbedding: "Embedding",
+}
+
+// String returns the human-readable name of the model type.
+func (m ModelType) String() string { return enumString(m, "ModelType", modelTypeNames) }
+
+// BackendType mirrors `LiteRtLmBackendType` in c/model_info.h.
+type BackendType int32
+
+const (
+	BackendTypeCPU BackendType = 1
+	BackendTypeGPU BackendType = 2
+	BackendTypeNPU BackendType = 3
+)
+
+var backendTypeNames = map[BackendType]string{
+	BackendTypeCPU: "CPU",
+	BackendTypeGPU: "GPU",
+	BackendTypeNPU: "NPU",
+}
+
+// String returns the human-readable name of the hardware backend type.
+func (b BackendType) String() string { return enumString(b, "BackendType", backendTypeNames) }
+
+// NPUBrand mirrors `LiteRtLmNpuBrand` in c/model_info.h.
+type NPUBrand int32
+
+const (
+	NPUBrandUnknown      NPUBrand = 0
+	NPUBrandQualcomm     NPUBrand = 1
+	NPUBrandGoogleTensor NPUBrand = 2
+	NPUBrandMediaTek     NPUBrand = 3
+	NPUBrandIntel        NPUBrand = 4
+	NPUBrandSamsung      NPUBrand = 5
+)
+
+var npuBrandNames = map[NPUBrand]string{
+	NPUBrandUnknown:      "Unknown",
+	NPUBrandQualcomm:     "Qualcomm",
+	NPUBrandGoogleTensor: "GoogleTensor",
+	NPUBrandMediaTek:     "MediaTek",
+	NPUBrandIntel:        "Intel",
+	NPUBrandSamsung:      "Samsung",
+}
+
+// String returns the human-readable name of the NPU vendor brand.
+func (n NPUBrand) String() string { return enumString(n, "NPUBrand", npuBrandNames) }
+
+// OverflowStrategy mirrors `LiteRtLmInputOverflowStrategy` in c/embedding_engine.h.
+type OverflowStrategy int32
+
+const (
+	OverflowChunkAndAverage OverflowStrategy = 0
+	OverflowTruncate        OverflowStrategy = 1
+	OverflowError           OverflowStrategy = 2
+)
+
+var overflowStrategyNames = map[OverflowStrategy]string{
+	OverflowChunkAndAverage: "ChunkAndAverage",
+	OverflowTruncate:        "Truncate",
+	OverflowError:           "Error",
+}
+
+// String returns the human-readable name of the input overflow strategy.
+func (o OverflowStrategy) String() string {
+	return enumString(o, "OverflowStrategy", overflowStrategyNames)
+}

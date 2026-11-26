@@ -12,3 +12,23 @@ func bytePtrOrNil(s string) (*byte, error) {
 	}
 	return cstr.BytePtrFromString(s)
 }
+
+func marshalBackendPtrs(backend string, vision, audio *string) (backendPtr, visionPtr, audioPtr *byte, err error) {
+	backendPtr, err = cstr.BytePtrFromString(backend)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if vision != nil {
+		visionPtr, err = cstr.BytePtrFromString(*vision)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	if audio != nil {
+		audioPtr, err = cstr.BytePtrFromString(*audio)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return backendPtr, visionPtr, audioPtr, nil
+}

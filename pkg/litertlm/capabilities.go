@@ -14,16 +14,26 @@ import (
 // from a .litertlm model file without loading full weight tensors or allocating
 // KV caches.
 type ModelCapabilities struct {
-	Path                        string      `json:"path,omitempty"`
-	SupportsSpeculativeDecoding bool        `json:"supports_speculative_decoding"`
-	SupportsThinking            bool        `json:"supports_thinking"`
-	SupportsFunctionCalling     bool        `json:"supports_function_calling"`
-	DefaultSampler              SamplerType `json:"default_sampler"`
-	DefaultTemperature          float32     `json:"default_temperature"`
-	DefaultTopK                 int         `json:"default_top_k"`
-	DefaultTopP                 float32     `json:"default_top_p"`
-	MaxVisionTokenBudget        int         `json:"max_vision_token_budget"`
-	SupportedModalities         []Modality  `json:"supported_modalities"`
+	Path                        string                     `json:"path,omitempty"`
+	ModelType                   ModelType                  `json:"model_type"`
+	MinRuntimeVersion           string                     `json:"min_runtime_version,omitempty"`
+	SupportsSpeculativeDecoding bool                       `json:"supports_speculative_decoding"`
+	SupportsThinking            bool                       `json:"supports_thinking"`
+	SupportsFunctionCalling     bool                       `json:"supports_function_calling"`
+	DefaultSampler              SamplerType                `json:"default_sampler"`
+	DefaultTemperature          float32                    `json:"default_temperature"`
+	DefaultTopK                 int                        `json:"default_top_k"`
+	DefaultTopP                 float32                    `json:"default_top_p"`
+	MaxContextTokens            int                        `json:"max_context_tokens,omitempty"`
+	IsDynamicContext            bool                       `json:"is_dynamic_context"`
+	MaxVisionTokenBudget        int                        `json:"max_vision_token_budget"`
+	VisionSignatureLengths      []int                      `json:"vision_signature_lengths,omitempty"`
+	EmbeddingDimension          int                        `json:"embedding_dimension,omitempty"`
+	EmbeddingSignatureLengths   []int                      `json:"embedding_signature_lengths,omitempty"`
+	SupportedModalities         []Modality                 `json:"supported_modalities"`
+	ModalityBackends            map[Modality][]BackendType `json:"modality_backends,omitempty"`
+	ModalityNPUBrand            map[Modality]NPUBrand      `json:"modality_npu_brand,omitempty"`
+	ModalitySoCName             map[Modality]string        `json:"modality_soc_name,omitempty"`
 }
 
 // SupportsModality reports whether the model supports the specified input modality.
@@ -141,20 +151,170 @@ func (f LoadedFile) MaxVisionTokenBudget() int {
 	return int(getHandleScalar[LoadedFile, int32](f, loadedFileMaxVisionTokenBudgetFunc, "loaded_file_max_vision_token_budget", -1))
 }
 
+// ModelType returns the loaded model kind (LLM, Embedding, or Unknown).
+func (f LoadedFile) ModelType() (ModelType, error) {
+	v, err := getHandleScalarErr[LoadedFile, int32](f, "loaded file", loadedFileModelTypeFunc, "loaded_file_model_type")
+	if err != nil {
+		return ModelTypeUnknown, err
+	}
+	return ModelType(v), nil
+}
+
+// MaxContextTokens returns the model's context capacity in tokens, or
+// ErrNotFound when the metadata does not specify one.
+func (f LoadedFile) MaxContextTokens() (int, error) {
+	v, err := getHandleScalarErr[LoadedFile, uint32](f, "loaded file", loadedFileMaxContextTokensFunc, "loaded_file_max_context_tokens")
+	if err != nil {
+		return 0, err
+	}
+	return int(v), nil
+}
+
+// IsDynamicContext reports whether the model graph supports configurable context lengths.
+func (f LoadedFile) IsDynamicContext() bool {
+	return getHandleBool(f, loadedFileIsDynamicContextFunc, "loaded_file_is_dynamic_context")
+}
+
+// VisionSignatureLengths returns supported discrete vision token budgets.
+// Returns ErrNotFound if the model does not support vision or defines none.
+func (f LoadedFile) VisionSignatureLengths() ([]int, error) {
+	return f.queryInt32Slice(loadedFileVisionSignatureSelectionFunc, "loaded_file_vision_signature_selection")
+}
+
+// EmbeddingDimension returns the output embedding dimension, or ErrNotFound
+// for non-embedding models.
+func (f LoadedFile) EmbeddingDimension() (int, error) {
+	v, err := getHandleScalarErr[LoadedFile, int32](f, "loaded file", loadedFileEmbeddingDimensionFunc, "loaded_file_embedding_dimension")
+	if err != nil {
+		return 0, err
+	}
+	return int(v), nil
+}
+
+// EmbeddingSignatureLengths returns supported embedding sequence lengths, or
+// ErrNotFound for non-embedding models.
+func (f LoadedFile) EmbeddingSignatureLengths() ([]int, error) {
+	return f.queryInt32Slice(loadedFileEmbeddingSignatureSelectionFunc, "loaded_file_embedding_signature_selection")
+}
+
+func (f LoadedFile) queryInt32Slice(fn *lazyFun, op string) ([]int, error) {
+	if f == 0 {
+		return nil, fmt.Errorf("litertlm: %s: invalid loaded file", op)
+	}
+	raw, err := queryCBuffer(func(buf *int32, maxSize uint64) (uint64, error) {
+		return callStatusScalar[uint64](fn, op,
+			unsafe.Pointer(&f), unsafe.Pointer(&buf), unsafe.Pointer(&maxSize))
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]int, len(raw))
+	for i, v := range raw {
+		out[i] = int(v)
+	}
+	return out, nil
+}
+
+// ModalitySupportedBackends returns the priority-ordered hardware backends
+// supported for modality (nil if modality is unsupported).
+func (f LoadedFile) ModalitySupportedBackends(modality Modality) ([]BackendType, error) {
+	if f == 0 {
+		return nil, fmt.Errorf("litertlm: loaded_file_modality_supported_backends: invalid loaded file")
+	}
+	modVal := int32(modality)
+	return queryCBuffer(func(buf *BackendType, maxSize uint64) (uint64, error) {
+		return callStatusScalar[uint64](loadedFileModalitySupportedBackendsFunc, "loaded_file_modality_supported_backends",
+			unsafe.Pointer(&f), unsafe.Pointer(&modVal), unsafe.Pointer(&buf), unsafe.Pointer(&maxSize))
+	})
+}
+
+// ModalityNPUBrand returns the detected NPU vendor for modality, or
+// NPUBrandUnknown if not NPU-compiled.
+func (f LoadedFile) ModalityNPUBrand(modality Modality) (NPUBrand, error) {
+	if f == 0 {
+		return NPUBrandUnknown, fmt.Errorf("litertlm: loaded_file_modality_npu_brand: invalid loaded file")
+	}
+	modVal := int32(modality)
+	v, err := callStatusScalar[int32](loadedFileModalityNpuBrandFunc, "loaded_file_modality_npu_brand",
+		unsafe.Pointer(&f), unsafe.Pointer(&modVal))
+	if err != nil {
+		return NPUBrandUnknown, err
+	}
+	return NPUBrand(v), nil
+}
+
+// ModalitySoCName returns the target SoC identifier for modality (empty string
+// when unspecified).
+func (f LoadedFile) ModalitySoCName(modality Modality) (string, error) {
+	if f == 0 {
+		return "", fmt.Errorf("litertlm: loaded_file_modality_soc_name: invalid loaded file")
+	}
+	modVal := int32(modality)
+	s, _, err := callStatusString(loadedFileModalitySocNameFunc, "loaded_file_modality_soc_name",
+		unsafe.Pointer(&f), unsafe.Pointer(&modVal))
+	if err != nil {
+		return "", err
+	}
+	return s, nil
+}
+
+// MinRuntimeVersion returns the minimum LiteRT-LM runtime version string
+// required by the model (empty string when unspecified).
+func (f LoadedFile) MinRuntimeVersion() (string, error) {
+	return getHandleStringErr(f, "loaded file", loadedFileMinRuntimeVersionFunc, "loaded_file_min_runtime_version")
+}
+
 // Snapshot copies all capability properties from the handle into a Go ModelCapabilities struct.
 func (f LoadedFile) Snapshot(path string) *ModelCapabilities {
 	if f == 0 {
 		return nil
 	}
 	allModalities := []Modality{ModalityText, ModalityVision, ModalityAudio, ModalityVideo}
-	var supported []Modality
+	var (
+		supported        []Modality
+		modalityBackends map[Modality][]BackendType
+		modalityNPUBrand map[Modality]NPUBrand
+		modalitySoCName  map[Modality]string
+	)
 	for _, m := range allModalities {
-		if f.SupportsInputModality(m) {
-			supported = append(supported, m)
+		if !f.SupportsInputModality(m) {
+			continue
+		}
+		supported = append(supported, m)
+		if backends, err := f.ModalitySupportedBackends(m); err == nil && len(backends) > 0 {
+			if modalityBackends == nil {
+				modalityBackends = make(map[Modality][]BackendType)
+			}
+			modalityBackends[m] = backends
+		}
+		if brand, err := f.ModalityNPUBrand(m); err == nil && brand != NPUBrandUnknown {
+			if modalityNPUBrand == nil {
+				modalityNPUBrand = make(map[Modality]NPUBrand)
+			}
+			modalityNPUBrand[m] = brand
+		}
+		if soc, err := f.ModalitySoCName(m); err == nil && soc != "" {
+			if modalitySoCName == nil {
+				modalitySoCName = make(map[Modality]string)
+			}
+			modalitySoCName[m] = soc
 		}
 	}
+
+	modelType, _ := f.ModelType()
+	minVer, _ := f.MinRuntimeVersion()
+	maxCtx, _ := f.MaxContextTokens()
+	visionLens, _ := f.VisionSignatureLengths()
+	embedDim, _ := f.EmbeddingDimension()
+	embedLens, _ := f.EmbeddingSignatureLengths()
+
 	return &ModelCapabilities{
 		Path:                        path,
+		ModelType:                   modelType,
+		MinRuntimeVersion:           minVer,
 		SupportsSpeculativeDecoding: f.HasSpeculativeDecodingSupport(),
 		SupportsThinking:            f.SupportsThinking(),
 		SupportsFunctionCalling:     f.SupportsFunctionCalling(),
@@ -162,7 +322,15 @@ func (f LoadedFile) Snapshot(path string) *ModelCapabilities {
 		DefaultTemperature:          f.SamplerTemperature(),
 		DefaultTopK:                 f.SamplerTopK(),
 		DefaultTopP:                 f.SamplerTopP(),
+		MaxContextTokens:            maxCtx,
+		IsDynamicContext:            f.IsDynamicContext(),
 		MaxVisionTokenBudget:        f.MaxVisionTokenBudget(),
+		VisionSignatureLengths:      visionLens,
+		EmbeddingDimension:          embedDim,
+		EmbeddingSignatureLengths:   embedLens,
 		SupportedModalities:         supported,
+		ModalityBackends:            modalityBackends,
+		ModalityNPUBrand:            modalityNPUBrand,
+		ModalitySoCName:             modalitySoCName,
 	}
 }
