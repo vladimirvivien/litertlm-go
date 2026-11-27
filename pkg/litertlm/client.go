@@ -170,6 +170,11 @@ func applySettings(s EngineSettings, cfg *clientConfig) error {
 			return err
 		}
 	}
+	if cfg.enableDebugger != nil {
+		if err := s.SetEnableDebugger(*cfg.enableDebugger); err != nil {
+			return err
+		}
+	}
 	if len(cfg.selectedSignatures) > 0 {
 		if err := s.SetSelectedSignatures(cfg.selectedSignatures); err != nil {
 			return err

@@ -28,6 +28,7 @@ type jsonModelConfig struct {
 	GPUWaitForWeightUploads     *bool    `json:"gpu_wait_for_weight_uploads,omitempty"`
 	UseRingbuffersLocalAttn     *bool    `json:"use_ringbuffers_local_attention,omitempty"`
 	SingleThreadedExecution     *bool    `json:"single_threaded_execution,omitempty"`
+	EnableDebugger              *bool    `json:"enable_debugger,omitempty"`
 	SelectedSignatures          []string `json:"selected_signatures,omitempty"`
 	NumThreads                  *int     `json:"num_threads,omitempty"`
 	AudioNumThreads             *int     `json:"audio_num_threads,omitempty"`
@@ -142,6 +143,9 @@ func (c *clientConfig) applyModelConfig(mc *jsonModelConfig) error {
 	}
 	if mc.SingleThreadedExecution != nil {
 		c.singleThreadedExecution = new(*mc.SingleThreadedExecution)
+	}
+	if mc.EnableDebugger != nil {
+		c.enableDebugger = new(*mc.EnableDebugger)
 	}
 	if len(mc.SelectedSignatures) > 0 {
 		c.selectedSignatures = slices.Clone(mc.SelectedSignatures)

@@ -1,6 +1,9 @@
 # Staging & Building LiteRT-LM C Shared Libraries (Linux & macOS)
 
-`litertlm-go` loads the unified `liblitert-lm` shared library (`liblitert-lm.so` on Linux, `liblitert-lm.dylib` on macOS) targeting LiteRT-LM **v0.19.1** (C API `1.0.0`). Official prebuilt shared libraries are distributed for Linux and macOS.
+`litertlm-go` loads the unified `liblitert-lm` shared library (`liblitert-lm.so` on Linux, `liblitert-lm.dylib` on macOS) targeting LiteRT-LM **v0.19.1** (C API `1.0.0`) as the default prebuilt baseline, with support for **v0.20.0** (C API `1.1.0`). Official cross-platform prebuilt shared libraries (`v0.19.1`) are distributed for Linux and macOS, alongside macOS ARM64 (`litert_lm_macos_arm64.tar.gz`) builds for `v0.20.0`.
+
+> [!NOTE]
+> C API `1.1.0` capabilities (`ModelSync`, `WithToolChoice`, `WithSelectedSignatures`, and `WithDebuggerEnabled`) require a `v0.20.0+` runtime library. On Linux, build `//c:litert-lm` from source at tag `v0.20.0` until cross-platform prebuilt archives include `1.1.0`.
 
 ---
 
@@ -84,7 +87,7 @@ If you are modifying the C++ engine or building custom operator extensions, you 
 ```bash
 git clone https://github.com/google-ai-edge/LiteRT-LM.git
 cd LiteRT-LM
-git checkout v0.19.1
+git checkout v0.20.0 # or v0.19.1 for C API 1.0.0 baseline
 git lfs install --local
 git lfs pull
 ```

@@ -1,6 +1,9 @@
 # Staging & Building LiteRT-LM C Shared Libraries on Windows
 
-`litertlm-go` loads the unified `litert-lm.dll` shared library targeting LiteRT-LM **v0.19.1** (C API `1.0.0`). Official prebuilt Windows binaries are distributed by the LiteRT-LM project.
+`litertlm-go` loads the unified `litert-lm.dll` shared library targeting LiteRT-LM **v0.19.1** (C API `1.0.0`) as the default prebuilt baseline, with support for **v0.20.0** (C API `1.1.0`). Official prebuilt Windows binaries are distributed by the LiteRT-LM `v0.19.1` release.
+
+> [!NOTE]
+> C API `1.1.0` capabilities (`ModelSync`, `WithToolChoice`, `WithSelectedSignatures`, and `WithDebuggerEnabled`) require `litert-lm.dll` built at tag `v0.20.0` (see Section 3 below) when cross-platform `1.1.0` prebuilt archives are not yet published.
 
 ---
 
@@ -88,7 +91,7 @@ If you are developing custom C++ engine features or operators, compile from sour
 ```powershell
 git clone https://github.com/google-ai-edge/LiteRT-LM.git
 cd LiteRT-LM
-git checkout v0.19.1
+git checkout v0.20.0 # or v0.19.1 for C API 1.0.0 baseline
 git lfs install --local
 git lfs pull
 ```

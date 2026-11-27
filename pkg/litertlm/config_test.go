@@ -259,4 +259,17 @@ func TestWithConfigFile_EmbeddingFields(t *testing.T) {
 	if cfg.minInputLength == nil || *cfg.minInputLength != 64 {
 		t.Errorf("minInputLength = %v, want 64", cfg.minInputLength)
 	}
+
+	dbgPath := filepath.Join(tmp, "dbg_config.json")
+	if err := os.WriteFile(dbgPath, []byte(`{"default":{"enable_debugger":true}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile dbg: %v", err)
+	}
+	dbgCfg := clientConfig{}
+	WithConfigFile(dbgPath, "")(&dbgCfg)
+	if dbgCfg.err != nil {
+		t.Fatalf("unexpected error: %v", dbgCfg.err)
+	}
+	if dbgCfg.enableDebugger == nil || !*dbgCfg.enableDebugger {
+		t.Errorf("enableDebugger = %v, want true", dbgCfg.enableDebugger)
+	}
 }

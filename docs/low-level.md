@@ -10,6 +10,8 @@ Common reasons to drop down:
 - **Per-turn constraint, thinking & penalty handles.** Configure `OptionalArgs` with `SetThinkingConfig`, `SetConstraint`, `SetRepetitionPenalty`, `SetNoRepeatNgram`, `SetSuppressTokens`, and `SetToolChoice` (C API `1.1+`).
 - **Model capability inspection.** Read `.litertlm` metadata (`ModelType`, `MaxContextTokens`, `IsDynamicContext`, `ModalitySupportedBackends`, NPU/SoC metadata, embedding dimensions) directly via `OpenLoadedFile` / `LoadedFile` without creating an engine.
 - **Standalone embedding engines.** Use `EmbeddingEngineSettings`, `EmbeddingEngine`, `EmbeddingOptions`, `EmbeddingResponse`, and `EmbeddingResponses` directly when reusing `InputData` buffers or option handles across calls.
+- **Differential model sync (`C API 1.1+`).** Drive `NewModelSyncOptions`, `NewModelSyncPlanFromFile`, `ModelSyncUpdate`, and `ModelSyncCacheSync` directly over a custom `RangeFetcher` or `ModelSyncRangeWriter`.
+- **Runtime Metal residency & debugger captures.** Toggle residency with `Engine.SetMetalResidency`, configure `EngineSettings.SetEnableDebugger(true)` (`C API 1.1+`), and inspect trace folders via `Session.DebugInfo` / `Session.DebugCaptureDir` and `Conversation.SessionDebugInfo` / `Conversation.DebugCaptureDir`.
 - **Single-threaded execution.** Drive caller-thread scheduling with `SetSingleThreadedExecution(true)` paired with `Conversation.WaitUntilDone`.
 - **Text scoring.** `Session.ScoreTexts` returns log-probabilities for candidate completions.
 - **Token introspection.** `Engine.Tokenize` / `Engine.Detokenize`, `Engine.StartTokenIDs` / `StopTokenIDs`.
@@ -36,14 +38,19 @@ Common reasons to drop down:
 | `litertlm.NewEmbeddingClient(...)`    | `Load` + `NewEmbeddingEngineSettings` + setters + `NewEmbeddingEngine`                                                     |
 | `embedClient.Embed(ctx, text, ...)`   | `NewTextInputString` + `NewEmbeddingOptions` + `embeddingEngine.ComputeEmbedding` + `Values` + `Delete`s                   |
 | `embedClient.EmbedBatch(ctx, ...)`    | Build `[][]InputData` + `embeddingEngine.ComputeEmbeddingBatch` + `EmbeddingResponses.Values` + `Delete`s                  |
+| `client.SetMetalResidency(on)`        | `engine.SetMetalResidency(on)`                                                                                             |
+| `chat.DebugCaptureDir()`              | `conv.SessionDebugInfo()` + `SessionDebugInfo.CaptureDir()` + `SessionDebugInfo.Delete()`                                  |
+| `litertlm.PlanModelSync(...)`         | `NewModelSyncOptions` + `NewModelSyncPlanFromFile` + `ModelSyncPlanHandle.Snapshot` + `Delete`s                            |
+| `litertlm.SyncModel(...)`             | `NewModelSyncOptions` + `ModelSyncUpdate` + `ModelSyncOptionsHandle.Delete`                                                |
+| `litertlm.SyncModelCache(...)`        | `NewModelSyncOptions` + `ModelSyncCacheSync` + `ModelSyncResultHandle.CachedPath` + `Delete`s                              |
 
 ## Resource lifetime management
 
-The low-level API surfaces each C handle as a `uintptr` value type (`Engine`, `Session`, `EngineSettings`, `SessionConfig`, `Conversation`, `ConversationConfig`, `OptionalArgs`, `Responses`, `BenchmarkInfo`, `JSONResponse`, `InputData`, `LoadedFile`, `EmbeddingEngine`, `EmbeddingEngineSettings`, `EmbeddingOptions`, `EmbeddingResponse`, `EmbeddingResponses`). Each provides a `.Delete()` method. Low-level setters return `error`, wrapping C status failures in `*CError` with thread-local error messages and `StatusCode` sentinels.
+The low-level API surfaces each C handle as a `uintptr` value type (`Engine`, `Session`, `EngineSettings`, `SessionConfig`, `Conversation`, `ConversationConfig`, `OptionalArgs`, `Responses`, `BenchmarkInfo`, `JSONResponse`, `InputData`, `LoadedFile`, `EmbeddingEngine`, `EmbeddingEngineSettings`, `EmbeddingOptions`, `EmbeddingResponse`, `EmbeddingResponses`, `ModelSyncOptionsHandle`, `ModelSyncPlanHandle`, `ModelSyncResultHandle`, `SessionDebugInfo`). Each provides a `.Delete()` method. `ModelSyncRangeWriter` is a borrowed handle valid only for the duration of a `RangeFetcher` callback and must not be retained. Low-level setters return `error`, wrapping C status failures in `*CError` with thread-local error messages and `StatusCode` sentinels.
 
 **Rules of thumb:**
 
-- Every `New*`, `OpenLoadedFile`, `Clone`, `ComputeEmbedding*`, and `Generate*` (when returning a handle) must be paired with `defer h.Delete()`.
+- Every `New*`, `OpenLoadedFile`, `Clone`, `ComputeEmbedding*`, `ModelSyncCacheSync`, non-zero `DebugInfo()` / `SessionDebugInfo()`, and `Generate*` (when returning a handle) must be paired with `defer h.Delete()`.
 - `EmbeddingResponses.At(i)` returns a borrowed `EmbeddingResponse` owned by the batch container; do not call `Delete()` on it.
 - A cloned `Session` or `Conversation` owns an independent handle, but keep parent resources (`Engine`, root `Chat`) alive for the lifetime of active clones.
 - Strings and embedding float slices returned by accessor methods are copied into Go memory, so they remain valid after the parent handle is deleted.

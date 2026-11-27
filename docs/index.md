@@ -10,7 +10,7 @@ A Go binding for Google's
 
 ## 🔥 Features
 
-* 📦 **Automated Provisioning** — Fetch, cache, and stage official LiteRT-LM shared libraries (`FetchLib`) and `.litertlm` models from Hugging Face (`FetchModel`) in Go.
+* 📦 **Automated Provisioning & Differential Sync** — Fetch, cache, and stage official LiteRT-LM shared libraries (`FetchLib`), download `.litertlm` models from Hugging Face (`FetchModel`), and reuse unchanged sections during model updates (`PlanModelSync`, `SyncModel`, `SyncModelCache`, C API `1.1+`).
 * 🔬 **Model Inspection & Structured Diagnostics** — Inspect model types, context limits, hardware backends/NPU targets, thinking support, function calling, embedding dimensions, and default sampler settings without booting an engine (`InspectModel`), with `*CError` diagnostics and `StatusCode` sentinel matching.
 * ⚙️ **Centralized Configuration** — Configure backends, speculative decoding, token limits, and sampler parameters from a shared `config.json` file (`WithConfigFile`).
 * 💬 **[Stateful Chat & Conversations](chat.md)** — Multi-turn chat orchestration with system prompts, custom prompt templates, thinking budgets, transcript seeding, KV-cache channel filtering, and branching (`Chat.Clone`).
@@ -19,7 +19,7 @@ A Go binding for Google's
 * 🧭 **[Standalone Embeddings](embeddings.md)** — Generate text, multimodal, batch, and Matryoshka-truncated embeddings with `EmbeddingClient`.
 * 🛠️ **[Automated Tool Calling](tools.md)** — Register Go functions as tools with automatic dispatch, streaming tool calls, error recovery policies, and `ToolChoice` selection policies (C API `1.1+`).
 * 📐 **[Structured JSON Output](structured-output.md)** — Extract model outputs directly into Go structs with type-safe generic helpers (`GenerateData[T]`, `GenerateDataMulti[T]`).
-* ⚡ **Hardware Acceleration & Speculative Decoding** — Run on CPU (XNNPACK / YNNPACK), GPU (WebGPU / Direct3D 12 / Metal), or NPU with configurable speculative decoding (`Off`, `On`, `Adaptive`).
+* ⚡ **Hardware Acceleration, Residency & Diagnostics** — Run on CPU (XNNPACK / YNNPACK), GPU (WebGPU / Direct3D 12 / Metal), or NPU with configurable speculative decoding (`Off`, `On`, `Adaptive`), runtime Metal residency toggles (`Client.SetMetalResidency`), and AI Edge Debugger capture inspection (`WithDebuggerEnabled`, C API `1.1+`).
 * 🔍 **[Low-Level Control](low-level.md)** — Access the LiteRT-LM C API for explicit prefill/decode, KV-cache checkpoints and rewinding, session cloning, async decode, scoring, tokenization, and file-descriptor loading.
 * 🤖 **[Supported Models](models.md)** — Compatible with Gemma 4, Gemma 3/3n, Qwen 3/2.5, Phi-4, and other LiteRT-LM model families.
 
@@ -99,7 +99,7 @@ Minimum supported upstream: **LiteRT-LM v0.19.1** (C API `1.0.0`).
 
 ## Examples
 
-44 self-contained runnable programs covering every public API surface live under
+48 self-contained runnable programs covering every public API surface live under
 [`examples/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples).
 See the
 [examples index](https://github.com/vladimirvivien/litertlm-go/blob/main/examples/README.md)

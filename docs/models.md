@@ -148,6 +148,29 @@ Supported identifier formats:
 * **Full Repo + File:** `hf:google/gemma-3-1b-it:model.litertlm`
 * **Direct HTTPS URL:** `https://huggingface.co/litert-community/gemma3-1b-it-int4/resolve/main/gemma3-1b-it-int4.litertlm`
 
+### Differential Model Sync (`C API 1.1+`)
+
+On runtimes supporting LiteRT-LM C API `1.1.0+`, `PlanModelSync`, `SyncModel`, and `SyncModelCache` compare an existing local `.litertlm` container against a remote `RangeFetcher` (such as `modelfetch.NewHTTPRangeFetcher`) and download only modified sections:
+
+```go
+fetcher := modelfetch.NewHTTPRangeFetcher(http.DefaultClient, "litert-community/gemma3-1b-it-int4")
+plan, err := litertlm.PlanModelSync(ctx, localPath, fetcher,
+	litertlm.WithFullDownloadThreshold(0.80),
+)
+if err != nil {
+	return err
+}
+fmt.Printf("Up to date: %v | Download: %d B | Reuse: %d B\n",
+	plan.UpToDate, plan.BytesToDownload, plan.BytesToReuse)
+
+cachedPath, err := litertlm.SyncModelCache(ctx, cacheDir, "gemma3-1b-it-int4", fetcher,
+	litertlm.WithOfflineFallback(true),
+	litertlm.WithCheckDiskSpace(true),
+)
+```
+
+Transport failures and HTTP timeouts map to `StatusUnavailable` and `StatusDeadlineExceeded`, enabling offline fallback to a valid cached artifact when `WithOfflineFallback(true)` is active. Calling `ModelSync` functions against a C API `1.0.0` (`v0.19.1`) library returns `*CError` wrapping `ErrUnimplemented`. See [`examples/model-sync/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/model-sync).
+
 ---
 
 ## 6. Integration Test Execution

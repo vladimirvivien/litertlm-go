@@ -69,3 +69,22 @@ type EmbeddingResponse uintptr
 // EmbeddingResponses wraps a LiteRtLmEmbeddingResponses* holding a batch of
 // embedding vectors.
 type EmbeddingResponses uintptr
+
+// ModelSyncOptionsHandle wraps a LiteRtLmModelSyncOptions* configuring
+// differential model synchronization.
+type ModelSyncOptionsHandle uintptr
+
+// ModelSyncPlanHandle wraps a LiteRtLmModelSyncPlan* holding a computed
+// synchronization plan comparing local and remote models.
+type ModelSyncPlanHandle uintptr
+
+// ModelSyncRangeWriter wraps a borrowed LiteRtLmModelSyncRangeWriter* passed to
+// a RangeFetcher callback during synchronization. Valid only during the call.
+type ModelSyncRangeWriter uintptr
+
+// ModelSyncResultHandle wraps a LiteRtLmModelSyncResult* returned by cache sync.
+type ModelSyncResultHandle uintptr
+
+// SessionDebugInfo wraps a LiteRtLmSessionDebugInfo* holding debugger capture
+// metadata for a Session or Conversation.
+type SessionDebugInfo uintptr

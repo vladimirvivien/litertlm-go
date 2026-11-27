@@ -34,6 +34,7 @@ type clientConfig struct {
 	gpuWaitForWeightUploads    *bool
 	useRingbuffersLocalAttn    *bool
 	singleThreadedExecution    *bool
+	enableDebugger             *bool
 	selectedSignatures         []string
 
 	dispatchLibDir       string
@@ -174,6 +175,12 @@ func WithRingbuffersLocalAttention(on bool) Option {
 // WithSingleThreadedExecution configures caller-driven single-threaded session execution.
 func WithSingleThreadedExecution(on bool) Option {
 	return func(c *clientConfig) { c.singleThreadedExecution = new(on) }
+}
+
+// WithDebuggerEnabled enables the AI Edge Debugger capture traces for engines
+// configured with a writable WithCacheDir directory (requires LiteRT-LM C API 1.1.0+).
+func WithDebuggerEnabled(on bool) Option {
+	return func(c *clientConfig) { c.enableDebugger = new(on) }
 }
 
 // WithSelectedSignatures restricts the main executor to the listed model signatures

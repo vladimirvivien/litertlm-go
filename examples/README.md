@@ -69,5 +69,8 @@ go run ./examples/<name> [-backend cpu|gpu]
 | `examples/token-limiter/`      | Dynamic sequence output constraints on a per-call basis (`WithMaxOutputTokens`) |
 | `examples/lora-tuner/`         | Low-level base and supported LoRA rank configuration on settings handles at initialization |
 | `examples/model-downloader/`   | Standalone model downloader utility using `litertlm.FetchModel` |
+| `examples/model-sync/`         | Differential `.litertlm` update planning and cache sync via `PlanModelSync` / `SyncModelCache` (C API `1.1.0+`) |
+| `examples/metal-residency/`    | Apple Metal residency startup option and runtime toggle via `Client.SetMetalResidency` |
+| `examples/debugger/`           | AI Edge Debugger configuration (`WithDebuggerEnabled`, C API `1.1.0+`) and `DebugCaptureDir()` inspection |
 | `examples/config-file/`        | Configure `litertlm.Client` from a centralized `config.json` file using `WithConfigFile` |
 

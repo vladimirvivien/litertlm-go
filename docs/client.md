@@ -59,6 +59,7 @@ Use functional options to specify environment and inference engine settings.
 | `WithGPUWaitForWeightUploads(on)`         | Wait for weight uploads to complete during GPU initialization.            |
 | `WithRingbuffersLocalAttention(on)`       | Store local attention KV caches in ringbuffers.                           |
 | `WithSingleThreadedExecution(on)`         | Run session execution on caller-driven threads rather than background workers. |
+| `WithDebuggerEnabled(on)`                 | Enable AI Edge Debugger trace captures under a writable `WithCacheDir` (requires C API `1.1+`; returns `ErrUnimplemented` on `1.0.0`). |
 | `WithSelectedSignatures(signatures...)`   | Restrict the main executor to named model signatures (requires C API `1.1+`; returns `ErrUnimplemented` on `1.0.0`). |
 | `WithDispatchLibDir(dir)`                 | LiteRT dispatch library directory for the NPU backend.                    |
 | `WithVisionDispatchLibDir(dir)`           | LiteRT dispatch library directory for vision NPU embedding backends.      |
@@ -90,7 +91,7 @@ Use functional options to specify environment and inference engine settings.
 Store engine, speculative decoding, acceleration, thread-count, LoRA, and default sampler settings in a JSON file with a `"default"` block and per-model overrides under `"models"`. Load a profile with `litertlm.WithConfigFile("config.json", "model-profile")`; explicit Go options applied after `WithConfigFile` override profile fields.
 
 Supported keys inside each model entry include:
-`backend`, `max_tokens`, `cache_dir`, `speculative_decoding_enabled`, `speculative_decoding_mode` (`"off"` | `"on"` | `"adaptive"`), `speculative_decoding_lenience`, `parallel_section_loading`, `enable_ynnpack`, `max_vision_tokens_per_image`, `metal_residency_set`, `gpu_decode_steps_per_sync`, `gpu_wait_for_weight_uploads`, `use_ringbuffers_local_attention`, `single_threaded_execution`, `selected_signatures`, `num_threads`, `audio_num_threads`, `vision_dispatch_lib_dir`, `audio_dispatch_lib_dir`, `max_input_length`, `min_input_length`, `lora_rank`, `supported_lora_ranks`, `audio_lora_rank`, `supported_audio_lora_ranks`, `sampler_type` (`"top_k"` | `"top_p"` | `"greedy"`), `temperature`, `top_k`, `top_p`, `seed`, `lib_path`, `lib_name`, and `model_path`.
+`backend`, `max_tokens`, `cache_dir`, `speculative_decoding_enabled`, `speculative_decoding_mode` (`"off"` | `"on"` | `"adaptive"`), `speculative_decoding_lenience`, `parallel_section_loading`, `enable_ynnpack`, `max_vision_tokens_per_image`, `metal_residency_set`, `gpu_decode_steps_per_sync`, `gpu_wait_for_weight_uploads`, `use_ringbuffers_local_attention`, `single_threaded_execution`, `enable_debugger`, `selected_signatures`, `num_threads`, `audio_num_threads`, `vision_dispatch_lib_dir`, `audio_dispatch_lib_dir`, `max_input_length`, `min_input_length`, `lora_rank`, `supported_lora_ranks`, `audio_lora_rank`, `supported_audio_lora_ranks`, `sampler_type` (`"top_k"` | `"top_p"` | `"greedy"`), `temperature`, `top_k`, `top_p`, `seed`, `lib_path`, `lib_name`, and `model_path`.
 
 See [`examples/config-file/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/config-file).
 
@@ -111,6 +112,12 @@ fmt.Printf("type=%s ctx=%d dynamic=%v modalities=%v thinking=%v tools=%v\n",
 `ModelCapabilities` reports `ModelType` (`ModelTypeLLM` / `ModelTypeEmbedding`), `MinRuntimeVersion`, `MaxContextTokens`, `IsDynamicContext`, `VisionSignatureLengths`, `EmbeddingDimension`, `EmbeddingSignatureLengths`, per-modality hardware support (`ModalityBackends`, `ModalityNPUBrand`, `ModalitySoCName`), and convenience predicates (`SupportsText()`, `SupportsVision()`, `SupportsAudio()`, `SupportsVideo()`). See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities).
 
 Inspect the loaded C API version at runtime with `litertlm.APIVersion()`. Native runtime failures return a `*litertlm.CError` carrying the failing `Op`, canonical `StatusCode`, and thread-local C++ diagnostic `Message`. Match conditions portably with `errors.Is` against sentinel errors (`ErrCancelled`, `ErrInvalidArgument`, `ErrNotFound`, `ErrResourceExhausted`, `ErrFailedPrecondition`, `ErrUnimplemented`, `ErrInternal`, etc.) or extract details via `errors.As`.
+
+### Runtime Residency & Debugger Diagnostics
+
+Adjust Metal GPU weight residency at runtime with `client.SetMetalResidency(enable)` (active on Apple Metal GPU backends; safely ignored on other platforms or CPU execution). See [`examples/metal-residency/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/metal-residency).
+
+When `WithDebuggerEnabled(true)` is paired with a writable `WithCacheDir` on C API `1.1+`, query relative capture directories using `chat.DebugCaptureDir()` or `session.DebugCaptureDir()`. Captures contain unencrypted prompt/decoded text and activation tensors; remove capture directories manually after diagnostics. See [`examples/debugger/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/debugger).
 
 ## Client methods
 ### `Generate(ctx, prompt, opts...)`

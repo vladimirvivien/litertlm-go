@@ -12,7 +12,7 @@ A high-performance Go binding for Google's [LiteRT-LM](https://github.com/google
 
 ## 🔥 Features 
 
-* 📦 **Automated Provisioning** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`FetchLib`, including Windows DXC binaries) and `.litertlm` models from Hugging Face (`FetchModel`) directly in Go.
+* 📦 **Automated Provisioning & Differential Sync** — Automatically download, cache, and stage official LiteRT-LM prebuilts (`FetchLib`, including Windows DXC binaries), download `.litertlm` models (`FetchModel`), and sync changed model sections over HTTP byte ranges (`PlanModelSync`, `SyncModel`, `SyncModelCache`, C API `1.1+`).
 * 🔬 **Model Inspection & Structured Diagnostics** — Inspect `.litertlm` model types (`LLM`/`Embedding`), context capacities, supported backends, NPU/SoC metadata, thinking/tool support, and sampler defaults without booting an engine (`InspectModel`), and match native C errors with `StatusCode` sentinels (`*CError`, `APIVersion`).
 * ⚙️ **Centralized Configuration** — Load engine and sampler configurations from a shared `config.json` profile file (`WithConfigFile`).
 * 💬 **Stateful Chat & Conversations** — Multi-turn chat orchestration with system prompts, custom prompt templates (`WithPromptTemplate`), thinking budgets (`ThinkingConfig`), transcript seeding, KV-cache channel filtering, and branching (`Chat.Clone`).
@@ -21,7 +21,7 @@ A high-performance Go binding for Google's [LiteRT-LM](https://github.com/google
 * 🧭 **Standalone Multimodal Embeddings** — Generate single, batch, and multimodal vectors with `EmbeddingClient`, overflow chunking, L2 normalization, and Matryoshka truncation.
 * 🛠️ **Automated Tool Calling** — Register Go functions as tools with automatic dispatch, streaming tool calls, per-tool error recovery policies, and OpenAI-style `ToolChoice` policies (C API `1.1+`).
 * 📐 **Structured JSON Output** — Extract model outputs directly into Go structs with type-safe generic helpers (`GenerateData[T]`, `GenerateDataMulti[T]`).
-* ⚡ **Hardware Acceleration & Speculative Decoding** — Run on CPU (XNNPACK / YNNPACK), GPU (WebGPU / Direct3D 12 / Metal), or NPU with configurable speculative decoding (`Off`, `On`, `Adaptive`).
+* ⚡ **Hardware Acceleration, Residency & Diagnostics** — Run on CPU (XNNPACK / YNNPACK), GPU (WebGPU / Direct3D 12 / Metal), or NPU with configurable speculative decoding (`Off`, `On`, `Adaptive`), dynamic Metal residency control (`Client.SetMetalResidency`), and AI Edge Debugger trace captures (`WithDebuggerEnabled`, C API `1.1+`).
 * 🔍 **Low-Level Control** — Access the LiteRT-LM C API for custom prefill/decode loops, KV-cache checkpoints and rewinding, session cloning, async decode, scoring, tokenization, and file-descriptor loading.
 
 ---
@@ -132,7 +132,7 @@ go run ./examples/autotool -get-lib v0.19.1 -get-model litert-community/gemma3-1
 go run ./examples/semantic-search search -get-lib v0.19.1 -get-model litert-community/embeddinggemma-2-text-vision-440m-litert-lm -dir ./examples/testdata -query "parking lot"
 ```
 
-See [`examples/README.md`](./examples/README.md) for the complete index of 45 runnable examples.
+See [`examples/README.md`](./examples/README.md) for the complete index of 48 runnable examples.
 
 ### Multimodal Demo
 

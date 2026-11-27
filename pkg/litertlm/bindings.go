@@ -916,6 +916,111 @@ var (
 		&ffi.TypePointer, // options (nullable)
 		&ffi.TypePointer, // out_responses
 	)
+
+	// ---- Differential Model Sync (c/model_sync.h, C API 1.1.0+) ----
+	modelSyncRangeWriterWriteFunc = newLazyFun(
+		"litert_lm_model_sync_range_writer_write",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // writer
+		&ffi.TypePointer, // data
+		&ffiTypeSizeT,    // size
+	)
+	modelSyncRangeWriterSetErrorFunc = newLazyFun(
+		"litert_lm_model_sync_range_writer_set_error",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // writer
+		&ffi.TypePointer, // message
+	)
+	modelSyncOptionsCreateFunc = newLazyFun(
+		"litert_lm_model_sync_options_create",
+		&ffi.TypeSint32, &ffi.TypePointer)
+	modelSyncOptionsDeleteFunc = newLazyFun(
+		"litert_lm_model_sync_options_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	modelSyncOptionsSetFullDownloadThresholdFunc = newLazyFun(
+		"litert_lm_model_sync_options_set_full_download_threshold",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeDouble)
+	modelSyncOptionsSetCleanFunc = newLazyFun(
+		"litert_lm_model_sync_options_set_clean",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	modelSyncOptionsSetCheckDiskSpaceFunc = newLazyFun(
+		"litert_lm_model_sync_options_set_check_disk_space",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	modelSyncOptionsSetAllowOfflineFallbackFunc = newLazyFun(
+		"litert_lm_model_sync_options_set_allow_offline_fallback",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	modelSyncPlanCreateFromFileFunc = newLazyFun(
+		"litert_lm_model_sync_plan_create_from_file",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // local_model_path (nullable)
+		&ffi.TypePointer, // remote_fetcher callback
+		&ffi.TypePointer, // user_data
+		&ffi.TypePointer, // options (nullable)
+		&ffi.TypePointer, // out_plan
+	)
+	modelSyncPlanDeleteFunc = newLazyFun(
+		"litert_lm_model_sync_plan_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	modelSyncPlanIsUpToDateFunc = newLazyFun(
+		"litert_lm_model_sync_plan_is_up_to_date",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	modelSyncPlanGetBytesToDownloadFunc = newLazyFun(
+		"litert_lm_model_sync_plan_get_bytes_to_download",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	modelSyncPlanGetBytesToReuseFunc = newLazyFun(
+		"litert_lm_model_sync_plan_get_bytes_to_reuse",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	modelSyncPlanGetTotalRemoteSizeFunc = newLazyFun(
+		"litert_lm_model_sync_plan_get_total_remote_size",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	modelSyncPlanFormatFunc = newLazyFun(
+		"litert_lm_model_sync_plan_format",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	modelSyncUpdateFunc = newLazyFun(
+		"litert_lm_model_sync_update",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // local_model_path (nullable)
+		&ffi.TypePointer, // output_model_path
+		&ffi.TypePointer, // remote_fetcher callback
+		&ffi.TypePointer, // user_data
+		&ffi.TypePointer, // options (nullable)
+	)
+	modelSyncCacheSyncFunc = newLazyFun(
+		"litert_lm_model_sync_cache_sync",
+		&ffi.TypeSint32,
+		&ffi.TypePointer, // cache_dir
+		&ffi.TypePointer, // model_id
+		&ffi.TypePointer, // remote_fetcher callback
+		&ffi.TypePointer, // user_data
+		&ffi.TypePointer, // options (nullable)
+		&ffi.TypePointer, // out_result
+	)
+	modelSyncResultDeleteFunc = newLazyFun(
+		"litert_lm_model_sync_result_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	modelSyncResultGetCachedPathFunc = newLazyFun(
+		"litert_lm_model_sync_result_get_cached_path",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+
+	// ---- Experimental Hooks (c/experimental.h) ----
+	experimentalEngineUpdateGpuEnableMetalResidencySetFunc = newLazyFun(
+		"litert_lm_experimental_engine_update_gpu_enable_metal_residency_set",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	experimentalEngineSettingsSetEnableDebuggerFunc = newLazyFun(
+		"litert_lm_experimental_engine_settings_set_enable_debugger",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypeUint8)
+	experimentalSessionGetDebugInfoFunc = newLazyFun(
+		"litert_lm_experimental_session_get_debug_info",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	experimentalConversationGetSessionDebugInfoFunc = newLazyFun(
+		"litert_lm_experimental_conversation_get_session_debug_info",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
+	experimentalSessionDebugInfoDeleteFunc = newLazyFun(
+		"litert_lm_experimental_session_debug_info_delete",
+		&ffi.TypeVoid, &ffi.TypePointer)
+	experimentalSessionDebugInfoGetCaptureDirFunc = newLazyFun(
+		"litert_lm_experimental_session_debug_info_get_capture_dir",
+		&ffi.TypeSint32, &ffi.TypePointer, &ffi.TypePointer)
 )
 
 // loadFuncs stashes the opened library so lazyFun can resolve symbols
