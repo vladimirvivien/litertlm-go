@@ -155,7 +155,7 @@ version-specific symbols fail with `ErrUnimplemented` when invoked
 against a build that does not export them.
 
 **Cause.** The LiteRT-LM library staged in `$LITERTLM_LIB` does not
-export the requested symbol or reports an earlier C API minor version. Features requiring `1.1+` include `WithSelectedSignatures` / `EngineSettings.SetSelectedSignatures` and `WithToolChoice` / `OptionalArgs.SetToolChoice`. Speculative decoding `Lenience != 0` also requires a runtime exporting `litert_lm_speculative_decoding_config_set_lenience`.
+export the requested symbol or reports an earlier C API minor version. Features requiring `1.1+` include `WithSelectedSignatures` / `EngineSettings.SetSelectedSignatures`, `WithToolChoice` / `OptionalArgs.SetToolChoice`, `PlanModelSync` / `SyncModel` / `SyncModelCache`, and `WithDebuggerEnabled` / `EngineSettings.SetEnableDebugger`. Speculative decoding `Lenience != 0` also requires a runtime exporting `litert_lm_speculative_decoding_config_set_lenience`.
 
 **Fix.** Match error handling with `errors.Is(err, litertlm.ErrUnimplemented)`, leave optional fields at their defaults (`Lenience: 0`), or stage a newer LiteRT-LM shared library release (minimum supported base is `v0.19.1` per [`LITERTLM-BUILD.md`](https://github.com/vladimirvivien/litertlm-go/blob/main/LITERTLM-BUILD.md)).
 

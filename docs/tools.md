@@ -110,26 +110,16 @@ Multiple `WithTool(...)` calls accumulate. Duplicate names error at
 When the chat has at least one `ManagedTool` registered, `Chat.Send`
 runs a dispatch loop:
 
-```
-Send(user message)
-        │
-        ▼
-   transport.SendMessage  ──►  reply
-                                  │
-                                  ▼
-              ┌── reply has no tool calls? ──► return reply ✓
-              │
-              └── every call dispatchable?
-                       │
-            ┌──────────┴──────────┐
-            │                     │
-           yes                    no
-            │                     │
-            ▼                     ▼
-   invoke each handler    return reply for manual handling
-            │
-            ▼
-   bundle results, loop ──► next reply ──► (back to top)
+```mermaid
+flowchart TD
+    S["Send(user message)"] --> T["transport.SendMessage -> reply"]
+    T --> Q1{"Reply has tool calls?"}
+    Q1 -->|No| R["Return reply"]
+    Q1 -->|Yes| Q2{"Every call dispatchable?"}
+    Q2 -->|No| M["Return reply for manual handling"]
+    Q2 -->|Yes| H["Invoke each ManagedTool handler"]
+    H --> B["Bundle tool results and loop"]
+    B --> T
 ```
 
 A call is **dispatchable** when its name maps to a `ManagedTool` in
@@ -264,6 +254,8 @@ if errors.Is(err, litertlm.ErrUnimplemented) {
 
 ## See also
 
+- [Tutorial: Tool-Calling Agents & KV-Cache Branching](tutorial-tools-branching.md) — end-to-end walkthrough of `RegisterTool`, `ToolPolicy`, `ToolChoice`, and `Chat.Clone`.
+- [Examples Gallery](examples.md) — all 48 runnable repository examples.
 - [`examples/autotool/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/autotool)
   — auto-dispatch with a typed handler.
 - [`examples/conversation/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/conversation)

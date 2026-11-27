@@ -1,47 +1,74 @@
 site_name: litertlm-go
-site_description: A purego-backed Go wrapper for Google's LiteRT-LM C API.
+site_description: Run local LLMs, vision, audio, embeddings, and tool-calling agents directly in Go with Google's LiteRT-LM runtime.
 site_url: https://vladimirvivien.github.io/litertlm-go/
 repo_url: https://github.com/vladimirvivien/litertlm-go
 repo_name: vladimirvivien/litertlm-go
 edit_uri: edit/main/docs/
+copyright: Apache-2.0 License · litertlm-go
 
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  font:
+    text: Plus Jakarta Sans
+    code: JetBrains Mono
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/brightness-7
+        icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/brightness-4
+        icon: material/weather-sunny
         name: Switch to light mode
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.top
+    - navigation.footer
     - navigation.instant
+    - navigation.instant.progress
     - search.suggest
     - search.highlight
     - content.code.copy
     - content.code.annotate
+    - content.tabs.link
     - toc.follow
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/vladimirvivien/litertlm-go
+      name: litertlm-go on GitHub
+    - icon: fontawesome/brands/golang
+      link: https://pkg.go.dev/github.com/vladimirvivien/litertlm-go/pkg/litertlm
+      name: Go API Reference on pkg.go.dev
 
 markdown_extensions:
   - admonition
   - attr_list
+  - md_in_html
   - def_list
   - tables
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
@@ -50,6 +77,9 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 # All source files live flat under docs/ — easy for both humans and
 # repo-crawling agents to find without descending. Logical grouping
@@ -57,12 +87,19 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
-  - High-level API:
+  - Tutorials:
+      - Overview: tutorials.md
+      - First Local LLM App: tutorial-first-app.md
+      - Vision & Structured JSON: tutorial-vision-json.md
+      - Multimodal Semantic Search: tutorial-semantic-search.md
+      - Tool-Calling Agents & Branching: tutorial-tools-branching.md
+  - Guides:
       - Client: client.md
       - Chat: chat.md
       - Tools: tools.md
       - Embeddings: embeddings.md
       - Structured output: structured-output.md
-  - Low-level API: low-level.md
+      - Low-level API: low-level.md
+  - Examples: examples.md
   - Supported models: models.md
   - Troubleshooting: troubleshooting.md

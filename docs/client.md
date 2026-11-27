@@ -190,8 +190,8 @@ if err != nil { return err }
 
 fmt.Println(resp.Text())          // Generated reply text
 fmt.Println(resp.NumCandidates()) // Number of candidates present (1 when non-empty)
-if b := resp.Benchmark(); b != nil {
-    fmt.Printf("kv_cap=%d decode=%.1f tok/s\n", b.MaxNumTokens, b.DecodeTokensPerSec)
+if b := resp.Benchmark(); b != nil && len(b.DecodeTokensPerSec) > 0 {
+    fmt.Printf("kv_cap=%d decode=%.1f tok/s\n", b.MaxNumTokens, b.DecodeTokensPerSec[0])
 }
 ```
 
@@ -240,6 +240,8 @@ text, err := client.GenerateMulti(ctx, []litertlm.Part{
 
 ## See also
 
+- [Tutorial: Your First Local LLM App in 5 Minutes](tutorial-first-app.md) — walkthrough of `FetchLib`, `FetchModel`, streaming, and benchmarks.
+- [Examples Gallery](examples.md) — all 48 runnable repository examples.
 - [Chat](chat.md) — multi-turn with system prompts and tools.
 - [Embeddings](embeddings.md) — standalone text, multimodal, and batch embeddings.
 - [Structured output](structured-output.md) — `GenerateData[T]` and `GenerateDataMulti[T]`.

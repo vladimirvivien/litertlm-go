@@ -102,6 +102,8 @@ Drop down to `EmbeddingEngineSettings`, `EmbeddingEngine`, `EmbeddingOptions`, `
 
 ## See also
 
+- [Tutorial: Local Multimodal Semantic Search & Zero-Shot Classification](tutorial-semantic-search.md) — build a cross-modal index and zero-shot classifier step-by-step.
+- [Examples Gallery](examples.md) — all 48 runnable repository examples.
 - [`examples/embed/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/embed) — text, batch, Matryoshka truncation, and optional multimodal embedding similarity.
 - [`examples/semantic-search/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/semantic-search) — reusable `search` index and zero-shot `classify` subpackages with a multimodal CLI.
 - [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/capabilities) — inspect embedding dimensions and signature lengths before loading.

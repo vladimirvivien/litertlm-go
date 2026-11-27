@@ -167,6 +167,8 @@ Models without embedded constraint-provider metadata fail `NewChat` with `Failed
 
 ## See also
 
+- [Tutorial: Vision Q&A & Structured JSON Extraction](tutorial-vision-json.md) — walk through `GenerateDataMulti[T]` and grammar-constrained `WithConstraint`.
+- [Examples Gallery](examples.md) — all 48 runnable repository examples.
 - [`examples/structured/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/structured)
   — text-only Recipe extraction.
 - [`examples/extract/`](https://github.com/vladimirvivien/litertlm-go/tree/main/examples/extract)

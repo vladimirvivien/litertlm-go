@@ -1,5 +1,9 @@
 # Getting Started with litertlm-go
 
+!!! tip "Prefer a guided walkthrough?"
+
+    Follow [Your First Local LLM App in 5 Minutes](tutorial-first-app.md) for a step-by-step tutorial with capability inspection and benchmarks, or jump straight to the [Examples Gallery](examples.md) to browse all 48 runnable CLI programs.
+
 `litertlm-go` supports two setup workflows:
 1. **Fully Programmatic Setup (Recommended):** Automatically downloads and caches both the native C libraries and the model artifact in Go without manual setup steps.
 2. **Manual Provisioning:** Manually download the `.litertlm` model file and native shared libraries, specifying their paths via environment variables or options.
@@ -88,30 +92,33 @@ Download a `.litertlm` model from Hugging Face's [LiteRT Community](https://hugg
 
 Download the C-API release archive (`litert_lm_c_api-1.0.0.zip`) or macOS framework archive from [LiteRT-LM Releases](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.19.1):
 
-* **Linux x86_64:**
-  ```bash
-  mkdir -p ~/include/litertlm/lib
-  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
-  unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
-  cp /tmp/litert_lm_c_api/lib/linux_x86_64/liblitert-lm.so ~/include/litertlm/lib/
-  ```
+=== "Linux (x86_64)"
 
-* **macOS ARM64 (Apple Silicon):**
-  ```bash
-  mkdir -p ~/include/litertlm/lib
-  curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
-  unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
-  cp /tmp/litert_lm_c_api/lib/macos_arm64/liblitert-lm.dylib ~/include/litertlm/lib/
-  ```
+    ```bash
+    mkdir -p ~/include/litertlm/lib
+    curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
+    unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
+    cp /tmp/litert_lm_c_api/lib/linux_x86_64/liblitert-lm.so ~/include/litertlm/lib/
+    ```
 
-* **Windows x86_64:**
-  ```powershell
-  $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
-  New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
-  Invoke-WebRequest -Uri https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip -OutFile litert_lm_c_api.zip
-  Expand-Archive -Path litert_lm_c_api.zip -DestinationPath .\litert_lm_c_api -Force
-  Copy-Item .\litert_lm_c_api\lib\windows_x86_64\litert-lm.dll $Env:LITERTLM_LIB\
-  ```
+=== "macOS (Apple Silicon)"
+
+    ```bash
+    mkdir -p ~/include/litertlm/lib
+    curl -LO https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip
+    unzip litert_lm_c_api-1.0.0.zip -d /tmp/litert_lm_c_api
+    cp /tmp/litert_lm_c_api/lib/macos_arm64/liblitert-lm.dylib ~/include/litertlm/lib/
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+    New-Item -ItemType Directory -Path $Env:LITERTLM_LIB -Force | Out-Null
+    Invoke-WebRequest -Uri https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.19.1/litert_lm_c_api-1.0.0.zip -OutFile litert_lm_c_api.zip
+    Expand-Archive -Path litert_lm_c_api.zip -DestinationPath .\litert_lm_c_api -Force
+    Copy-Item .\litert_lm_c_api\lib\windows_x86_64\litert-lm.dll $Env:LITERTLM_LIB\
+    ```
 
 ### Step 3: Go Program (`main.go`)
 
@@ -150,18 +157,21 @@ func main() {
 
 ### Step 4: Run with Environment Variables
 
-```bash
-LITERTLM_LIB=~/include/litertlm/lib \
-LITERTLM_MODEL=~/models/gemma3-1b-it-int4.litertlm \
-    go run main.go
-```
+=== "Linux / macOS"
 
-On Windows (PowerShell):
-```powershell
-$Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
-$Env:LITERTLM_MODEL = "$Env:USERPROFILE\models\gemma3-1b-it-int4.litertlm"
-go run main.go
-```
+    ```bash
+    LITERTLM_LIB=~/include/litertlm/lib \
+    LITERTLM_MODEL=~/models/gemma3-1b-it-int4.litertlm \
+        go run main.go
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    $Env:LITERTLM_LIB = "$Env:USERPROFILE\include\litertlm\lib"
+    $Env:LITERTLM_MODEL = "$Env:USERPROFILE\models\gemma3-1b-it-int4.litertlm"
+    go run main.go
+    ```
 
 ---
 
@@ -206,9 +216,12 @@ See [`examples/capabilities/`](https://github.com/vladimirvivien/litertlm-go/tre
 
 ## Next Steps
 
+* **Hands-on walkthroughs** → [Tutorials Overview](tutorials.md)
+* **All 48 runnable examples** → [Examples Gallery](examples.md)
 * **Client options & configuration** → [Client Guide](client.md)
 * **Multi-turn chat & conversations** → [Chat Guide](chat.md)
 * **Automated tool and function calling** → [Tools Guide](tools.md)
+* **Multimodal embeddings & search** → [Embeddings Guide](embeddings.md)
 * **Structured JSON decoding** → [Structured Output Guide](structured-output.md)
 * **Model scaling and memory sizing** → [Supported Models](models.md)
 * **Low-level C-API control** → [Low-Level API](low-level.md)

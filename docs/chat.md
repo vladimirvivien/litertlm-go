@@ -349,6 +349,8 @@ decode breakdown and reported KV-cache capacity (`MaxNumTokens`), read
 
 ## See also
 
+- [Tutorial: Tool-Calling Agents & KV-Cache Branching](tutorial-tools-branching.md) — build multi-hop agents and fork conversations with `Chat.Clone`.
+- [Examples Gallery](examples.md) — all 48 runnable repository examples.
 - [Tools guide](tools.md) — full reference for `RawTool`,
   `ManagedTool`, `RegisterTool`, schema reflection, the dispatch
   loop, `WithMaxToolHops`, `WithToolChoice`, and `ToolPolicy`.

@@ -18,6 +18,18 @@ The test battery ([`pkg/litertlm/model_matrix_test.go`](https://github.com/vladi
 | **Phi-3.5 / Phi-4** | `generic` | 3.8B, 14B | ✅ | ✅ |
 | **SmolLM / SmolLM2** | `generic` | 135M, 360M, 1.7B | ✅ | ✅ |
 
+### Embedding Models (`ModelTypeEmbedding`)
+
+Standalone embedding artifacts use `litertlm.NewEmbeddingClient` to generate dense vector representations for semantic retrieval and classification across text, vision, and audio. Verify model type and output dimensionality upfront via `InspectModel`.
+
+| Model Identifier | Modalities | Native Dimension | Approximate Size |
+|---|---|:---:|:---:|
+| `litert-community/embeddinggemma-2-text-270m-litert-lm` | Text | 768 | ~165 MB |
+| `litert-community/embeddinggemma-2-text-vision-440m-litert-lm` | Text, Vision | 768 | ~388 MB |
+| `litert-community/embeddinggemma-2-740m-litert-lm` | Text, Vision, Audio | 768 | ~485 MB |
+
+See the [Embeddings Guide](embeddings.md) and [Tutorial: Local Multimodal Semantic Search & Zero-Shot Classification](tutorial-semantic-search.md) for runnable workflows.
+
 ---
 
 ## 2. Parameter Scaling & Memory Allocation Matrix
@@ -41,7 +53,9 @@ Model memory consumption during inference consists of two primary components:
 
 The dynamic memory allocated for the Key-Value (KV) cache scales linearly with sequence length:
 
-$$\text{Memory}_{\text{KV}} = 2 \times \text{layers} \times \text{KV-heads} \times \text{head-dimension} \times \text{bytes-per-element} \times \text{max-tokens}$$
+```text
+Memory_KV = 2 × layers × kv_heads × head_dim × bytes_per_element × max_tokens
+```
 
 ### Context Length Recommendations
 

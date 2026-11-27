@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="litertlm-go prism mark">
+  <defs>
+    <linearGradient id="lrt-prism-grad" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E05324"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#0F9D8A"/>
+    </linearGradient>
+    <linearGradient id="lrt-facet-warm" x1="16" y1="16" x2="38" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF7A4D"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="lrt-facet-cool" x1="28" y1="28" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#0F9D8A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#FFFBF7"/>
+  <rect x="5" y="5" width="54" height="54" rx="15" stroke="url(#lrt-prism-grad)" stroke-width="2" stroke-opacity="0.35"/>
+  <!-- Faceted 4-point prism star -->
+  <path d="M32 13L38.2 25.8L51 32L38.2 38.2L32 51L25.8 38.2L13 32L25.8 25.8L32 13Z" fill="url(#lrt-prism-grad)"/>
+  <path d="M32 13L32 32L13 32L25.8 25.8L32 13Z" fill="url(#lrt-facet-warm)" fill-opacity="0.9"/>
+  <path d="M51 32L38.2 38.2L32 51L32 32L51 32Z" fill="url(#lrt-facet-cool)" fill-opacity="0.9"/>
+  <!-- Inner white core sparkle -->
+  <path d="M32 24.5L34.3 29.7L39.5 32L34.3 34.3L32 39.5L29.7 34.3L24.5 32L29.7 29.7L32 24.5Z" fill="#FFFBF7"/>
+  <!-- Modality orbital sparks: Text (coral), Vision (gold), Audio (teal) -->
+  <circle cx="17" cy="17" r="3.6" fill="#E05324"/>
+  <circle cx="47.5" cy="16.5" r="3.2" fill="#F59E0B"/>
+  <circle cx="47.5" cy="47.5" r="3.6" fill="#0F9D8A"/>
+</svg>
