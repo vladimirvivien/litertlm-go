@@ -1,0 +1,370 @@
+/* ==========================================================================
+   litertlm-go — Festival Prism Visual Identity
+   Clean-slate light & dark palettes, high readability prose typography,
+   festive hero surfaces, pill tags, and interactive card hover states.
+   ========================================================================== */
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #e05324;
+  --md-primary-fg-color--light: #ff7a4d;
+  --md-primary-fg-color--dark: #b93e14;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.78);
+
+  --md-accent-fg-color: #0f9d8a;
+  --md-accent-fg-color--transparent: rgba(15, 157, 138, 0.12);
+  --md-accent-bg-color: #ffffff;
+
+  --md-default-bg-color: #fffbf7;
+  --md-default-bg-color--light: #fff7ee;
+  --md-default-fg-color: #1f2430;
+  --md-default-fg-color--light: #4e5668;
+  --md-typeset-a-color: #c84419;
+
+  --lrt-coral: #e05324;
+  --lrt-amber: #d97706;
+  --lrt-gold: #f59e0b;
+  --lrt-teal: #0f9d8a;
+  --lrt-plum: #9333ea;
+
+  --lrt-card-bg: #ffffff;
+  --lrt-card-border: rgba(224, 83, 36, 0.15);
+  --lrt-card-shadow: 0 8px 24px -12px rgba(185, 62, 20, 0.16), 0 2px 6px rgba(31, 36, 48, 0.04);
+  --lrt-card-shadow-hover: 0 18px 34px -14px rgba(15, 157, 138, 0.24), 0 6px 16px -6px rgba(224, 83, 36, 0.18);
+
+  --lrt-hero-border: rgba(224, 83, 36, 0.22);
+  --lrt-hero-bg:
+    radial-gradient(circle at 10% 16%, rgba(255, 138, 91, 0.24), transparent 45%),
+    radial-gradient(circle at 88% 14%, rgba(15, 157, 138, 0.20), transparent 44%),
+    radial-gradient(circle at 52% 96%, rgba(245, 158, 11, 0.17), transparent 48%),
+    linear-gradient(135deg, #fff4ea 0%, #fffbf7 52%, #eefbf7 100%);
+
+  --lrt-table-head-bg: rgba(224, 83, 36, 0.07);
+  --lrt-pill-coral-bg: rgba(224, 83, 36, 0.11);
+  --lrt-pill-coral-fg: #b93e14;
+  --lrt-pill-teal-bg: rgba(15, 157, 138, 0.12);
+  --lrt-pill-teal-fg: #0b7b6c;
+  --lrt-pill-gold-bg: rgba(245, 158, 11, 0.15);
+  --lrt-pill-gold-fg: #9a5b04;
+  --lrt-pill-plum-bg: rgba(147, 51, 234, 0.10);
+  --lrt-pill-plum-fg: #6b21a8;
+  --lrt-code-shadow: 0 6px 18px -10px rgba(31, 36, 48, 0.14);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #191e2e;
+  --md-primary-fg-color--light: #242b42;
+  --md-primary-fg-color--dark: #111521;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.78);
+
+  --md-accent-fg-color: #2dd4bf;
+  --md-accent-fg-color--transparent: rgba(45, 212, 191, 0.15);
+  --md-accent-bg-color: #0e1420;
+
+  --md-default-bg-color: #131622;
+  --md-default-bg-color--light: #1a1f30;
+  --md-default-fg-color: #eef2ff;
+  --md-default-fg-color--light: #a6b0c8;
+  --md-typeset-a-color: #ff8e63;
+
+  --lrt-coral: #ff7a4d;
+  --lrt-amber: #fbbf24;
+  --lrt-gold: #fbbf24;
+  --lrt-teal: #2dd4bf;
+  --lrt-plum: #c084fc;
+
+  --lrt-card-bg: #1b2032;
+  --lrt-card-border: rgba(255, 122, 77, 0.22);
+  --lrt-card-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.55);
+  --lrt-card-shadow-hover: 0 18px 34px -12px rgba(45, 212, 191, 0.24), 0 6px 18px -6px rgba(255, 122, 77, 0.22);
+
+  --lrt-hero-border: rgba(255, 122, 77, 0.28);
+  --lrt-hero-bg:
+    radial-gradient(circle at 12% 16%, rgba(255, 122, 77, 0.22), transparent 46%),
+    radial-gradient(circle at 88% 18%, rgba(45, 212, 191, 0.19), transparent 46%),
+    radial-gradient(circle at 50% 96%, rgba(251, 191, 36, 0.13), transparent 50%),
+    linear-gradient(135deg, #1d1b2e 0%, #171c2b 55%, #122429 100%);
+
+  --lrt-table-head-bg: rgba(255, 122, 77, 0.12);
+  --lrt-pill-coral-bg: rgba(255, 122, 77, 0.16);
+  --lrt-pill-coral-fg: #ffb194;
+  --lrt-pill-teal-bg: rgba(45, 212, 191, 0.16);
+  --lrt-pill-teal-fg: #6ef0dc;
+  --lrt-pill-gold-bg: rgba(251, 191, 36, 0.16);
+  --lrt-pill-gold-fg: #fde087;
+  --lrt-pill-plum-bg: rgba(192, 132, 252, 0.16);
+  --lrt-pill-plum-fg: #e2b8ff;
+  --lrt-code-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Signature celebratory bottom spectrum ribbon under navigation tabs */
+.md-tabs {
+  border-bottom: 3px solid transparent;
+  border-image: linear-gradient(90deg, #ff7a4d 0%, #fbbf24 50%, #2dd4bf 100%) 1;
+}
+
+.md-header__title {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.55rem;
+  width: 1.55rem;
+}
+
+/* Hover accent for links */
+.md-typeset a:hover {
+  color: var(--lrt-teal);
+}
+
+/* Comfortable reading cadence across prose pages */
+.md-typeset {
+  font-size: 0.82rem;
+  line-height: 1.72;
+}
+
+.md-typeset h1 {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h2,
+.md-typeset h3 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.md-typeset hr {
+  border-bottom-color: var(--lrt-card-border);
+}
+
+/* Code blocks and tables */
+.md-typeset pre > code,
+.md-typeset .highlight {
+  border-radius: 12px;
+  box-shadow: var(--lrt-code-shadow);
+}
+
+.md-typeset table:not([class]) {
+  border-radius: 12px;
+  border: 1px solid var(--lrt-card-border);
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--lrt-table-head-bg);
+  font-weight: 700;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.68rem 0.9rem;
+}
+
+/* ==========================================================================
+   Festive Hero Banner (.lrt-hero)
+   ========================================================================== */
+.lrt-hero {
+  position: relative;
+  margin: 0 0 2rem;
+  padding: clamp(1.75rem, 4.2vw, 3.2rem);
+  border-radius: 22px;
+  border: 1px solid var(--lrt-hero-border);
+  background: var(--lrt-hero-bg);
+  box-shadow: var(--lrt-card-shadow);
+  overflow: hidden;
+}
+
+.lrt-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.15rem;
+}
+
+.lrt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.24rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  line-height: 1.35;
+}
+
+.lrt-pill--coral {
+  background: var(--lrt-pill-coral-bg);
+  color: var(--lrt-pill-coral-fg);
+}
+
+.lrt-pill--teal {
+  background: var(--lrt-pill-teal-bg);
+  color: var(--lrt-pill-teal-fg);
+}
+
+.lrt-pill--gold {
+  background: var(--lrt-pill-gold-bg);
+  color: var(--lrt-pill-gold-fg);
+}
+
+.lrt-pill--plum {
+  background: var(--lrt-pill-plum-bg);
+  color: var(--lrt-pill-plum-fg);
+}
+
+.lrt-hero-title {
+  margin: 0 0 0.75rem !important;
+  font-size: clamp(1.9rem, 4.1vw, 2.95rem) !important;
+  font-weight: 800 !important;
+  line-height: 1.14 !important;
+  letter-spacing: -0.03em !important;
+}
+
+.lrt-gradient-text {
+  background: linear-gradient(92deg, #e05324 0%, #f59e0b 48%, #0f9d8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-md-color-scheme="slate"] .lrt-gradient-text {
+  background: linear-gradient(92deg, #ff7a4d 0%, #fbbf24 50%, #2dd4bf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lrt-hero-lead {
+  max-width: 66ch;
+  margin: 0 0 1.4rem;
+  font-size: 0.96rem;
+  line-height: 1.68;
+  color: var(--md-default-fg-color--light);
+}
+
+.lrt-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.lrt-hero-actions .md-button {
+  border-radius: 999px;
+  font-weight: 700;
+  padding: 0.62rem 1.25rem;
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.lrt-hero-actions .md-button:hover {
+  transform: translateY(-2px);
+}
+
+.lrt-hero-actions .lrt-btn-primary {
+  background: linear-gradient(135deg, #e05324 0%, #f59e0b 100%);
+  border-color: transparent;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px -8px rgba(224, 83, 36, 0.55);
+}
+
+.lrt-hero-actions .lrt-btn-primary:hover {
+  filter: brightness(1.05);
+  color: #ffffff !important;
+}
+
+.lrt-hero-actions .lrt-btn-secondary {
+  background: var(--lrt-pill-teal-bg);
+  border-color: var(--lrt-teal);
+  color: var(--lrt-pill-teal-fg) !important;
+}
+
+.lrt-hero-actions .lrt-btn-secondary:hover {
+  background: var(--lrt-teal);
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   Enhanced Grid Cards (.grid.cards)
+   ========================================================================== */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  border-radius: 16px;
+  border: 1px solid var(--lrt-card-border);
+  background: var(--lrt-card-bg);
+  box-shadow: var(--lrt-card-shadow);
+  padding: 1.15rem 1.25rem;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > ol > li:hover {
+  transform: translateY(-3px);
+  border-color: var(--lrt-teal);
+  box-shadow: var(--lrt-card-shadow-hover);
+}
+
+.md-typeset .grid.cards > ul > li > p:first-child {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+/* Tutorial metadata strip */
+.lrt-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.48rem;
+  margin: -0.35rem 0 1.4rem;
+}
+
+/* Media Showcase Frame */
+.lrt-media-frame {
+  margin: 1.5rem auto;
+  padding: 0.9rem;
+  max-width: 780px;
+  border-radius: 18px;
+  border: 1px solid var(--lrt-card-border);
+  background: var(--lrt-card-bg);
+  box-shadow: var(--lrt-card-shadow);
+  text-align: center;
+}
+
+.lrt-media-frame img {
+  display: block;
+  margin: 0 auto;
+  border-radius: 12px;
+  max-width: 100%;
+  height: auto;
+}
+
+.lrt-media-caption {
+  margin: 0.7rem 0 0.1rem;
+  font-size: 0.74rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Inline Install Banner */
+.lrt-install-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.15rem;
+  margin: 0 0 1.8rem;
+  border-radius: 14px;
+  border: 1px solid var(--lrt-card-border);
+  background: var(--lrt-card-bg);
+  box-shadow: var(--lrt-card-shadow);
+}
+
+.lrt-install-label {
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--md-default-fg-color--light);
+}

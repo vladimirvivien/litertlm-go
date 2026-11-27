@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="litertlm-go favicon">
+  <defs>
+    <linearGradient id="lrt-fav-bg" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E05324"/>
+      <stop offset="52%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#0F9D8A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="15" fill="url(#lrt-fav-bg)"/>
+  <path d="M32 14L37.6 26.4L50 32L37.6 37.6L32 50L26.4 37.6L14 32L26.4 26.4L32 14Z" fill="#FFFBF7"/>
+  <circle cx="17.5" cy="17.5" r="3.2" fill="#FFFBF7" fill-opacity="0.92"/>
+  <circle cx="47" cy="17" r="2.8" fill="#FFFBF7" fill-opacity="0.88"/>
+  <circle cx="46.5" cy="46.5" r="3.2" fill="#FFFBF7" fill-opacity="0.92"/>
+</svg>
