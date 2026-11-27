@@ -214,7 +214,7 @@ func TestModelSync_CallbackTrampoline(t *testing.T) {
 	}
 
 	var wrote []byte
-	var recordedErr string
+	var recordedErr strings.Builder
 	withStubRangeWriterHooks(t,
 		func(_ ModelSyncRangeWriter, dataPtr unsafe.Pointer, size uint64) error {
 			wrote = append(wrote, unsafe.Slice((*byte)(dataPtr), size)...)
@@ -224,7 +224,7 @@ func TestModelSync_CallbackTrampoline(t *testing.T) {
 			if msgPtr != nil {
 				// Reconstruct string cleanly without relying on C runtime.
 				for p := msgPtr; *p != 0; p = (*byte)(unsafe.Add(unsafe.Pointer(p), 1)) {
-					recordedErr += string(*p)
+					recordedErr.WriteString(string(*p))
 				}
 			}
 			return nil
@@ -280,7 +280,7 @@ func TestModelSync_CallbackTrampoline(t *testing.T) {
 	))
 	st = callTramp(0, 4, 100, errCookie)
 	cleanupErr()
-	if st != StatusUnavailable || !strings.Contains(recordedErr, "http 503") {
-		t.Errorf("error callback got (status=%v, err=%q), want (Unavailable, contains http 503)", st, recordedErr)
+	if st != StatusUnavailable || !strings.Contains(recordedErr.String(), "http 503") {
+		t.Errorf("error callback got (status=%v, err=%q), want (Unavailable, contains http 503)", st, recordedErr.String())
 	}
 }
